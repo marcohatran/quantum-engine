@@ -8,6 +8,7 @@
     "fmt",
     "abseil",
     "nlohmann-json",
+    "protobuf",
     {
       "name": "gtest",
       "platform": "!uwp"

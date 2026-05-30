@@ -36,9 +36,10 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Dict-aware HashJoin probe** — when the probe-side join key is a single dict-encoded `STRING` column, the operator precomputes `dictCode → buildSlot` once per unique dict entry; per-row work collapses to an array load + chain walk.
 
 **Phase 4 — In Progress**
-- **Plan IR + JSON wire format + builder** — new `src/plan/` module defines a `PlanNode` / `ScalarExpr` IR (Scan / Filter / Project / HashAggregate / HashJoin + Literal / ColumnRef / BinaryOp / Like). `PlanJson` round-trips the IR through JSON via nlohmann-json (Protobuf wire format is the next slice). `PlanBuilder` walks the IR and constructs the engine's `Operator` tree, with a `SourceCatalog` (string-keyed map of `vector<ColumnBatch>`) supplying actual data to each scan node at execution time. This is the bridge surface that the JVM side will speak — Spark's Catalyst plan becomes a `PlanNode` IR, gets serialized, and crosses JNI as either JSON (for prototyping) or Protobuf (for production).
+- **Plan IR + JSON wire format + builder** — new `src/plan/` module defines a `PlanNode` / `ScalarExpr` IR (Scan / Filter / Project / HashAggregate / HashJoin + Literal / ColumnRef / BinaryOp / Like). `PlanJson` round-trips the IR through JSON via nlohmann-json. `PlanBuilder` walks the IR and constructs the engine's `Operator` tree, with a `SourceCatalog` (string-keyed map of `vector<ColumnBatch>`) supplying actual data to each scan node at execution time. This is the bridge surface that the JVM side will speak — Spark's Catalyst plan becomes a `PlanNode` IR, gets serialized, and crosses JNI.
+- **Protobuf wire format** — `src/plan/proto/quantum_plan.proto` mirrors the IR 1:1 (oneof-based unions for `ScalarExpr` and `PlanNode`, enum-typed kinds, repeated children). Generated via `protobuf_generate_cpp` at CMake configure time. `PlanProto` (`planToProtoBytes` / `planFromProtoBytes`) provides binary round-trip; JSON stays as the human-readable debug format. Cross-codec equivalence verified by tests: encode through JSON, decode, encode through proto, decode, and the resulting IR re-encodes to the original JSON string.
 
-**Tests & benchmarks** — 135 GoogleTest cases. New since previous slice: end-to-end scan-filter-project from an IR round-tripped through JSON; HashAggregate (SUM + COUNT_STAR) built directly from a JSON plan string; HashJoin built from IR; scalar expression and literal JSON round-trips.
+**Tests & benchmarks** — 140 GoogleTest cases. New since previous slice: 5 protobuf round-trips covering ScalarExpr / Literal / Scan-Filter-Project / HashAggregate / cross-codec JSON↔Proto equivalence.
 
 ## Build & Test
 
@@ -49,7 +50,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 135 tests, ~2.3s
+ctest --preset=debug                 # 140 tests, ~2.7s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -60,7 +61,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ## Architecture at a Glance
 
 ```
-plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson (wire format)
+plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
 operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
@@ -93,7 +94,7 @@ Key invariants the codebase enforces:
 | **3** | Spill-to-disk for HashAggregate (StringFastPath + Fixed + Var, group-count + memory-fraction triggers) | done |
 | **3** | Dict-aware HashJoin probe (precomputed `dictCode → buildSlot` table) | done |
 | **4** | Plan IR + JSON wire format + PlanBuilder | done |
-| 4 | Protobuf wire format (binary, language-portable replacement for JSON) | planned |
+| **4** | Protobuf wire format (binary, language-portable) | done |
 | 4 | JNI bridge (Java/Scala side that produces the IR + ships it to native) | planned |
 | 4 | Arrow IPC for cross-JVM batch transport | planned |
 | 4 | `QuantumPlanner` Spark extension (post-Catalyst plan tagging + handoff) | planned |

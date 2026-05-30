@@ -1,0 +1,146 @@
+// Quantum Engine plan IR wire format.
+//
+// 1:1 mirror of src/plan/Plan.hpp. The JVM bridge produces messages of this
+// shape; the native PlanProto codec turns them back into the C++ IR.
+
+syntax = "proto3";
+
+package quantum.plan.proto;
+
+// ============================================================================
+// Types
+// ============================================================================
+
+enum TypeId {
+  TYPE_BOOL    = 0;
+  TYPE_INT32   = 1;
+  TYPE_INT64   = 2;
+  TYPE_FLOAT64 = 3;
+  TYPE_STRING  = 4;
+}
+
+message Field {
+  string name = 1;
+  TypeId type = 2;
+}
+
+message Schema {
+  repeated Field fields = 1;
+}
+
+// ============================================================================
+// Scalar expressions
+// ============================================================================
+
+message Literal {
+  oneof value {
+    bool   bool_value   = 1;
+    int64  int64_value  = 2;
+    double double_value = 3;
+    string string_value = 4;
+  }
+}
+
+message ColumnRef {
+  int32 index = 1;
+}
+
+enum BinaryOpType {
+  BINOP_ADD = 0;
+  BINOP_SUB = 1;
+  BINOP_MUL = 2;
+  BINOP_EQ  = 3;
+  BINOP_LT  = 4;
+  BINOP_GT  = 5;
+}
+
+message BinaryOp {
+  BinaryOpType op  = 1;
+  ScalarExpr   lhs = 2;
+  ScalarExpr   rhs = 3;
+}
+
+message LikeOp {
+  ScalarExpr input  = 1;
+  string     pattern = 2;
+}
+
+message ScalarExpr {
+  oneof expr {
+    Literal   literal    = 1;
+    ColumnRef column_ref = 2;
+    BinaryOp  binary     = 3;
+    LikeOp    like       = 4;
+  }
+}
+
+// ============================================================================
+// Aggregates
+// ============================================================================
+
+enum AggregateKind {
+  AGG_SUM        = 0;
+  AGG_COUNT_STAR = 1;
+  AGG_MIN        = 2;
+  AGG_MAX        = 3;
+  AGG_AVG        = 4;
+}
+
+message AggregateSpec {
+  AggregateKind kind        = 1;
+  TypeId        input_type  = 2;  // ignored for COUNT_STAR
+  ScalarExpr    input       = 3;  // absent for COUNT_STAR (use has_input())
+}
+
+// ============================================================================
+// Plan nodes
+// ============================================================================
+
+message ScanNode {
+  string source_id = 1;
+  Schema schema    = 2;
+}
+
+message FilterNode {
+  PlanNode   child     = 1;
+  ScalarExpr predicate = 2;
+}
+
+message ProjectNode {
+  PlanNode            child        = 1;
+  repeated ScalarExpr exprs        = 2;
+  repeated string     output_names = 3;
+}
+
+message HashAggregateNode {
+  PlanNode               child        = 1;
+  repeated ScalarExpr    group_keys   = 2;
+  repeated AggregateSpec aggregates   = 3;
+  repeated string        output_names = 4;
+}
+
+enum JoinType {
+  JOIN_INNER       = 0;
+  JOIN_LEFT_OUTER  = 1;
+  JOIN_RIGHT_OUTER = 2;
+  JOIN_FULL_OUTER  = 3;
+}
+
+message HashJoinNode {
+  PlanNode             build        = 1;
+  PlanNode             probe        = 2;
+  repeated ScalarExpr  build_keys   = 3;
+  repeated ScalarExpr  probe_keys   = 4;
+  JoinType             join_type    = 5;
+  repeated string      output_names = 6;
+}
+
+message PlanNode {
+  oneof node {
+    ScanNode          scan      = 1;
+    FilterNode        filter    = 2;
+    ProjectNode       project   = 3;
+    HashAggregateNode hash_agg  = 4;
+    HashJoinNode      hash_join = 5;
+  }
+}
