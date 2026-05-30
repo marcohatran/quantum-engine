@@ -34,3 +34,16 @@ TEST(Literal, BroadcastsDouble) {
     EXPECT_EQ(result.type(), Float64);
     for (size_t i = 0; i < 4; ++i) EXPECT_DOUBLE_EQ(result.typed<double>()[i], 3.5);
 }
+
+TEST(Literal, BroadcastsString) {
+    MemoryManager mm(4096);
+    auto batch = emptyBatchOf(mm, 3);
+    Literal lit(std::string{"hi"});
+    auto result = lit.eval(batch, &mm);
+    EXPECT_EQ(result.type().id, TypeId::STRING);
+    ASSERT_EQ(result.numRows(), 3u);
+    for (size_t i = 0; i < 3; ++i) {
+        EXPECT_EQ(result.stringAt(i), "hi");
+        EXPECT_TRUE(result.validity().isValid(i));
+    }
+}

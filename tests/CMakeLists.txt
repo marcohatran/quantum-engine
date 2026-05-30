@@ -7,6 +7,7 @@ add_executable(quantum_tests
     vector/test_position_list.cpp
     vector/test_column_vector.cpp
     vector/test_column_batch.cpp
+    vector/test_string_builder.cpp
     expression/test_literal.cpp
     expression/test_column_ref.cpp
     expression/test_binary_expr.cpp
@@ -16,6 +17,7 @@ add_executable(quantum_tests
     operator/test_aggregate_function.cpp
     operator/test_hash_aggregate_operator.cpp
     operator/test_hash_join_operator.cpp
+    operator/test_string_join.cpp
     hash/test_hash_table.cpp
     e2e/test_pipeline_smoke.cpp
 )

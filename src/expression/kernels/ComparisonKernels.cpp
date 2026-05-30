@@ -1,6 +1,7 @@
 #include "expression/kernels/ComparisonKernels.hpp"
 
 #include <cstring>
+#include <string_view>
 
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
@@ -40,6 +41,32 @@ void run(const ColumnVector& lhs, const ColumnVector& rhs,
 }
 
 template <CmpOp Op>
+inline uint8_t cmpString(std::string_view a, std::string_view b) {
+    if constexpr (Op == CmpOp::Eq) return a == b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Lt) return a <  b ? 1U : 0U;
+    else /* Gt */                       return a >  b ? 1U : 0U;
+}
+
+template <CmpOp Op>
+void runString(const ColumnVector& lhs, const ColumnVector& rhs,
+               ColumnVector& out, const PositionList& pos) {
+    uint8_t* o = out.typed<uint8_t>();
+    out.validity().setAllNull();
+
+    if (pos.isIdentity()) {
+        for (size_t i = 0; i < pos.size(); ++i) {
+            o[i] = cmpString<Op>(lhs.stringAt(i), rhs.stringAt(i));
+        }
+    } else {
+        const auto idx = pos.indices();
+        for (size_t k = 0; k < idx.size(); ++k) {
+            const auto i = static_cast<size_t>(idx[k]);
+            o[i] = cmpString<Op>(lhs.stringAt(i), rhs.stringAt(i));
+        }
+    }
+}
+
+template <CmpOp Op>
 ColumnVector dispatch(DataType type,
                       const ColumnVector& lhs, const ColumnVector& rhs,
                       const PositionList& pos, MemoryManager* mm) {
@@ -49,6 +76,7 @@ ColumnVector dispatch(DataType type,
         case TypeId::INT64:   run<int64_t, Op>(lhs, rhs, out, pos); break;
         case TypeId::FLOAT64: run<double,  Op>(lhs, rhs, out, pos); break;
         case TypeId::BOOL:    run<uint8_t, Op>(lhs, rhs, out, pos); break;
+        case TypeId::STRING:  runString<Op>(lhs, rhs, out, pos);   break;
         default:
             raise(ErrorCode::TypeMismatch,
                   "ComparisonKernel: unsupported type {}", type.toString());

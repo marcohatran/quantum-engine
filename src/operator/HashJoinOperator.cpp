@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "common/Bits.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 
@@ -16,6 +17,79 @@ void initEndOfChain(uint8_t* state) {
     std::memcpy(state, &v, sizeof(v));
 }
 
+ColumnVector concatFixedWidthColumn(
+        const std::vector<ColumnBatch>& batches, size_t col,
+        size_t total, DataType type, MemoryManager* mm) {
+    ColumnVector out = ColumnVector::make(type, total, mm);
+    out.validity().setAllValid();
+    const size_t width = static_cast<size_t>(type.fixedWidth());
+    size_t       row   = 0;
+    for (const auto& b : batches) {
+        const auto& src = b.column(col);
+        std::memcpy(out.values().data() + row * width,
+                    src.values().data(),
+                    src.numRows() * width);
+        for (size_t i = 0; i < src.numRows(); ++i) {
+            out.validity().setValid(row + i, src.validity().isValid(i));
+        }
+        row += src.numRows();
+    }
+    return out;
+}
+
+ColumnVector concatVariableWidthColumn(
+        const std::vector<ColumnBatch>& batches, size_t col,
+        size_t total, DataType type, MemoryManager* mm) {
+    // Pass 1: sum total bytes and build offset array.
+    size_t totalBytes = 0;
+    for (const auto& b : batches) totalBytes += b.column(col).values().size();
+    // Actual data bytes (not the rounded buffer size). Need to walk offsets.
+    totalBytes = 0;
+    for (const auto& b : batches) {
+        const auto& src = b.column(col);
+        const int32_t* off = src.offsets().as<int32_t>();
+        totalBytes += static_cast<size_t>(off[src.numRows()]);
+    }
+
+    Buffer  offsetsBuf = mm->allocate(roundUp((total + 1) * sizeof(int32_t), kCacheLineBytes));
+    Buffer  valuesBuf  = mm->allocate(roundUp(totalBytes, kCacheLineBytes));
+    int32_t* outOff    = offsetsBuf.as<int32_t>();
+    char*    outVals   = valuesBuf.as<char>();
+
+    size_t  rowCursor  = 0;
+    int64_t byteCursor = 0;
+    outOff[0] = 0;
+    for (const auto& b : batches) {
+        const auto&    src    = b.column(col);
+        const int32_t* srcOff = src.offsets().as<int32_t>();
+        const size_t   n      = src.numRows();
+        const size_t   blen   = static_cast<size_t>(srcOff[n]);
+        if (blen > 0) {
+            std::memcpy(outVals + byteCursor, src.values().as<char>(), blen);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            outOff[rowCursor + i + 1] =
+                static_cast<int32_t>(byteCursor + srcOff[i + 1]);
+        }
+        rowCursor  += n;
+        byteCursor += static_cast<int64_t>(blen);
+    }
+
+    ColumnVector out = ColumnVector::makeVariableWidth(
+        type, total, std::move(offsetsBuf), std::move(valuesBuf), mm);
+    out.validity().setAllValid();
+    // Copy validity from each batch into the right slice.
+    size_t row = 0;
+    for (const auto& b : batches) {
+        const auto& src = b.column(col);
+        for (size_t i = 0; i < src.numRows(); ++i) {
+            out.validity().setValid(row + i, src.validity().isValid(i));
+        }
+        row += src.numRows();
+    }
+    return out;
+}
+
 ColumnBatch concatDense(std::vector<ColumnBatch> batches, MemoryManager* mm) {
     if (batches.empty()) return ColumnBatch({}, PositionList::identity(0));
 
@@ -28,29 +102,53 @@ ColumnBatch concatDense(std::vector<ColumnBatch> batches, MemoryManager* mm) {
 
     for (size_t c = 0; c < numCols; ++c) {
         const DataType type = batches[0].column(c).type();
-        ColumnVector   out  = ColumnVector::make(type, total, mm);
-        out.validity().setAllValid();
-
-        const size_t width = static_cast<size_t>(type.fixedWidth());
-        size_t       row   = 0;
-        for (const auto& b : batches) {
-            const auto& src = b.column(c);
-            std::memcpy(out.values().data() + row * width,
-                        src.values().data(),
-                        src.numRows() * width);
-            for (size_t i = 0; i < src.numRows(); ++i) {
-                out.validity().setValid(row + i, src.validity().isValid(i));
-            }
-            row += src.numRows();
-        }
-        outCols.push_back(std::move(out));
+        outCols.push_back(type.isFixedWidth()
+            ? concatFixedWidthColumn(batches, c, total, type, mm)
+            : concatVariableWidthColumn(batches, c, total, type, mm));
     }
     return ColumnBatch(std::move(outCols), PositionList::identity(total));
+}
+
+ColumnVector gatherVariableWidth(const ColumnVector&         src,
+                                 const std::vector<int32_t>& idx,
+                                 MemoryManager*              mm) {
+    const size_t   nOut   = idx.size();
+    const int32_t* srcOff = src.offsets().as<int32_t>();
+
+    Buffer  offsetsBuf = mm->allocate(roundUp((nOut + 1) * sizeof(int32_t), kCacheLineBytes));
+    int32_t* outOff    = offsetsBuf.as<int32_t>();
+    int64_t running = 0;
+    for (size_t k = 0; k < nOut; ++k) {
+        outOff[k] = static_cast<int32_t>(running);
+        const auto i = static_cast<size_t>(idx[k]);
+        running += srcOff[i + 1] - srcOff[i];
+    }
+    outOff[nOut] = static_cast<int32_t>(running);
+
+    Buffer values = mm->allocate(roundUp(static_cast<size_t>(running), kCacheLineBytes));
+    char*       outVals = values.as<char>();
+    const char* srcVals = src.values().as<char>();
+    for (size_t k = 0; k < nOut; ++k) {
+        const auto i   = static_cast<size_t>(idx[k]);
+        const auto beg = static_cast<size_t>(srcOff[i]);
+        const auto len = static_cast<size_t>(srcOff[i + 1] - srcOff[i]);
+        if (len > 0) std::memcpy(outVals + outOff[k], srcVals + beg, len);
+    }
+
+    ColumnVector out = ColumnVector::makeVariableWidth(
+        src.type(), nOut, std::move(offsetsBuf), std::move(values), mm);
+    out.validity().setAllValid();
+    for (size_t k = 0; k < nOut; ++k) {
+        out.validity().setValid(k, src.validity().isValid(static_cast<size_t>(idx[k])));
+    }
+    return out;
 }
 
 ColumnVector gather(const ColumnVector&         src,
                     const std::vector<int32_t>& idx,
                     MemoryManager*              mm) {
+    if (src.isVariableWidth()) return gatherVariableWidth(src, idx, mm);
+
     ColumnVector out = ColumnVector::make(src.type(), idx.size(), mm);
     out.validity().setAllValid();
 

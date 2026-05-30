@@ -66,3 +66,31 @@ TEST(BinaryExpr, NullPropagation) {
     EXPECT_FALSE(result.validity().isValid(5));
     EXPECT_TRUE (result.validity().isValid(0));
 }
+
+#include "vector/StringBuilder.hpp"
+
+TEST(BinaryExpr, StringEqAndLtAndGt) {
+    MemoryManager mm(64 * 1024);
+
+    StringBuilder b(&mm);
+    b.append("apple"); b.append("banana"); b.append("cherry");
+    auto names = b.build();
+    std::vector<ColumnVector> cols;
+    cols.push_back(std::move(names));
+    ColumnBatch batch(std::move(cols), PositionList::identity(3));
+
+    auto checkOp = [&](BinaryOp op, const std::string& lit, std::vector<uint8_t> want) {
+        BinaryExpr expr(op,
+                        std::make_unique<ColumnRef>(0),
+                        std::make_unique<Literal>(lit));
+        auto r = expr.eval(batch, &mm);
+        ASSERT_EQ(r.type(), Bool);
+        for (size_t i = 0; i < want.size(); ++i) {
+            EXPECT_EQ(r.typed<uint8_t>()[i], want[i]) << "op=" << static_cast<int>(op) << " i=" << i;
+        }
+    };
+
+    checkOp(BinaryOp::Eq, "banana", {0, 1, 0});
+    checkOp(BinaryOp::Lt, "banana", {1, 0, 0});  // "apple" < "banana" only
+    checkOp(BinaryOp::Gt, "banana", {0, 0, 1});  // "cherry" > "banana" only
+}

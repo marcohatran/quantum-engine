@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <variant>
 
 #include "expression/Expression.hpp"
@@ -11,12 +12,14 @@ namespace quantum {
 // batch.numRows() with every slot set to the literal value.
 class Literal final : public Expression {
 public:
-    using Value = std::variant<bool, int32_t, int64_t, double>;
+    using Value = std::variant<bool, int32_t, int64_t, double, std::string>;
 
-    explicit Literal(int32_t v) : value_(v), type_(Int32)   {}
-    explicit Literal(int64_t v) : value_(v), type_(Int64)   {}
-    explicit Literal(double  v) : value_(v), type_(Float64) {}
-    explicit Literal(bool    v) : value_(v), type_(Bool)    {}
+    explicit Literal(int32_t     v) : value_(v), type_(Int32)   {}
+    explicit Literal(int64_t     v) : value_(v), type_(Int64)   {}
+    explicit Literal(double      v) : value_(v), type_(Float64) {}
+    explicit Literal(bool        v) : value_(v), type_(Bool)    {}
+    explicit Literal(std::string v) : value_(std::move(v)), type_(DataType{TypeId::STRING}) {}
+    explicit Literal(const char* v) : Literal(std::string(v))   {}
 
     ColumnVector eval(const ColumnBatch& batch, MemoryManager* mm) const override;
     DataType     resultType(const Schema&) const override { return type_; }

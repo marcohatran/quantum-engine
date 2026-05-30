@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phase 1 + 2 complete. Self-contained C++ pipeline supporting Scan / Filter / Project / GROUP BY / Inner & Left-Outer Join with composite keys. Phase 3 (strings, dictionary encoding, spill, AVX2) is on the roadmap.
+> **Status:** Phase 1 + 2 complete, Phase 3 in progress. STRING values flow through Scan / Filter / Project / Aggregate / Join end-to-end; string GROUP BY / JOIN keys, dictionary encoding, spill, and AVX2 still pending.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -21,7 +21,11 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`HashJoinOperator`** — `Inner` and `LeftOuter` equi-join on any number of fixed-width key columns. Build side is densified into a row store and chained via a `next[]` array indexed by `BytesHashTable`; probe side streams batch-by-batch. NULLs in any key column never match.
 - **Hash infrastructure** — `HashTable` (int64-keyed, used by tests as a perf baseline) and `BytesHashTable` (opaque fixed-width byte-string key, used by both Hash* operators). `KeyCodec` encodes composite group/join keys with validity bits inline.
 
-**Tests & benchmarks** — 70 GoogleTest cases including E2E pipelines, every aggregate's null path, HashJoin one-to-one / multi-match / null-key / multi-batch-build / LEFT OUTER / two-column-key coverage. Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
+**Phase 3 — In Progress**
+- **`STRING` / variable-width values** — `ColumnVector` gains a second `offsets` buffer (Arrow-compatible layout). `StringBuilder` constructs string columns row-by-row. Strings work as values throughout: scan → filter → project → aggregate-pass-through → join build/probe materialization.
+- **String comparisons** — `BinaryExpr` `Eq` / `Lt` / `Gt` over `STRING` columns via lexicographic `std::string_view` compare; null propagation unchanged.
+
+**Tests & benchmarks** — 77 GoogleTest cases. New coverage: `StringBuilder` (basic, nulls, empty, mixed lengths), `Literal` broadcasting strings, `BinaryExpr` string comparisons, and `HashJoin` passing a STRING column through the build-side gather. Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
 
 ## Build & Test
 
@@ -32,7 +36,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 70 tests, ~0.7s
+ctest --preset=debug                 # 77 tests, ~0.8s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -46,7 +50,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (composite), KeyCodec
-vector/      → ColumnBatch, ColumnVector, PositionList, ValidityBitmask
+vector/      → ColumnBatch, ColumnVector, PositionList, ValidityBitmask, StringBuilder
 memory/      → MemoryManager (budget) + Arena + Buffer (RAII off-heap)
 common/      → DataType, Schema, Status, Bits, Macros
 ```
@@ -63,7 +67,8 @@ Key invariants the codebase enforces:
 |---|---|---|
 | **1** | Native execution core + columnar format with Scan/Filter/Project | done |
 | **2** | HashAggregate + HashJoin with composite keys; MIN/MAX/AVG; LEFT OUTER join | done |
-| 3 | String / variable-width types, dictionary encoding, spill-to-disk, AVX2 kernels, RIGHT/FULL OUTER, Exchange operator, intra-operator parallelism | planned |
+| **3** | STRING / variable-width values through scan/filter/project/join | done |
+| 3 | String GROUP BY / JOIN keys, dictionary encoding, spill-to-disk, AVX2 kernels, RIGHT/FULL OUTER, Exchange operator, intra-operator parallelism | in progress |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
