@@ -36,7 +36,8 @@ HashAggregateOperator::HashAggregateOperator(
     : Operator(mm),
       child_(std::move(child)),
       groupKeys_(std::move(groupKeys)),
-      aggs_(std::move(aggs)) {
+      aggs_(std::move(aggs)),
+      path_(Path::Var) {
 
     if (groupKeys_.empty()) {
         raise(ErrorCode::InvalidArgument,
@@ -59,7 +60,15 @@ HashAggregateOperator::HashAggregateOperator(
     const Schema& inSchema = child_->outputSchema();
     keyTypes_.reserve(groupKeys_.size());
     for (auto& e : groupKeys_) keyTypes_.push_back(e->resultType(inSchema));
-    codec_ = std::make_unique<KeyCodec>(keyTypes_);
+
+    // Path selection.
+    if (groupKeys_.size() == 1 && keyTypes_[0].id == TypeId::STRING) {
+        path_ = Path::StringFastPath;
+        nullGroupState_.resize(stateBytes_);
+    } else {
+        codec_ = std::make_unique<KeyCodec>(keyTypes_);
+        path_  = codec_->isFixedWidth() ? Path::Fixed : Path::Var;
+    }
 
     std::vector<Field> fields;
     fields.reserve(outputNames.size());
@@ -77,18 +86,43 @@ HashAggregateOperator::HashAggregateOperator(
 void HashAggregateOperator::open()  { child_->open(); }
 void HashAggregateOperator::close() { child_->close(); }
 
-void HashAggregateOperator::build() {
-    if (codec_->isFixedWidth()) {
-        tableFixed_ = std::make_unique<BytesHashTable>(
-            codec_->keyBytes(), stateBytes_, mm_);
-    } else {
-        tableVar_ = std::make_unique<VarBytesHashTable>(stateBytes_, mm_);
-    }
+int32_t HashAggregateOperator::internGlobalString(std::string_view s) {
+    auto it = globalDict_.find(std::string(s));
+    if (it != globalDict_.end()) return it->second;
+    const int32_t code = static_cast<int32_t>(globalDictReverse_.size());
+    globalDictReverse_.emplace_back(s);
+    globalDict_.emplace(globalDictReverse_.back(), code);
+    return code;
+}
 
+uint8_t* HashAggregateOperator::fastPathStateForCode(int32_t globalCode) {
+    const size_t needed = (static_cast<size_t>(globalCode) + 1) * stateBytes_;
+    if (codeStates_.size() < needed) {
+        const size_t oldSlots = codeStates_.size() / stateBytes_;
+        codeStates_.resize(needed);
+        // Initialize newly-added slots.
+        for (size_t s = oldSlots; s <= static_cast<size_t>(globalCode); ++s) {
+            uint8_t* slab = codeStates_.data() + s * stateBytes_;
+            for (size_t a = 0; a < aggs_.size(); ++a) {
+                aggs_[a]->init(slab + aggOffsets_[a]);
+            }
+        }
+    }
+    return codeStates_.data() + static_cast<size_t>(globalCode) * stateBytes_;
+}
+
+void HashAggregateOperator::build() {
     InitCtx ctx{&aggs_, &aggOffsets_};
     g_initCtx = &ctx;
 
-    std::vector<uint8_t>  keyBufFixed(codec_->isFixedWidth() ? codec_->keyBytes() : 0);
+    if (path_ == Path::Fixed) {
+        tableFixed_ = std::make_unique<BytesHashTable>(
+            codec_->keyBytes(), stateBytes_, mm_);
+    } else if (path_ == Path::Var) {
+        tableVar_ = std::make_unique<VarBytesHashTable>(stateBytes_, mm_);
+    }
+
+    std::vector<uint8_t>  keyBufFixed(path_ == Path::Fixed ? codec_->keyBytes() : 0);
     std::vector<uint8_t>  keyBufVar;
     std::vector<uint8_t*> groupSlots;
 
@@ -105,15 +139,74 @@ void HashAggregateOperator::build() {
 
         groupSlots.clear();
         groupSlots.reserve(pos.size());
-        for (size_t k = 0; k < pos.size(); ++k) {
-            const auto i = static_cast<size_t>(pos.at(k));
-            if (codec_->isFixedWidth()) {
-                codec_->encode(keyPtrs, i, keyBufFixed.data());
-                groupSlots.push_back(tableFixed_->findOrInsert(keyBufFixed.data(), initSlab));
+
+        if (path_ == Path::StringFastPath) {
+            const ColumnVector&    keyCol   = keyEvals[0];
+            const ValidityBitmask& keyValid = keyCol.validity();
+
+            // Two-pass: (1) intern all strings to global codes (which may
+            // grow globalDict_ / codeStates_ and invalidate any pointers),
+            // (2) resize codeStates_ once, (3) materialize per-row slot
+            // pointers from the now-stable buffer.
+            constexpr int32_t kNullCodeMarker = -1;
+            std::vector<int32_t> rowCodes(pos.size(), kNullCodeMarker);
+
+            if (keyCol.isDictEncoded()) {
+                std::vector<int32_t> batchToGlobal(keyCol.dictSize());
+                for (size_t b = 0; b < keyCol.dictSize(); ++b) {
+                    const int32_t* doff = keyCol.dictOffsets().as<int32_t>();
+                    const char*    dval = keyCol.dictValues().as<char>();
+                    std::string_view s(dval + doff[b],
+                                       static_cast<size_t>(doff[b + 1] - doff[b]));
+                    batchToGlobal[b] = internGlobalString(s);
+                }
+                const int32_t* codes = keyCol.values().as<int32_t>();
+                for (size_t k = 0; k < pos.size(); ++k) {
+                    const size_t i = static_cast<size_t>(pos.at(k));
+                    if (keyValid.isValid(i)) {
+                        rowCodes[k] = batchToGlobal[static_cast<size_t>(codes[i])];
+                    }
+                }
             } else {
-                codec_->encodeVar(keyPtrs, i, keyBufVar);
-                groupSlots.push_back(tableVar_->findOrInsert(
-                    keyBufVar.data(), keyBufVar.size(), initSlab));
+                for (size_t k = 0; k < pos.size(); ++k) {
+                    const size_t i = static_cast<size_t>(pos.at(k));
+                    if (keyValid.isValid(i)) {
+                        rowCodes[k] = internGlobalString(keyCol.stringAt(i));
+                    }
+                }
+            }
+
+            // Now codeStates_ is stable: every new global code created above is
+            // covered by a single resize-and-init pass.
+            if (!globalDictReverse_.empty()) {
+                fastPathStateForCode(static_cast<int32_t>(globalDictReverse_.size()) - 1);
+            }
+
+            for (size_t k = 0; k < pos.size(); ++k) {
+                if (rowCodes[k] == kNullCodeMarker) {
+                    if (!nullGroupInit_) {
+                        initSlab(nullGroupState_.data());
+                        nullGroupInit_ = true;
+                    }
+                    groupSlots.push_back(nullGroupState_.data());
+                } else {
+                    groupSlots.push_back(
+                        codeStates_.data() +
+                        static_cast<size_t>(rowCodes[k]) * stateBytes_);
+                }
+            }
+        } else {
+            // Existing fixed / var paths via KeyCodec + Bytes/VarBytesHashTable.
+            for (size_t k = 0; k < pos.size(); ++k) {
+                const auto i = static_cast<size_t>(pos.at(k));
+                if (path_ == Path::Fixed) {
+                    codec_->encode(keyPtrs, i, keyBufFixed.data());
+                    groupSlots.push_back(tableFixed_->findOrInsert(keyBufFixed.data(), initSlab));
+                } else {
+                    codec_->encodeVar(keyPtrs, i, keyBufVar);
+                    groupSlots.push_back(tableVar_->findOrInsert(
+                        keyBufVar.data(), keyBufVar.size(), initSlab));
+                }
             }
         }
 
@@ -169,9 +262,6 @@ ColumnBatch HashAggregateOperator::emitFixed() {
 ColumnBatch HashAggregateOperator::emitVar() {
     const size_t total = tableVar_->numGroups();
 
-    // Pre-allocate fixed-width key columns; lazy-init StringBuilders for
-    // variable-width key columns. Both kinds get populated inside the cursor
-    // walk via codec_->decodeVar().
     std::vector<ColumnVector>                  fixedCols(groupKeys_.size());
     std::vector<std::unique_ptr<StringBuilder>> stringBuilders(groupKeys_.size());
     for (size_t c = 0; c < groupKeys_.size(); ++c) {
@@ -230,8 +320,42 @@ ColumnBatch HashAggregateOperator::emitVar() {
     return ColumnBatch(std::move(cols), PositionList::identity(total));
 }
 
+ColumnBatch HashAggregateOperator::emitStringFastPath() {
+    const size_t numCodes  = globalDictReverse_.size();
+    const size_t total     = numCodes + (nullGroupInit_ ? 1 : 0);
+
+    StringBuilder keyBuilder(mm_);
+    std::vector<const uint8_t*> states;
+    states.reserve(total);
+
+    if (nullGroupInit_) {
+        keyBuilder.appendNull();
+        states.push_back(nullGroupState_.data());
+    }
+    for (size_t c = 0; c < numCodes; ++c) {
+        keyBuilder.append(globalDictReverse_[c]);
+        states.push_back(codeStates_.data() + c * stateBytes_);
+    }
+
+    std::vector<ColumnVector> cols;
+    cols.reserve(1 + aggs_.size());
+    cols.push_back(keyBuilder.build());
+    for (size_t a = 0; a < aggs_.size(); ++a) {
+        std::vector<const uint8_t*> slices;
+        slices.reserve(states.size());
+        for (const auto* s : states) slices.push_back(s + aggOffsets_[a]);
+        cols.push_back(aggs_[a]->finalize(slices, mm_));
+    }
+    return ColumnBatch(std::move(cols), PositionList::identity(total));
+}
+
 ColumnBatch HashAggregateOperator::emit() {
-    return codec_->isFixedWidth() ? emitFixed() : emitVar();
+    switch (path_) {
+        case Path::StringFastPath: return emitStringFastPath();
+        case Path::Fixed:          return emitFixed();
+        case Path::Var:            return emitVar();
+    }
+    raise(ErrorCode::Internal, "HashAggregate: unknown emit path");
 }
 
 std::optional<ColumnBatch> HashAggregateOperator::getNext() {

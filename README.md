@@ -31,8 +31,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Dictionary-encoded STRING columns** — `ColumnVector` grows a third layout: `values_` holds `int32` codes; `dictOffsets_` + `dictValues_` hold the shared dictionary. `DictStringBuilder` builds dict columns row-by-row with dedup. `stringAt()` dispatches uniformly so existing kernels (compare, LIKE, MIN/MAX) and GROUP BY/JOIN key codecs work unchanged. Dict layout is preserved through `clone` / `selectActive` / `HashJoin gather`; `HashJoin concatDense` currently decodes mixed-dict inputs to regular STRING (dict-merge is a follow-up).
 - **Dict-aware equality fast path** — `Literal(std::string)` now emits a dict-encoded broadcast (`dictSize=1`), and the STRING `Eq` kernel detects dict-vs-dict inputs, precomputes a `rhsCode → lhsCode` translation table, and compares int32s per row. Measured **~4× throughput** on `dict_size=10` vs the per-row `stringAt` path; gains shrink as dict size grows.
 - **Dict-aware LIKE fast path** — `LikeExpr::eval` on a dict-encoded column evaluates the pattern matcher once per dictionary entry (into a `dictResult[dictSize]` table), then per row just indexes into that table by code. Measured **~3× throughput** at `dict_size=10`, **~3.6×** at `dict_size=100`, **~2.4×** at `dict_size=1000` — LIKE benefits more than `Eq` because per-row pattern matching is the expensive bit.
+- **Code-aware GROUP BY (single STRING key)** — `HashAggregateOperator` adds a `StringFastPath` selected for single-STRING-key aggregates. Maintains a global dictionary across batches; for dict-encoded inputs per-row work shrinks to a `batchCode → globalCode` array lookup plus an array-indexed group state slot. Non-dict batches still intern per row into the same global dictionary so results are identical. Measured on 1M-row aggregation: **~4× throughput** at `dict_size=10` (128M vs 33M items/s), **~3.9×** at 100, **~1.6×** at 1000.
 
-**Tests & benchmarks** — 117 GoogleTest cases. New since previous slice: dict-encoded LIKE fast path correctness + null-propagation. New `bench_dict_like` sweeps dict cardinality {10, 100, 1000} for dict-vs-plain LIKE throughput.
+**Tests & benchmarks** — 122 GoogleTest cases. New since previous slice: StringFastPath GROUP BY across dict / non-dict / mixed batches, NULL keys as their own group, many-groups codeStates_ resize path. New `bench_string_group_by` sweeps dict cardinality {10, 100, 1000} for dict-vs-plain GROUP BY throughput.
 
 ## Build & Test
 
@@ -43,7 +44,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 117 tests, ~1.3s
+ctest --preset=debug                 # 122 tests, ~1.4s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -81,7 +82,8 @@ Key invariants the codebase enforces:
 | **3** | Dictionary-encoded STRING columns (layout + builder + dict-aware gather) | done |
 | **3** | Dict-aware `Eq` fast path (~4× on low-cardinality dict-vs-literal) | done |
 | **3** | Dict-aware `LIKE` fast path (~3× on low-cardinality dict-vs-pattern) | done |
-| 3 | Spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware GROUP BY / JOIN hashing | in progress |
+| **3** | Code-aware GROUP BY for single STRING key (~4× on 1M-row low-cardinality agg) | done |
+| 3 | Spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware HashJoin keys | in progress |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
