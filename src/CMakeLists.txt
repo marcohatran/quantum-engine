@@ -12,6 +12,7 @@ add_library(quantum_core STATIC
     expression/Literal.cpp
     expression/ColumnRef.cpp
     expression/BinaryExpr.cpp
+    expression/LikeExpr.cpp
     expression/kernels/ArithmeticKernels.cpp
     expression/kernels/ComparisonKernels.cpp
     hash/HashTable.cpp

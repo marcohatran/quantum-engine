@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <string_view>
 
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
+#include "vector/StringBuilder.hpp"
 
 namespace quantum {
 
@@ -184,6 +186,101 @@ void MaxI64::update(uint8_t* const* groupSlots, const ColumnVector* input,
 ColumnVector MaxI64::finalize(const std::vector<const uint8_t*>& states,
                               MemoryManager* mm) const {
     return finalizeMinMax(states, mm);
+}
+
+// ---------- MinString / MaxString ----------
+
+namespace {
+
+constexpr int32_t kStringIdxNone = -1;
+
+template <bool IsMax>
+void updateStringAgg(uint8_t* const*       groupSlots,
+                     const ColumnVector*   input,
+                     const PositionList&   pos,
+                     std::vector<std::string>& values,
+                     const char*           opName) {
+    if (input == nullptr) {
+        raise(ErrorCode::InvalidArgument, "{}: input column is required", opName);
+    }
+    if (input->type().id != TypeId::STRING) {
+        raise(ErrorCode::TypeMismatch, "{}: input type {} != STRING", opName,
+              input->type().toString());
+    }
+    const ValidityBitmask& validity = input->validity();
+    const size_t n = pos.size();
+    for (size_t k = 0; k < n; ++k) {
+        const auto i = static_cast<size_t>(pos.at(k));
+        if (!validity.isValid(i)) continue;
+        const std::string_view s = input->stringAt(i);
+
+        int32_t idx;
+        std::memcpy(&idx, groupSlots[k], sizeof(idx));
+        if (idx == kStringIdxNone) {
+            idx = static_cast<int32_t>(values.size());
+            values.emplace_back(s);
+            std::memcpy(groupSlots[k], &idx, sizeof(idx));
+            continue;
+        }
+        const std::string& cur = values[static_cast<size_t>(idx)];
+        const bool replace = IsMax ? (s > cur) : (s < cur);
+        if (replace) values[static_cast<size_t>(idx)].assign(s);
+    }
+}
+
+ColumnVector finalizeStringAgg(const std::vector<const uint8_t*>& states,
+                               const std::vector<std::string>&    values,
+                               MemoryManager*                     mm) {
+    StringBuilder sb(mm);
+    for (const auto* s : states) {
+        int32_t idx;
+        std::memcpy(&idx, s, sizeof(idx));
+        if (idx == kStringIdxNone) sb.appendNull();
+        else                       sb.append(values[static_cast<size_t>(idx)]);
+    }
+    return sb.build();
+}
+
+} // namespace
+
+MinString::MinString(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "MinString: input expression required");
+}
+
+void MinString::init(uint8_t* state) const {
+    int32_t v = kStringIdxNone;
+    std::memcpy(state, &v, sizeof(v));
+}
+
+void MinString::update(uint8_t* const* groupSlots,
+                       const ColumnVector* input,
+                       const PositionList& pos) const {
+    updateStringAgg</*IsMax=*/false>(groupSlots, input, pos, values_, "MinString");
+}
+
+ColumnVector MinString::finalize(const std::vector<const uint8_t*>& states,
+                                 MemoryManager* mm) const {
+    return finalizeStringAgg(states, values_, mm);
+}
+
+MaxString::MaxString(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "MaxString: input expression required");
+}
+
+void MaxString::init(uint8_t* state) const {
+    int32_t v = kStringIdxNone;
+    std::memcpy(state, &v, sizeof(v));
+}
+
+void MaxString::update(uint8_t* const* groupSlots,
+                       const ColumnVector* input,
+                       const PositionList& pos) const {
+    updateStringAgg</*IsMax=*/true>(groupSlots, input, pos, values_, "MaxString");
+}
+
+ColumnVector MaxString::finalize(const std::vector<const uint8_t*>& states,
+                                 MemoryManager* mm) const {
+    return finalizeStringAgg(states, values_, mm);
 }
 
 // ---------- AvgI64 ----------

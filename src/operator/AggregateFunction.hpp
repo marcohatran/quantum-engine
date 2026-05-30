@@ -121,6 +121,50 @@ private:
     ExpressionPtr input_;
 };
 
+// MIN/MAX(STRING) -> STRING. Returns NULL for a group with no non-null inputs.
+//
+// State layout: int32 index into a mutable per-aggregate vector of current
+// best-seen strings. Index -1 means "no value yet". The aggregate is owned by
+// a single operator and called single-threaded, so the mutable bookkeeping is
+// safe without locking.
+class MinString final : public AggregateFunction {
+public:
+    explicit MinString(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(int32_t); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    DataType outputType() const override { return DataType{TypeId::STRING}; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr                    input_;
+    mutable std::vector<std::string> values_;  // index lookup via state
+};
+
+class MaxString final : public AggregateFunction {
+public:
+    explicit MaxString(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(int32_t); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    DataType outputType() const override { return DataType{TypeId::STRING}; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr                    input_;
+    mutable std::vector<std::string> values_;
+};
+
 // AVG(int64) -> double. State: [double sum][int64 count]. Skips nulls.
 // Returns NULL for a group with no non-null inputs.
 class AvgI64 final : public AggregateFunction {

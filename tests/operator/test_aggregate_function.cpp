@@ -131,3 +131,55 @@ TEST(AvgI64, EmptyGroupReturnsNull) {
     auto out = runAggSingleGroup(mm, agg, batch);
     EXPECT_FALSE(out.validity().isValid(0));
 }
+
+#include "vector/StringBuilder.hpp"
+
+namespace {
+ColumnBatch oneStringCol(MemoryManager& mm,
+                         const std::vector<std::string>& vals,
+                         const std::vector<bool>&        validity = {}) {
+    StringBuilder sb(&mm);
+    for (size_t i = 0; i < vals.size(); ++i) {
+        if (!validity.empty() && !validity[i]) sb.appendNull();
+        else                                   sb.append(vals[i]);
+    }
+    std::vector<ColumnVector> cols;
+    cols.push_back(sb.build());
+    return ColumnBatch(std::move(cols), PositionList::identity(vals.size()));
+}
+} // namespace
+
+TEST(MinString, FindsLexMin) {
+    MemoryManager mm(64 * 1024);
+    MinString agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneStringCol(mm, {"banana", "apple", "cherry"});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_TRUE(out.validity().isValid(0));
+    EXPECT_EQ(out.stringAt(0), "apple");
+}
+
+TEST(MaxString, FindsLexMax) {
+    MemoryManager mm(64 * 1024);
+    MaxString agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneStringCol(mm, {"banana", "apple", "cherry"});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_TRUE(out.validity().isValid(0));
+    EXPECT_EQ(out.stringAt(0), "cherry");
+}
+
+TEST(MinString, SkipsNullsAndAllNullReturnsNull) {
+    MemoryManager mm(64 * 1024);
+    {
+        MinString agg(std::make_unique<ColumnRef>(0));
+        auto batch = oneStringCol(mm, {"x", "apple", "y"}, {false, true, false});
+        auto out = runAggSingleGroup(mm, agg, batch);
+        EXPECT_TRUE(out.validity().isValid(0));
+        EXPECT_EQ(out.stringAt(0), "apple");
+    }
+    {
+        MinString agg(std::make_unique<ColumnRef>(0));
+        auto batch = oneStringCol(mm, {"x", "y"}, {false, false});
+        auto out = runAggSingleGroup(mm, agg, batch);
+        EXPECT_FALSE(out.validity().isValid(0));
+    }
+}
