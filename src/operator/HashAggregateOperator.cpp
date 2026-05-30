@@ -9,7 +9,6 @@ namespace quantum {
 
 namespace {
 
-// Init the full per-group state slab by initializing each aggregate's slice.
 struct InitCtx {
     const std::vector<AggregateFunctionPtr>* aggs;
     const std::vector<size_t>*               offsets;
@@ -30,40 +29,54 @@ void initSlab(uint8_t* slab) {
 HashAggregateOperator::HashAggregateOperator(
         MemoryManager*                    mm,
         OperatorPtr                       child,
-        ExpressionPtr                     groupKey,
+        std::vector<ExpressionPtr>        groupKeys,
         std::vector<AggregateFunctionPtr> aggs,
         std::vector<std::string>          outputNames)
     : Operator(mm),
       child_(std::move(child)),
-      groupKey_(std::move(groupKey)),
+      groupKeys_(std::move(groupKeys)),
       aggs_(std::move(aggs)) {
-    if (outputNames.size() != aggs_.size() + 1) {
+
+    if (groupKeys_.empty()) {
         raise(ErrorCode::InvalidArgument,
-              "HashAggregate: {} output names, expected {} (key + {} aggs)",
-              outputNames.size(), aggs_.size() + 1, aggs_.size());
+              "HashAggregate: at least one group key required");
+    }
+    if (outputNames.size() != groupKeys_.size() + aggs_.size()) {
+        raise(ErrorCode::InvalidArgument,
+              "HashAggregate: {} output names, expected {} ({} keys + {} aggs)",
+              outputNames.size(), groupKeys_.size() + aggs_.size(),
+              groupKeys_.size(), aggs_.size());
     }
 
-    // State layout: pack aggregate slices back-to-back.
     aggOffsets_.reserve(aggs_.size());
     for (const auto& a : aggs_) {
         aggOffsets_.push_back(stateBytes_);
         stateBytes_ += a->stateSize();
     }
-    if (stateBytes_ == 0) stateBytes_ = 1;  // HashTable disallows zero-byte slots
+    if (stateBytes_ == 0) stateBytes_ = 1;
 
-    // Output schema: group key column + one column per aggregate.
     const Schema& inSchema = child_->outputSchema();
-    DataType keyType = groupKey_->resultType(inSchema);
-    if (keyType.id != TypeId::INT64) {
-        raise(ErrorCode::NotImplemented,
-              "HashAggregate: only INT64 grouping keys supported in Phase 2 slice (got {})",
-              keyType.toString());
+    keyTypes_.reserve(groupKeys_.size());
+    for (auto& e : groupKeys_) {
+        DataType t = e->resultType(inSchema);
+        if (!t.isFixedWidth()) {
+            raise(ErrorCode::NotImplemented,
+                  "HashAggregate: variable-width key type {} not supported",
+                  t.toString());
+        }
+        keyTypes_.push_back(t);
     }
+    codec_ = std::make_unique<KeyCodec>(keyTypes_);
+
     std::vector<Field> fields;
     fields.reserve(outputNames.size());
-    fields.push_back(Field{std::move(outputNames[0]), keyType});
+    for (size_t i = 0; i < groupKeys_.size(); ++i) {
+        fields.push_back(Field{std::move(outputNames[i]), keyTypes_[i]});
+    }
     for (size_t i = 0; i < aggs_.size(); ++i) {
-        fields.push_back(Field{std::move(outputNames[i + 1]), aggs_[i]->outputType()});
+        fields.push_back(Field{
+            std::move(outputNames[groupKeys_.size() + i]),
+            aggs_[i]->outputType()});
     }
     outSchema_ = Schema(std::move(fields));
 }
@@ -72,36 +85,36 @@ void HashAggregateOperator::open()  { child_->open(); }
 void HashAggregateOperator::close() { child_->close(); }
 
 void HashAggregateOperator::build() {
-    table_ = std::make_unique<HashTable>(stateBytes_, mm_);
+    table_ = std::make_unique<BytesHashTable>(codec_->keyBytes(), stateBytes_, mm_);
 
     InitCtx ctx{&aggs_, &aggOffsets_};
     g_initCtx = &ctx;
 
-    std::vector<uint8_t*> groupSlots;  // one entry per active row in the batch
+    std::vector<uint8_t>  keyBuf(codec_->keyBytes());
+    std::vector<uint8_t*> groupSlots;
 
     while (auto in = child_->getNext()) {
         const PositionList& pos = in->positions();
         if (pos.size() == 0) continue;
 
-        // 1. Evaluate the group key column.
-        ColumnVector keyCol = groupKey_->eval(*in, mm_);
-        const int64_t*         keys     = keyCol.typed<int64_t>();
-        const ValidityBitmask& keyValid = keyCol.validity();
+        // Evaluate all group key columns.
+        std::vector<ColumnVector> keyEvals;
+        keyEvals.reserve(groupKeys_.size());
+        for (const auto& e : groupKeys_) keyEvals.push_back(e->eval(*in, mm_));
+        std::vector<const ColumnVector*> keyPtrs;
+        keyPtrs.reserve(keyEvals.size());
+        for (const auto& c : keyEvals) keyPtrs.push_back(&c);
 
-        // 2. Insert / look up the per-row group slot.
+        // Find/insert one slot per active probe row.
         groupSlots.clear();
         groupSlots.reserve(pos.size());
         for (size_t k = 0; k < pos.size(); ++k) {
             const auto i = static_cast<size_t>(pos.at(k));
-            if (!keyValid.isValid(i)) {
-                groupSlots.push_back(table_->findOrInsertNull(initSlab));
-            } else {
-                groupSlots.push_back(table_->findOrInsert(keys[i], initSlab));
-            }
+            codec_->encode(keyPtrs, i, keyBuf.data());
+            groupSlots.push_back(table_->findOrInsert(keyBuf.data(), initSlab));
         }
 
-        // 3. For each aggregate, evaluate its (optional) input and update.
-        // groupSlots holds pointers to the slab; offset each by the agg's slice.
+        // For each aggregate, evaluate its input and update.
         for (size_t a = 0; a < aggs_.size(); ++a) {
             const auto& agg = aggs_[a];
 
@@ -125,35 +138,30 @@ void HashAggregateOperator::build() {
 }
 
 ColumnBatch HashAggregateOperator::emit() {
-    const size_t numNonNull = table_->numGroups();
-    const size_t total      = numNonNull + (table_->hasNullGroup() ? 1 : 0);
+    const size_t total = table_->numGroups();
 
-    // 1. Build the group-key column.
-    ColumnVector keyCol = ColumnVector::make(Int64, total, mm_);
-    keyCol.validity().setAllValid();
-    int64_t* keyData = keyCol.typed<int64_t>();
+    // Output key columns (one per key) + one column per aggregate.
+    std::vector<ColumnVector> cols;
+    cols.reserve(groupKeys_.size() + aggs_.size());
 
-    // 2. Collect state pointers in the same order we'll write the keys.
+    for (const auto& t : keyTypes_) {
+        ColumnVector c = ColumnVector::make(t, total, mm_);
+        c.validity().setAllValid();
+        cols.push_back(std::move(c));
+    }
+
+    // Walk the table, decoding each key into the corresponding column slot.
     std::vector<const uint8_t*> states;
     states.reserve(total);
 
     size_t row = 0;
-    if (table_->hasNullGroup()) {
-        keyData[row] = 0;
-        keyCol.validity().setValid(row, false);
-        states.push_back(table_->nullGroupState());
-        ++row;
-    }
     for (auto cur = table_->cursor(); cur.valid(); cur.next()) {
-        keyData[row] = cur.key();
+        for (size_t c = 0; c < groupKeys_.size(); ++c) {
+            codec_->decode(cur.key(), c, cols[c], row);
+        }
         states.push_back(cur.state());
         ++row;
     }
-
-    // 3. Materialize each aggregate's output column from its slice.
-    std::vector<ColumnVector> cols;
-    cols.reserve(1 + aggs_.size());
-    cols.push_back(std::move(keyCol));
 
     for (size_t a = 0; a < aggs_.size(); ++a) {
         std::vector<const uint8_t*> slices;

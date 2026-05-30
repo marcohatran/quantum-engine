@@ -82,4 +82,63 @@ public:
     const Expression* inputExpr() const override { return nullptr; }
 };
 
+// MIN(int64) -> int64. Returns NULL for a group with no non-null inputs.
+// State layout: [int64_t value][uint8_t hasValue][7 bytes padding].
+class MinI64 final : public AggregateFunction {
+public:
+    explicit MinI64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return 16; }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    DataType outputType() const override { return Int64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
+// MAX(int64) -> int64. Returns NULL for a group with no non-null inputs.
+class MaxI64 final : public AggregateFunction {
+public:
+    explicit MaxI64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return 16; }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    DataType outputType() const override { return Int64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
+// AVG(int64) -> double. State: [double sum][int64 count]. Skips nulls.
+// Returns NULL for a group with no non-null inputs.
+class AvgI64 final : public AggregateFunction {
+public:
+    explicit AvgI64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return 16; }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    DataType outputType() const override { return Float64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
 } // namespace quantum

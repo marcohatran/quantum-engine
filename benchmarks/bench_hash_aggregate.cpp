@@ -43,8 +43,10 @@ static void BM_HashAggregate(benchmark::State& state) {
             &mm, Schema({{"k", Int64}, {"v", Int64}}), std::move(src));
         std::vector<AggregateFunctionPtr> aggs;
         aggs.push_back(std::make_unique<SumI64>(std::make_unique<ColumnRef>(1)));
+        std::vector<ExpressionPtr> keys;
+        keys.push_back(std::make_unique<ColumnRef>(0));
         HashAggregateOperator op(&mm, std::move(scan),
-                                 std::make_unique<ColumnRef>(0),
+                                 std::move(keys),
                                  std::move(aggs),
                                  {"k", "sum"});
         op.open();

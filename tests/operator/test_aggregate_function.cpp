@@ -73,3 +73,61 @@ TEST(CountStar, CountsActiveRowsIncludingNulls) {
     std::memcpy(&cnt, state, sizeof(cnt));
     EXPECT_EQ(cnt, 4);
 }
+
+namespace {
+// Drive an aggregate against a single all-into-one-group batch and return
+// the finalized output as a one-row ColumnVector. Convenience for tests.
+ColumnVector runAggSingleGroup(MemoryManager& mm,
+                               AggregateFunction& agg,
+                               const ColumnBatch& batch) {
+    std::vector<uint8_t> state(agg.stateSize());
+    agg.init(state.data());
+    std::optional<ColumnVector> input;
+    if (const Expression* e = agg.inputExpr()) input = e->eval(batch, &mm);
+    std::vector<uint8_t*> slots(batch.activeRows(), state.data());
+    agg.update(slots.data(), input.has_value() ? &*input : nullptr, batch.positions());
+    return agg.finalize({state.data()}, &mm);
+}
+} // namespace
+
+TEST(MinI64, FindsMinAndSkipsNulls) {
+    MemoryManager mm(64 * 1024);
+    MinI64 agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {7, 100, 3, -2, 5}, {true, false, true, true, true});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_TRUE(out.validity().isValid(0));
+    EXPECT_EQ(out.typed<int64_t>()[0], -2);
+}
+
+TEST(MinI64, EmptyGroupReturnsNull) {
+    MemoryManager mm(64 * 1024);
+    MinI64 agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {1, 2, 3}, {false, false, false});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_FALSE(out.validity().isValid(0));
+}
+
+TEST(MaxI64, FindsMax) {
+    MemoryManager mm(64 * 1024);
+    MaxI64 agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {7, -100, 3, 42, 5});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_EQ(out.typed<int64_t>()[0], 42);
+}
+
+TEST(AvgI64, ComputesMeanOfActiveValues) {
+    MemoryManager mm(64 * 1024);
+    AvgI64 agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {1, 2, 3, 4, 100}, {true, true, true, true, false});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_TRUE(out.validity().isValid(0));
+    EXPECT_DOUBLE_EQ(out.typed<double>()[0], (1.0 + 2 + 3 + 4) / 4.0);
+}
+
+TEST(AvgI64, EmptyGroupReturnsNull) {
+    MemoryManager mm(64 * 1024);
+    AvgI64 agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {1, 2}, {false, false});
+    auto out = runAggSingleGroup(mm, agg, batch);
+    EXPECT_FALSE(out.validity().isValid(0));
+}

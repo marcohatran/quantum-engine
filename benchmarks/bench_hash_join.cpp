@@ -54,9 +54,12 @@ static void BM_HashJoin(benchmark::State& state) {
         auto probeScan = std::make_unique<ScanOperator>(
             &mm, Schema({{"k", Int64}, {"v", Int64}}), std::move(probeSrc));
 
+        std::vector<ExpressionPtr> bk;
+        bk.push_back(std::make_unique<ColumnRef>(0));
+        std::vector<ExpressionPtr> pk;
+        pk.push_back(std::make_unique<ColumnRef>(0));
         HashJoinOperator op(&mm, std::move(buildScan), std::move(probeScan),
-                            std::make_unique<ColumnRef>(0),
-                            std::make_unique<ColumnRef>(0),
+                            std::move(bk), std::move(pk),
                             {"bk", "bv", "pk", "pv"});
         op.open();
         state.ResumeTiming();
