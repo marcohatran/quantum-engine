@@ -26,6 +26,7 @@ add_library(quantum_core STATIC
     operator/AggregateFunction.cpp
     operator/HashAggregateOperator.cpp
     operator/HashJoinOperator.cpp
+    spill/SpillFile.cpp
 )
 
 target_include_directories(quantum_core

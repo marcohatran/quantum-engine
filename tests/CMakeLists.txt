@@ -25,7 +25,9 @@ add_executable(quantum_tests
     operator/test_outer_joins.cpp
     operator/test_dict_e2e.cpp
     operator/test_string_group_by_fast.cpp
+    operator/test_spill_hash_aggregate.cpp
     hash/test_hash_table.cpp
+    spill/test_spill_file.cpp
     e2e/test_pipeline_smoke.cpp
 )
 

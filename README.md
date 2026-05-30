@@ -32,8 +32,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Dict-aware equality fast path** — `Literal(std::string)` now emits a dict-encoded broadcast (`dictSize=1`), and the STRING `Eq` kernel detects dict-vs-dict inputs, precomputes a `rhsCode → lhsCode` translation table, and compares int32s per row. Measured **~4× throughput** on `dict_size=10` vs the per-row `stringAt` path; gains shrink as dict size grows.
 - **Dict-aware LIKE fast path** — `LikeExpr::eval` on a dict-encoded column evaluates the pattern matcher once per dictionary entry (into a `dictResult[dictSize]` table), then per row just indexes into that table by code. Measured **~3× throughput** at `dict_size=10`, **~3.6×** at `dict_size=100`, **~2.4×** at `dict_size=1000` — LIKE benefits more than `Eq` because per-row pattern matching is the expensive bit.
 - **Code-aware GROUP BY (single STRING key)** — `HashAggregateOperator` adds a `StringFastPath` selected for single-STRING-key aggregates. Maintains a global dictionary across batches; for dict-encoded inputs per-row work shrinks to a `batchCode → globalCode` array lookup plus an array-indexed group state slot. Non-dict batches still intern per row into the same global dictionary so results are identical. Measured on 1M-row aggregation: **~4× throughput** at `dict_size=10` (128M vs 33M items/s), **~3.9×** at 100, **~1.6×** at 1000.
+- **Spill-to-disk (StringFastPath HashAggregate v1)** — `AggregateFunction::merge` added on the numeric aggregates (`SumI64`, `CountStar`, `MinI64`, `MaxI64`, `AvgI64`); `MinString`/`MaxString` raise `NotImplemented` for v1 since their state is out-of-line. New `SpillFile` writes `(keyLen, key, state)` records to a tempfile via `std::filesystem::temp_directory_path()`. When `spillTriggerGroups` is set on `HashAggregateOperator`, each batch that lifts `globalDictReverse_` past the threshold flushes the partial state to disk and resets; before emit, every spill file is drained back into the live state via `internGlobalString` + `agg->merge`. Manual trigger for now; MemoryManager-driven triggering is a follow-up.
 
-**Tests & benchmarks** — 122 GoogleTest cases. New since previous slice: StringFastPath GROUP BY across dict / non-dict / mixed batches, NULL keys as their own group, many-groups codeStates_ resize path. New `bench_string_group_by` sweeps dict cardinality {10, 100, 1000} for dict-vs-plain GROUP BY throughput.
+**Tests & benchmarks** — 127 GoogleTest cases. New since previous slice: SpillFile roundtrip (keyed records + null-group sentinel); HashAggregate with aggressive spill thresholds matches the no-spill baseline for SUM / COUNT / MIN / MAX / AVG combinations and preserves the NULL group across spills.
 
 ## Build & Test
 
@@ -44,7 +45,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 122 tests, ~1.4s
+ctest --preset=debug                 # 127 tests, ~1.4s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -58,6 +59,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
+spill/       → SpillFile (HashAggregate v1)
 vector/      → ColumnBatch, ColumnVector, PositionList, ValidityBitmask, StringBuilder, DictStringBuilder
 memory/      → MemoryManager (budget) + Arena + Buffer (RAII off-heap)
 common/      → DataType, Schema, Status, Bits, Macros
@@ -83,7 +85,8 @@ Key invariants the codebase enforces:
 | **3** | Dict-aware `Eq` fast path (~4× on low-cardinality dict-vs-literal) | done |
 | **3** | Dict-aware `LIKE` fast path (~3× on low-cardinality dict-vs-pattern) | done |
 | **3** | Code-aware GROUP BY for single STRING key (~4× on 1M-row low-cardinality agg) | done |
-| 3 | Spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware HashJoin keys | in progress |
+| **3** | Spill-to-disk v1 for HashAggregate StringFastPath (manual trigger, numeric merges) | done |
+| 3 | MemoryManager-driven spill trigger, spill for Fixed / Var paths, MinString/MaxString merge, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware HashJoin keys | in progress |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |

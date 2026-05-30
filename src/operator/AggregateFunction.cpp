@@ -57,6 +57,14 @@ ColumnVector SumI64::finalize(const std::vector<const uint8_t*>& states,
     return out;
 }
 
+void SumI64::merge(uint8_t* dst, const uint8_t* src) const {
+    int64_t a, b;
+    std::memcpy(&a, dst, sizeof(a));
+    std::memcpy(&b, src, sizeof(b));
+    a += b;
+    std::memcpy(dst, &a, sizeof(a));
+}
+
 // ---------- CountStar ----------
 
 void CountStar::init(uint8_t* state) const {
@@ -85,6 +93,14 @@ ColumnVector CountStar::finalize(const std::vector<const uint8_t*>& states,
         std::memcpy(&o[i], states[i], sizeof(int64_t));
     }
     return out;
+}
+
+void CountStar::merge(uint8_t* dst, const uint8_t* src) const {
+    int64_t a, b;
+    std::memcpy(&a, dst, sizeof(a));
+    std::memcpy(&b, src, sizeof(b));
+    a += b;
+    std::memcpy(dst, &a, sizeof(a));
 }
 
 // ---------- helpers for MIN/MAX state ----------
@@ -150,6 +166,19 @@ ColumnVector finalizeMinMax(const std::vector<const uint8_t*>& states,
     return out;
 }
 
+template <typename Cmp>
+void mergeMinMax(uint8_t* dst, const uint8_t* src) {
+    if (!minMaxHasValue(src)) return;
+    if (!minMaxHasValue(dst)) {
+        std::memcpy(dst, src, 16);
+        return;
+    }
+    Cmp cmp;
+    if (cmp(minMaxValue(src), minMaxValue(dst))) {
+        minMaxSet(dst, minMaxValue(src));
+    }
+}
+
 } // namespace
 
 // ---------- MinI64 ----------
@@ -170,6 +199,10 @@ ColumnVector MinI64::finalize(const std::vector<const uint8_t*>& states,
     return finalizeMinMax(states, mm);
 }
 
+void MinI64::merge(uint8_t* dst, const uint8_t* src) const {
+    mergeMinMax<std::less<int64_t>>(dst, src);
+}
+
 // ---------- MaxI64 ----------
 
 MaxI64::MaxI64(ExpressionPtr input) : input_(std::move(input)) {
@@ -186,6 +219,10 @@ void MaxI64::update(uint8_t* const* groupSlots, const ColumnVector* input,
 ColumnVector MaxI64::finalize(const std::vector<const uint8_t*>& states,
                               MemoryManager* mm) const {
     return finalizeMinMax(states, mm);
+}
+
+void MaxI64::merge(uint8_t* dst, const uint8_t* src) const {
+    mergeMinMax<std::greater<int64_t>>(dst, src);
 }
 
 // ---------- MinString / MaxString ----------
@@ -263,6 +300,11 @@ ColumnVector MinString::finalize(const std::vector<const uint8_t*>& states,
     return finalizeStringAgg(states, values_, mm);
 }
 
+void MinString::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
+    raise(ErrorCode::NotImplemented,
+          "MinString::merge not supported in spill v1 (state is out-of-line)");
+}
+
 MaxString::MaxString(ExpressionPtr input) : input_(std::move(input)) {
     if (!input_) raise(ErrorCode::InvalidArgument, "MaxString: input expression required");
 }
@@ -281,6 +323,11 @@ void MaxString::update(uint8_t* const* groupSlots,
 ColumnVector MaxString::finalize(const std::vector<const uint8_t*>& states,
                                  MemoryManager* mm) const {
     return finalizeStringAgg(states, values_, mm);
+}
+
+void MaxString::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
+    raise(ErrorCode::NotImplemented,
+          "MaxString::merge not supported in spill v1 (state is out-of-line)");
 }
 
 // ---------- AvgI64 ----------
@@ -339,6 +386,19 @@ ColumnVector AvgI64::finalize(const std::vector<const uint8_t*>& states,
         }
     }
     return out;
+}
+
+void AvgI64::merge(uint8_t* dst, const uint8_t* src) const {
+    double  sumA, sumB;
+    int64_t cntA, cntB;
+    std::memcpy(&sumA, dst,     sizeof(sumA));
+    std::memcpy(&cntA, dst + 8, sizeof(cntA));
+    std::memcpy(&sumB, src,     sizeof(sumB));
+    std::memcpy(&cntB, src + 8, sizeof(cntB));
+    sumA += sumB;
+    cntA += cntB;
+    std::memcpy(dst,     &sumA, sizeof(sumA));
+    std::memcpy(dst + 8, &cntA, sizeof(cntA));
 }
 
 } // namespace quantum

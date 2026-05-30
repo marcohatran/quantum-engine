@@ -32,12 +32,14 @@ HashAggregateOperator::HashAggregateOperator(
         OperatorPtr                       child,
         std::vector<ExpressionPtr>        groupKeys,
         std::vector<AggregateFunctionPtr> aggs,
-        std::vector<std::string>          outputNames)
+        std::vector<std::string>          outputNames,
+        size_t                            spillTriggerGroups)
     : Operator(mm),
       child_(std::move(child)),
       groupKeys_(std::move(groupKeys)),
       aggs_(std::move(aggs)),
-      path_(Path::Var) {
+      path_(Path::Var),
+      spillTriggerGroups_(spillTriggerGroups) {
 
     if (groupKeys_.empty()) {
         raise(ErrorCode::InvalidArgument,
@@ -109,6 +111,63 @@ uint8_t* HashAggregateOperator::fastPathStateForCode(int32_t globalCode) {
         }
     }
     return codeStates_.data() + static_cast<size_t>(globalCode) * stateBytes_;
+}
+
+void HashAggregateOperator::spillStringFastPath() {
+    if (globalDictReverse_.empty() && !nullGroupInit_) return;
+
+    SpillFile file(stateBytes_);
+    for (size_t c = 0; c < globalDictReverse_.size(); ++c) {
+        const auto& s = globalDictReverse_[c];
+        file.write(reinterpret_cast<const uint8_t*>(s.data()),
+                   static_cast<int32_t>(s.size()),
+                   codeStates_.data() + c * stateBytes_);
+    }
+    if (nullGroupInit_) {
+        file.writeNullGroup(nullGroupState_.data());
+    }
+    file.finishWriting();
+    spillFiles_.push_back(std::move(file));
+
+    // Reset in-memory state.
+    globalDict_.clear();
+    globalDictReverse_.clear();
+    codeStates_.clear();
+    nullGroupInit_ = false;
+}
+
+void HashAggregateOperator::mergeSpillFiles() {
+    if (spillFiles_.empty()) return;
+
+    for (auto& file : spillFiles_) {
+        auto reader = file.reader();
+        while (reader.next()) {
+            const uint8_t* srcState = reader.state();
+            if (reader.isNullGroup()) {
+                if (!nullGroupInit_) {
+                    InitCtx ctx{&aggs_, &aggOffsets_};
+                    g_initCtx = &ctx;
+                    initSlab(nullGroupState_.data());
+                    nullGroupInit_ = true;
+                }
+                for (size_t a = 0; a < aggs_.size(); ++a) {
+                    aggs_[a]->merge(
+                        nullGroupState_.data() + aggOffsets_[a],
+                        srcState                  + aggOffsets_[a]);
+                }
+            } else {
+                std::string_view s(reinterpret_cast<const char*>(reader.key()),
+                                   reader.keyLen());
+                const int32_t g = internGlobalString(s);
+                uint8_t* dstSlab = fastPathStateForCode(g);
+                for (size_t a = 0; a < aggs_.size(); ++a) {
+                    aggs_[a]->merge(dstSlab + aggOffsets_[a],
+                                    srcState + aggOffsets_[a]);
+                }
+            }
+        }
+    }
+    spillFiles_.clear();
 }
 
 void HashAggregateOperator::build() {
@@ -223,9 +282,18 @@ void HashAggregateOperator::build() {
                         inputCol.has_value() ? &*inputCol : nullptr,
                         pos);
         }
+
+        // Spill v1 trigger: only on StringFastPath, manually configured.
+        if (path_ == Path::StringFastPath && spillTriggerGroups_ > 0 &&
+            globalDictReverse_.size() >= spillTriggerGroups_) {
+            spillStringFastPath();
+        }
     }
 
     g_initCtx = nullptr;
+
+    if (path_ == Path::StringFastPath) mergeSpillFiles();
+
     built_ = true;
 }
 

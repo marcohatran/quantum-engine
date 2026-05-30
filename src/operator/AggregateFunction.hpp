@@ -45,6 +45,13 @@ public:
 
     // Optional input expression — nullopt for COUNT(*).
     virtual const Expression* inputExpr() const = 0;
+
+    // Combine two per-group states into one. `dst` accumulates `src`.
+    // Used by spill-and-merge: a spilled partial result is merged back into
+    // the current in-memory state. Aggregates whose state isn't fully self-
+    // contained (e.g. MinString stores its values out-of-line) raise
+    // NotImplemented for v1.
+    virtual void merge(uint8_t* dst, const uint8_t* src) const = 0;
 };
 
 using AggregateFunctionPtr = std::unique_ptr<AggregateFunction>;
@@ -61,6 +68,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -78,6 +86,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return nullptr; }
 };
@@ -95,6 +104,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -114,6 +124,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -138,6 +149,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return DataType{TypeId::STRING}; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -157,6 +169,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return DataType{TypeId::STRING}; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -178,6 +191,7 @@ public:
                     const PositionList& pos) const override;
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
     DataType outputType() const override { return Float64; }
     const Expression* inputExpr() const override { return input_.get(); }
 

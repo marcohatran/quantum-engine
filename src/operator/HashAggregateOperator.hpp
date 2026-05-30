@@ -12,6 +12,7 @@
 #include "hash/VarBytesHashTable.hpp"
 #include "operator/AggregateFunction.hpp"
 #include "operator/Operator.hpp"
+#include "spill/SpillFile.hpp"
 
 namespace quantum {
 
@@ -35,7 +36,11 @@ public:
                           OperatorPtr                       child,
                           std::vector<ExpressionPtr>        groupKeys,
                           std::vector<AggregateFunctionPtr> aggs,
-                          std::vector<std::string>          outputNames);
+                          std::vector<std::string>          outputNames,
+                          // Spill v1: in StringFastPath, dump partial state
+                          // to disk and reset once codeStates_ holds this many
+                          // groups. 0 disables spill (default).
+                          size_t                            spillTriggerGroups = 0);
 
     void                       open() override;
     std::optional<ColumnBatch> getNext() override;
@@ -55,6 +60,13 @@ private:
     // the state vector as needed.
     uint8_t* fastPathStateForCode(int32_t globalCode);
     int32_t  internGlobalString(std::string_view s);
+
+    // Serialize the current StringFastPath state to a fresh SpillFile and
+    // reset the in-memory dictionaries / states. Idempotent on an empty state.
+    void     spillStringFastPath();
+    // After all input has been consumed, drain every spill file back into the
+    // current in-memory state via internGlobalString + agg->merge.
+    void     mergeSpillFiles();
 
     OperatorPtr                       child_;
     std::vector<ExpressionPtr>        groupKeys_;
@@ -78,6 +90,10 @@ private:
     std::vector<uint8_t>                     codeStates_;     // dictN * stateBytes_
     std::vector<uint8_t>                     nullGroupState_; // stateBytes_
     bool                                     nullGroupInit_ = false;
+
+    // Spill v1 state (StringFastPath only).
+    size_t                  spillTriggerGroups_ = 0;
+    std::vector<SpillFile>  spillFiles_;
 
     bool built_   = false;
     bool emitted_ = false;
