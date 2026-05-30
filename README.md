@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phase 1 + 2 complete, Phase 3 in progress. Full SQL join family (Inner / Left / Right / Full Outer) over composite int + string keys; STRING fully integrated across Scan / Filter / Project / Aggregate / Join. Dictionary encoding, spill, Exchange, and AVX2 still pending.
+> **Status:** Phase 1 + 2 complete, Phase 3 in progress. Full SQL join family (Inner / Left / Right / Full Outer) over composite int + string keys; STRING and dictionary-encoded STRING fully integrated across Scan / Filter / Project / Aggregate / Join. Spill, Exchange, and AVX2 still pending.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -28,8 +28,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`RightOuter` and `FullOuter` joins** — `HashJoinOperator` tracks a build-side matched bitmap during probe and emits one trailing batch of unmatched build rows (with NULL probe columns) after the probe stream ends. NULL-keyed build rows naturally appear in the right tail since they were never insertable into the index.
 - **`MinString` / `MaxString` aggregates** — lexicographic MIN/MAX over `STRING` columns, NULL-skipping, NULL for all-null groups. Per-group state is an `int32` index into an aggregate-owned `std::vector<std::string>`; finalize emits via `StringBuilder`.
 - **`LikeExpr`** — SQL `LIKE` with `%` (any substring) and `_` (any single char). Anchored, iterative non-backtracking matcher. Null inputs propagate; pattern is a constant `std::string` for Phase 3.
+- **Dictionary-encoded STRING columns** — `ColumnVector` grows a third layout: `values_` holds `int32` codes; `dictOffsets_` + `dictValues_` hold the shared dictionary. `DictStringBuilder` builds dict columns row-by-row with dedup. `stringAt()` dispatches uniformly so existing kernels (compare, LIKE, MIN/MAX) and GROUP BY/JOIN key codecs work unchanged. Dict layout is preserved through `clone` / `selectActive` / `HashJoin gather`; `HashJoin concatDense` currently decodes mixed-dict inputs to regular STRING (dict-merge is a follow-up).
 
-**Tests & benchmarks** — 102 GoogleTest cases. New since previous slice: MIN/MAX(string) basic, null-skip, all-null returns NULL; LIKE exact / prefix / suffix / contains / underscore / mixed / null input / empty pattern / `%`-only. Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
+**Tests & benchmarks** — 110 GoogleTest cases. New since previous slice: `DictStringBuilder` (basic, null, empty, consecutive codes); dict-encoded layout end-to-end through Filter / Project / GROUP BY string key / HashJoin (build-side dict column flows through gather correctly); cross-layout `BinaryExpr::Eq` (dict vs regular STRING). Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
 
 ## Build & Test
 
@@ -40,7 +41,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 102 tests, ~1s
+ctest --preset=debug                 # 110 tests, ~1.1s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -54,7 +55,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
-vector/      → ColumnBatch, ColumnVector, PositionList, ValidityBitmask, StringBuilder
+vector/      → ColumnBatch, ColumnVector, PositionList, ValidityBitmask, StringBuilder, DictStringBuilder
 memory/      → MemoryManager (budget) + Arena + Buffer (RAII off-heap)
 common/      → DataType, Schema, Status, Bits, Macros
 ```
@@ -75,7 +76,8 @@ Key invariants the codebase enforces:
 | **3** | STRING GROUP BY / JOIN keys (inner + LEFT OUTER) | done |
 | **3** | RIGHT OUTER and FULL OUTER joins (with build-side matched tracking) | done |
 | **3** | MIN/MAX(string) aggregates; SQL `LIKE` expression with `%` / `_` | done |
-| 3 | Dictionary encoding, spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism | in progress |
+| **3** | Dictionary-encoded STRING columns (layout + builder + dict-aware gather) | done |
+| 3 | Spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware comparison fast paths | in progress |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |

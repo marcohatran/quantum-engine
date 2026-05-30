@@ -9,6 +9,7 @@ add_library(quantum_core STATIC
     vector/ColumnVector.cpp
     vector/ColumnBatch.cpp
     vector/StringBuilder.cpp
+    vector/DictStringBuilder.cpp
     expression/Literal.cpp
     expression/ColumnRef.cpp
     expression/BinaryExpr.cpp

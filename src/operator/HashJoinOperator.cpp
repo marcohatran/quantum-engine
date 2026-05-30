@@ -60,6 +60,26 @@ ColumnVector concatFixedWidthColumn(
 ColumnVector concatVariableWidthColumn(
         const std::vector<ColumnBatch>& batches, size_t col,
         size_t total, DataType type, MemoryManager* mm) {
+    // If any input batch carries this column dict-encoded, fall back to
+    // decoding everything into a regular STRING via StringBuilder. Merging
+    // dictionaries across batches would preserve encoding but is a follow-up.
+    bool anyDict = false;
+    for (const auto& b : batches) {
+        if (b.column(col).isDictEncoded()) { anyDict = true; break; }
+    }
+    if (anyDict) {
+        StringBuilder sb(mm);
+        for (const auto& b : batches) {
+            const auto& src = b.column(col);
+            for (size_t i = 0; i < src.numRows(); ++i) {
+                if (src.validity().isValid(i)) sb.append(src.stringAt(i));
+                else                            sb.appendNull();
+            }
+        }
+        (void)total;
+        return sb.build();
+    }
+
     size_t totalBytes = 0;
     for (const auto& b : batches) {
         const auto& src = b.column(col);
@@ -124,9 +144,36 @@ ColumnBatch concatDense(std::vector<ColumnBatch> batches, MemoryManager* mm) {
     return ColumnBatch(std::move(outCols), PositionList::identity(total));
 }
 
+ColumnVector gatherDictEncoded(const ColumnVector&         src,
+                               const std::vector<int32_t>& idx,
+                               MemoryManager*              mm) {
+    const size_t   nOut     = idx.size();
+    Buffer  codes = mm->allocate(roundUp(nOut * sizeof(int32_t), kCacheLineBytes));
+    const int32_t* srcCodes = src.values().as<int32_t>();
+    int32_t*       outCodes = codes.as<int32_t>();
+    for (size_t k = 0; k < nOut; ++k) outCodes[k] = srcCodes[idx[k]];
+
+    Buffer newDictOff = mm->allocate(roundUp(src.dictOffsets().size(), kCacheLineBytes));
+    Buffer newDictVal = mm->allocate(roundUp(src.dictValues().size(),  kCacheLineBytes));
+    std::memcpy(newDictOff.data(), src.dictOffsets().data(), src.dictOffsets().size());
+    if (src.dictValues().size() > 0) {
+        std::memcpy(newDictVal.data(), src.dictValues().data(), src.dictValues().size());
+    }
+    ColumnVector out = ColumnVector::makeDictEncoded(
+        src.type(), nOut, src.dictSize(), std::move(codes),
+        std::move(newDictOff), std::move(newDictVal), mm);
+    out.validity().setAllValid();
+    for (size_t k = 0; k < nOut; ++k) {
+        out.validity().setValid(k, src.validity().isValid(static_cast<size_t>(idx[k])));
+    }
+    return out;
+}
+
 ColumnVector gatherVariableWidth(const ColumnVector&         src,
                                  const std::vector<int32_t>& idx,
                                  MemoryManager*              mm) {
+    if (src.isDictEncoded()) return gatherDictEncoded(src, idx, mm);
+
     const size_t   nOut   = idx.size();
     const int32_t* srcOff = src.offsets().as<int32_t>();
 

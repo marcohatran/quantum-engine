@@ -41,28 +41,41 @@ ColumnVector cloneFixedWidth(const ColumnVector& src, MemoryManager* mm) {
 }
 
 ColumnVector cloneVariableWidth(const ColumnVector& src, MemoryManager* mm) {
-    const size_t n        = src.numRows();
-    const size_t offBytes = roundUp((n + 1) * sizeof(int32_t), kCacheLineBytes);
-    const size_t valBytes = roundUp(src.values().size(), kCacheLineBytes);
-    Buffer offsets = mm->allocate(offBytes);
-    Buffer values  = mm->allocate(valBytes);
-    std::memcpy(offsets.data(), src.offsets().data(), (n + 1) * sizeof(int32_t));
-    if (src.values().size() > 0) {
-        std::memcpy(values.data(), src.values().data(), src.values().size());
-    }
-    ColumnVector dst = ColumnVector::makeVariableWidth(
-        src.type(), n, std::move(offsets), std::move(values), mm);
-    std::memcpy(dst.validity().data(), src.validity().data(), src.validity().sizeBytes());
-    return dst;
+    // ColumnVector::clone already does this — and handles dict-encoded too —
+    // so just delegate. Existed before to keep the variable-width branch
+    // separate from fixed-width inside selectActive().
+    return src.clone(mm);
 }
 
 ColumnVector gatherVariableWidth(const ColumnVector& src,
                                  const PositionList& pos,
                                  MemoryManager*      mm) {
-    const size_t   nOut    = pos.size();
-    const int32_t* srcOff  = src.offsets().as<int32_t>();
+    const size_t nOut = pos.size();
 
-    // Pass 1: build new offsets, accumulating total byte count.
+    if (src.isDictEncoded()) {
+        // Gather codes (int32 fixed-width gather) and share the dictionary
+        // via clone-copy. Pruning unused dict entries is a follow-up.
+        Buffer codes = mm->allocate(roundUp(nOut * sizeof(int32_t), kCacheLineBytes));
+        const int32_t* srcCodes = src.values().as<int32_t>();
+        int32_t*       outCodes = codes.as<int32_t>();
+        for (size_t k = 0; k < nOut; ++k) {
+            outCodes[k] = srcCodes[pos.at(k)];
+        }
+        Buffer newDictOff = mm->allocate(roundUp(src.dictOffsets().size(), kCacheLineBytes));
+        Buffer newDictVal = mm->allocate(roundUp(src.dictValues().size(),  kCacheLineBytes));
+        std::memcpy(newDictOff.data(), src.dictOffsets().data(), src.dictOffsets().size());
+        if (src.dictValues().size() > 0) {
+            std::memcpy(newDictVal.data(), src.dictValues().data(), src.dictValues().size());
+        }
+        ColumnVector dst = ColumnVector::makeDictEncoded(
+            src.type(), nOut, src.dictSize(), std::move(codes),
+            std::move(newDictOff), std::move(newDictVal), mm);
+        gatherValidity(src.validity(), dst.validity(), pos);
+        return dst;
+    }
+
+    const int32_t* srcOff = src.offsets().as<int32_t>();
+
     const size_t outOffBytes = roundUp((nOut + 1) * sizeof(int32_t), kCacheLineBytes);
     Buffer  newOffsets = mm->allocate(outOffBytes);
     int32_t* outOff    = newOffsets.as<int32_t>();
@@ -74,7 +87,6 @@ ColumnVector gatherVariableWidth(const ColumnVector& src,
     }
     outOff[nOut] = static_cast<int32_t>(running);
 
-    // Pass 2: allocate values buffer of `running` bytes and copy slices.
     Buffer values = mm->allocate(roundUp(static_cast<size_t>(running), kCacheLineBytes));
     char*       outVals = values.as<char>();
     const char* srcVals = src.values().as<char>();

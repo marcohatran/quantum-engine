@@ -8,6 +8,7 @@ add_executable(quantum_tests
     vector/test_column_vector.cpp
     vector/test_column_batch.cpp
     vector/test_string_builder.cpp
+    vector/test_dict_string_builder.cpp
     expression/test_literal.cpp
     expression/test_column_ref.cpp
     expression/test_binary_expr.cpp
@@ -21,6 +22,7 @@ add_executable(quantum_tests
     operator/test_string_join.cpp
     operator/test_string_keys.cpp
     operator/test_outer_joins.cpp
+    operator/test_dict_e2e.cpp
     hash/test_hash_table.cpp
     e2e/test_pipeline_smoke.cpp
 )

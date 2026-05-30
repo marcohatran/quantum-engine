@@ -13,7 +13,7 @@ ColumnVector::ColumnVector(DataType type, size_t numRows, MemoryManager* mm)
     if (!type.isFixedWidth()) {
         raise(ErrorCode::InvalidArgument,
               "ColumnVector: fixed-width constructor cannot build {} columns; "
-              "use makeVariableWidth", type.toString());
+              "use makeVariableWidth or makeDictEncoded", type.toString());
     }
     const size_t valuesBytes = roundUp(
         static_cast<size_t>(type.fixedWidth()) * numRows,
@@ -45,7 +45,54 @@ ColumnVector ColumnVector::makeVariableWidth(DataType       type,
     return col;
 }
 
+ColumnVector ColumnVector::makeDictEncoded(DataType       type,
+                                           size_t         numRows,
+                                           size_t         dictSize,
+                                           Buffer         codes,
+                                           Buffer         dictOffsets,
+                                           Buffer         dictValues,
+                                           MemoryManager* mm) {
+    if (type.isFixedWidth()) {
+        raise(ErrorCode::InvalidArgument,
+              "makeDictEncoded: {} is not a variable-width type",
+              type.toString());
+    }
+    if (dictOffsets.size() < sizeof(int32_t)) {
+        raise(ErrorCode::InvalidArgument,
+              "makeDictEncoded: dictOffsets must hold at least one int32");
+    }
+    ColumnVector col;
+    col.type_        = type;
+    col.numRows_     = numRows;
+    col.dictSize_    = dictSize;
+    col.values_      = std::move(codes);
+    col.dictOffsets_ = std::move(dictOffsets);
+    col.dictValues_  = std::move(dictValues);
+    col.validity_    = ValidityBitmask(mm, numRows);
+    return col;
+}
+
 ColumnVector ColumnVector::clone(MemoryManager* mm) const {
+    if (isDictEncoded()) {
+        const size_t codesBytes = roundUp(numRows_ * sizeof(int32_t), kCacheLineBytes);
+        const size_t dOffBytes  = roundUp(dictOffsets_.size(), kCacheLineBytes);
+        const size_t dValBytes  = roundUp(dictValues_.size(),  kCacheLineBytes);
+        Buffer newCodes   = mm->allocate(codesBytes);
+        Buffer newDictOff = mm->allocate(dOffBytes);
+        Buffer newDictVal = mm->allocate(dValBytes);
+        if (numRows_ > 0) {
+            std::memcpy(newCodes.data(), values_.data(), numRows_ * sizeof(int32_t));
+        }
+        std::memcpy(newDictOff.data(), dictOffsets_.data(), dictOffsets_.size());
+        if (dictValues_.size() > 0) {
+            std::memcpy(newDictVal.data(), dictValues_.data(), dictValues_.size());
+        }
+        ColumnVector out = makeDictEncoded(
+            type_, numRows_, dictSize_, std::move(newCodes),
+            std::move(newDictOff), std::move(newDictVal), mm);
+        std::memcpy(out.validity().data(), validity_.data(), validity_.sizeBytes());
+        return out;
+    }
     if (isVariableWidth()) {
         const size_t offBytes = roundUp((numRows_ + 1) * sizeof(int32_t), kCacheLineBytes);
         const size_t valBytes = roundUp(values_.size(), kCacheLineBytes);

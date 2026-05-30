@@ -14,13 +14,22 @@ class MemoryManager;
 
 // A typed column of `numRows` values, plus a per-row validity bitmask.
 //
-// Two layouts:
+// Three layouts (all reported as type().id):
 //   - Fixed-width (BOOL, INT32, INT64, FLOAT64): values_ holds numRows slots
-//     of fixedWidth() bytes each. offsets_ is unused (empty).
-//   - Variable-width (STRING): values_ holds the concatenated bytes for every
-//     row; offsets_ holds int32_t[numRows + 1] where row i occupies values_
-//     bytes [offsets_[i], offsets_[i+1]). NULL rows have equal consecutive
-//     offsets (length 0) and validity bit cleared.
+//     of fixedWidth() bytes each. offsets_, dictOffsets_, dictValues_ are
+//     unused (empty).
+//   - Variable-width unencoded (STRING): values_ holds the concatenated bytes
+//     for every row; offsets_ holds int32_t[numRows + 1] where row i occupies
+//     values_ bytes [offsets_[i], offsets_[i+1]). NULL rows have equal
+//     consecutive offsets (length 0) and validity bit cleared.
+//   - Dictionary-encoded (STRING): values_ holds int32_t[numRows] codes;
+//     dictOffsets_ holds int32_t[dictSize + 1]; dictValues_ holds the dict
+//     bytes. offsets_ is empty. NULL rows have validity bit cleared; their
+//     code value is undefined.
+//
+// Type stays TypeId::STRING for both variable-width and dict-encoded layouts —
+// dict encoding is a layout variant, not a different type. Callers use
+// stringAt(row) which dispatches internally.
 class ColumnVector {
 public:
     ColumnVector() noexcept = default;
@@ -35,21 +44,37 @@ public:
     DataType type()    const noexcept { return type_; }
     size_t   numRows() const noexcept { return numRows_; }
 
-    Buffer&             values()         noexcept { return values_; }
-    const Buffer&       values()   const noexcept { return values_; }
-    Buffer&             offsets()        noexcept { return offsets_; }
-    const Buffer&       offsets()  const noexcept { return offsets_; }
-    ValidityBitmask&    validity()       noexcept { return validity_; }
+    Buffer&             values()           noexcept { return values_; }
+    const Buffer&       values()     const noexcept { return values_; }
+    Buffer&             offsets()          noexcept { return offsets_; }
+    const Buffer&       offsets()    const noexcept { return offsets_; }
+    Buffer&             dictOffsets()      noexcept { return dictOffsets_; }
+    const Buffer&       dictOffsets() const noexcept { return dictOffsets_; }
+    Buffer&             dictValues()       noexcept { return dictValues_; }
+    const Buffer&       dictValues()  const noexcept { return dictValues_; }
+    ValidityBitmask&    validity()         noexcept { return validity_; }
     const ValidityBitmask& validity() const noexcept { return validity_; }
 
     template <typename T>       T* typed()       noexcept { return values_.as<T>(); }
     template <typename T> const T* typed() const noexcept { return values_.as<T>(); }
 
     bool isVariableWidth() const noexcept { return !type_.isFixedWidth(); }
+    bool isDictEncoded()   const noexcept { return dictOffsets_.size() > 0; }
 
-    // Variable-width row access (STRING). Caller must ensure type is STRING and
-    // row index is in bounds; result is invalid if validity bit is cleared.
+    // dictSize: number of unique entries in the dictionary (0 when not dict).
+    size_t dictSize() const noexcept { return dictSize_; }
+
+    // Variable-width row access (STRING). Caller must ensure type is STRING
+    // and row index is in bounds; result is undefined if validity bit is clear.
+    // Dispatches internally between dict-encoded and unencoded layouts.
     std::string_view stringAt(size_t row) const noexcept {
+        if (isDictEncoded()) {
+            const int32_t  code = values_.as<int32_t>()[row];
+            const int32_t* doff = dictOffsets_.as<int32_t>();
+            const auto     beg  = static_cast<size_t>(doff[code]);
+            const auto     end  = static_cast<size_t>(doff[code + 1]);
+            return std::string_view(dictValues_.as<char>() + beg, end - beg);
+        }
         const int32_t* off = offsets_.as<int32_t>();
         const auto     beg = static_cast<size_t>(off[row]);
         const auto     end = static_cast<size_t>(off[row + 1]);
@@ -60,23 +85,36 @@ public:
     static ColumnVector make(DataType type, size_t numRows, MemoryManager* mm);
 
     // Deep-copy: returns a new ColumnVector with identical contents owned by
-    // `mm`. Handles both fixed-width and variable-width layouts.
+    // `mm`. Handles all three layouts.
     ColumnVector clone(MemoryManager* mm) const;
 
-    // Variable-width factory. `offsets` must already hold int32_t[numRows + 1]
-    // and `values` must hold offsets[numRows] bytes. Validity is allocated and
-    // defaults to all-valid; callers update it after the fact.
+    // Variable-width unencoded factory. `offsets` must already hold
+    // int32_t[numRows + 1] and `values` must hold offsets[numRows] bytes.
     static ColumnVector makeVariableWidth(DataType       type,
                                           size_t         numRows,
                                           Buffer         offsets,
                                           Buffer         values,
                                           MemoryManager* mm);
 
+    // Dictionary-encoded factory. `codes` must hold int32_t[numRows];
+    // `dictOffsets` must hold int32_t[dictSize + 1]; `dictValues` must hold
+    // dictOffsets[dictSize] bytes. `dictSize` is the number of dict entries.
+    static ColumnVector makeDictEncoded(DataType       type,
+                                        size_t         numRows,
+                                        size_t         dictSize,
+                                        Buffer         codes,
+                                        Buffer         dictOffsets,
+                                        Buffer         dictValues,
+                                        MemoryManager* mm);
+
 private:
     DataType        type_{TypeId::INT64};
     size_t          numRows_ = 0;
-    Buffer          values_;
-    Buffer          offsets_;     // empty unless variable-width
+    Buffer          values_;       // bytes (var-width) or codes int32 (dict)
+    Buffer          offsets_;      // empty for fixed-width and for dict
+    Buffer          dictOffsets_;  // empty unless dict-encoded
+    Buffer          dictValues_;   // empty unless dict-encoded
+    size_t          dictSize_ = 0; // logical dict entries (0 when not dict)
     ValidityBitmask validity_;
 };
 
