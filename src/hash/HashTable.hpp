@@ -29,6 +29,10 @@ public:
     // initialized via `init`. Grows the table when load factor exceeds 0.7.
     uint8_t* findOrInsert(int64_t key, InitFn init);
 
+    // Const lookup: returns the slot pointer or nullptr on miss. Never grows
+    // or modifies the table. Use this on the probe side of joins.
+    const uint8_t* find(int64_t key) const noexcept;
+
     // The dedicated NULL-group slot. Lazily initialized on first call.
     uint8_t* findOrInsertNull(InitFn init);
 

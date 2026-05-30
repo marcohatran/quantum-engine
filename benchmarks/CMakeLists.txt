@@ -4,6 +4,7 @@ add_executable(quantum_benchmarks
     bench_project.cpp
     bench_pipeline.cpp
     bench_hash_aggregate.cpp
+    bench_hash_join.cpp
 )
 
 target_link_libraries(quantum_benchmarks

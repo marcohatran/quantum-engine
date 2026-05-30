@@ -74,6 +74,18 @@ uint8_t* HashTable::findOrInsert(int64_t key, InitFn init) {
     return st;
 }
 
+const uint8_t* HashTable::find(int64_t key) const noexcept {
+    const uint64_t h    = hash(key);
+    const int64_t* keys = keys_.as<int64_t>();
+    const uint8_t* occ  = occupied_.data();
+    size_t         idx  = h & mask_;
+    for (;;) {
+        if (!getBit(occ, idx)) return nullptr;          // empty slot → miss
+        if (keys[idx] == key)  return states_.data() + idx * stateBytes_;
+        idx = (idx + 1) & mask_;
+    }
+}
+
 uint8_t* HashTable::findOrInsertNull(InitFn init) {
     if (!nullInit_) {
         init(nullState_.data());

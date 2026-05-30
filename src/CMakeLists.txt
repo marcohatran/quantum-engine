@@ -19,6 +19,7 @@ add_library(quantum_core STATIC
     operator/ProjectOperator.cpp
     operator/AggregateFunction.cpp
     operator/HashAggregateOperator.cpp
+    operator/HashJoinOperator.cpp
 )
 
 target_include_directories(quantum_core
