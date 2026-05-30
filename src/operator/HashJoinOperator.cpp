@@ -302,6 +302,7 @@ void HashJoinOperator::build() {
         indexVar_ = std::make_unique<VarBytesHashTable>(sizeof(int32_t), mm_);
     }
     next_.assign(rowStore_->numRows(), kEndOfChain);
+    buildMatched_.assign(rowStore_->numRows(), false);
 
     if (rowStore_->numRows() == 0) {
         built_ = true;
@@ -342,7 +343,10 @@ void HashJoinOperator::build() {
 
 std::optional<ColumnBatch> HashJoinOperator::probeOne() {
     auto in = probe_->getNext();
-    if (!in) return std::nullopt;
+    if (!in) {
+        probeExhausted_ = true;
+        return std::nullopt;
+    }
     if (in->activeRows() == 0) {
         return ColumnBatch(std::vector<ColumnVector>{}, PositionList::identity(0));
     }
@@ -355,7 +359,8 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
     for (const auto& c : keyEvals) keyPtrs.push_back(&c);
 
     const PositionList& pos = in->positions();
-    const bool leftOuter   = (joinType_ == JoinType::LeftOuter);
+    const bool emitLeftMisses = (joinType_ == JoinType::LeftOuter ||
+                                 joinType_ == JoinType::FullOuter);
     const bool buildEmpty  = (rowStore_->numRows() == 0);
 
     std::vector<uint8_t> keyBufFixed(codec_->isFixedWidth() ? codec_->keyBytes() : 0);
@@ -388,7 +393,7 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
         }
 
         if (anyNull || buildEmpty || slot == nullptr) {
-            if (leftOuter) emitUnmatched(i);
+            if (emitLeftMisses) emitUnmatched(i);
             continue;
         }
 
@@ -398,6 +403,7 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
             probeIdx.push_back(static_cast<int32_t>(i));
             buildIdx.push_back(cur);
             buildIsValid.push_back(true);
+            buildMatched_[static_cast<size_t>(cur)] = true;
             cur = next_[static_cast<size_t>(cur)];
         }
     }
@@ -423,9 +429,47 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
     return ColumnBatch(std::move(outCols), PositionList::identity(probeIdx.size()));
 }
 
+// Emit one batch holding every build row never matched during probe, with
+// NULL probe columns. Returns nullopt when nothing's left to emit.
+static std::optional<ColumnBatch> emitRightTailImpl(
+        const std::optional<ColumnBatch>& rowStore,
+        const std::vector<bool>&          buildMatched,
+        const Schema&                     probeSchema,
+        MemoryManager*                    mm) {
+    std::vector<int32_t> unmatched;
+    for (size_t i = 0; i < buildMatched.size(); ++i) {
+        if (!buildMatched[i]) unmatched.push_back(static_cast<int32_t>(i));
+    }
+    if (unmatched.empty()) return std::nullopt;
+
+    std::vector<ColumnVector> outCols;
+    outCols.reserve(rowStore->numColumns() + probeSchema.numFields());
+    for (size_t c = 0; c < rowStore->numColumns(); ++c) {
+        outCols.push_back(gather(rowStore->column(c), unmatched, mm));
+    }
+    for (size_t c = 0; c < probeSchema.numFields(); ++c) {
+        outCols.push_back(allNullColumn(probeSchema.field(c).type, unmatched.size(), mm));
+    }
+    return ColumnBatch(std::move(outCols), PositionList::identity(unmatched.size()));
+}
+
 std::optional<ColumnBatch> HashJoinOperator::getNext() {
     if (!built_) build();
-    return probeOne();
+
+    if (!probeExhausted_) {
+        auto out = probeOne();
+        // probeOne sets probeExhausted_ when the child returns nullopt; in
+        // that case we fall through to the right-tail check below.
+        if (out.has_value() || !probeExhausted_) return out;
+    }
+
+    if (!rightTailEmitted_ &&
+        (joinType_ == JoinType::RightOuter || joinType_ == JoinType::FullOuter)) {
+        rightTailEmitted_ = true;
+        return emitRightTailImpl(rowStore_, buildMatched_,
+                                 probe_->outputSchema(), mm_);
+    }
+    return std::nullopt;
 }
 
 } // namespace quantum

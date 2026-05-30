@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phase 1 + 2 complete, Phase 3 in progress. STRING fully integrated (values *and* keys) across Scan / Filter / Project / Aggregate / Join. Dictionary encoding, spill, RIGHT/FULL OUTER, Exchange, and AVX2 still pending.
+> **Status:** Phase 1 + 2 complete, Phase 3 in progress. Full SQL join family (Inner / Left / Right / Full Outer) over composite int + string keys; STRING fully integrated across Scan / Filter / Project / Aggregate / Join. Dictionary encoding, spill, Exchange, and AVX2 still pending.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -25,8 +25,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`STRING` / variable-width values** — `ColumnVector` gains a second `offsets` buffer (Arrow-compatible layout). `StringBuilder` constructs string columns row-by-row. Strings work as values throughout: scan → filter → project → aggregate-pass-through → join build/probe materialization.
 - **String comparisons** — `BinaryExpr` `Eq` / `Lt` / `Gt` over `STRING` columns via lexicographic `std::string_view` compare; null propagation unchanged.
 - **String GROUP BY / JOIN keys** — `KeyCodec` grows a variable-width encoding path with length-prefixed string columns and inline column-validity bits (so `("", "x")` and `(NULL, "x")` are distinct groups). New `VarBytesHashTable` stores out-of-line keys in a growing arena. `HashAggregate` / `HashJoin` route through it automatically when any key column is `STRING`. Null string keys never match in joins.
+- **`RightOuter` and `FullOuter` joins** — `HashJoinOperator` tracks a build-side matched bitmap during probe and emits one trailing batch of unmatched build rows (with NULL probe columns) after the probe stream ends. NULL-keyed build rows naturally appear in the right tail since they were never insertable into the index.
 
-**Tests & benchmarks** — 83 GoogleTest cases. New coverage: `StringBuilder`, `Literal` string broadcast, `BinaryExpr` string comparisons, `HashJoin` passing a STRING value through gather, `HashAggregate` GROUP BY string (basic + null keys + composite string+int key), `HashJoin` inner + LEFT OUTER on string key (incl. null-key skipping). Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
+**Tests & benchmarks** — 90 GoogleTest cases. New since previous slice: 7 outer-join tests (RIGHT OUTER basic, FULL OUTER basic, empty probe / empty build / both empty, NULL build keys in tail, duplicate build key). Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
 
 ## Build & Test
 
@@ -37,7 +38,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 83 tests, ~0.9s
+ctest --preset=debug                 # 90 tests, ~0.9s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -70,7 +71,8 @@ Key invariants the codebase enforces:
 | **2** | HashAggregate + HashJoin with composite keys; MIN/MAX/AVG; LEFT OUTER join | done |
 | **3** | STRING / variable-width values through scan/filter/project/join | done |
 | **3** | STRING GROUP BY / JOIN keys (inner + LEFT OUTER) | done |
-| 3 | Dictionary encoding, spill-to-disk, AVX2 kernels, RIGHT/FULL OUTER, Exchange operator, intra-operator parallelism | in progress |
+| **3** | RIGHT OUTER and FULL OUTER joins (with build-side matched tracking) | done |
+| 3 | Dictionary encoding, spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism | in progress |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
