@@ -36,6 +36,7 @@ add_library(quantum_core STATIC
     plan/PlanJson.cpp
     plan/PlanProto.cpp
     bridge/quantum_c.cpp
+    bridge/quantum_arrow.cpp
     ${QUANTUM_PROTO_SRCS}
 )
 

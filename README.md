@@ -39,8 +39,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Plan IR + JSON wire format + builder** — new `src/plan/` module defines a `PlanNode` / `ScalarExpr` IR (Scan / Filter / Project / HashAggregate / HashJoin + Literal / ColumnRef / BinaryOp / Like). `PlanJson` round-trips the IR through JSON via nlohmann-json. `PlanBuilder` walks the IR and constructs the engine's `Operator` tree, with a `SourceCatalog` (string-keyed map of `vector<ColumnBatch>`) supplying actual data to each scan node at execution time. This is the bridge surface that the JVM side will speak — Spark's Catalyst plan becomes a `PlanNode` IR, gets serialized, and crosses JNI.
 - **Protobuf wire format** — `src/plan/proto/quantum_plan.proto` mirrors the IR 1:1 (oneof-based unions for `ScalarExpr` and `PlanNode`, enum-typed kinds, repeated children). Generated via `protobuf_generate_cpp` at CMake configure time. `PlanProto` (`planToProtoBytes` / `planFromProtoBytes`) provides binary round-trip; JSON stays as the human-readable debug format. Cross-codec equivalence verified by tests: encode through JSON, decode, encode through proto, decode, and the resulting IR re-encodes to the original JSON string.
 - **C ABI (`include/quantum/quantum_c.h`)** — stable `extern "C"` surface ready for JNI / JNA / Panama from the JVM side. Opaque handles for engine / column / batch / result; column builders for `int64` and `string`; protobuf-encoded plan execution; iteration over result batches; per-column accessors. Exceptions are translated to a thread-local error string surfaced through `q_last_error()`. The JVM bridge in a later slice just wraps these symbols — no further C++ changes needed.
+- **Arrow C Data Interface (`include/quantum/quantum_arrow.h`)** — `ArrowSchema` / `ArrowArray` structs declared verbatim from the [Arrow spec](https://arrow.apache.org/docs/format/CDataInterface.html). `q_column_export_arrow` populates them with pointers INTO an existing `QColumn`'s buffers (zero-copy; the column must outlive the array). `q_column_import_arrow` deep-copies an Arrow array into a new engine-owned column. Supports `"l"` (int64) and `"u"` (utf8) in this slice; other fixed-width types and dict-encoded export are follow-ups. This is the canonical Photon-style data transport that lets any Arrow-aware producer/consumer interop with the engine without an intermediate serialization.
 
-**Tests & benchmarks** — 143 GoogleTest cases. New since previous slice: 3 C ABI end-to-end tests (int-aggregation, string GROUP BY, error path on a malformed plan).
+**Tests & benchmarks** — 147 GoogleTest cases. New since previous slice: 4 Arrow bridge tests (zero-copy int64 export, int64 export→import round-trip, string export+roundtrip, unsupported format returns an error).
 
 ## Build & Test
 
@@ -51,7 +52,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 143 tests, ~2.7s
+ctest --preset=debug                 # 147 tests, ~4.7s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -62,7 +63,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ## Architecture at a Glance
 
 ```
-bridge/      → C ABI (include/quantum/quantum_c.h, src/bridge/quantum_c.cpp)
+bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
 plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
 operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
@@ -98,6 +99,7 @@ Key invariants the codebase enforces:
 | **4** | Plan IR + JSON wire format + PlanBuilder | done |
 | **4** | Protobuf wire format (binary, language-portable) | done |
 | **4** | C ABI (`quantum_c.h`) — opaque handles, columns, batches, plan exec | done |
+| **4** | Arrow C Data Interface (zero-copy column transport for int64 + utf8) | done |
 | 4 | JNI bridge (Java/Scala side that produces the IR + ships it to native) | planned |
 | 4 | Arrow IPC for cross-JVM batch transport | planned |
 | 4 | `QuantumPlanner` Spark extension (post-Catalyst plan tagging + handoff) | planned |

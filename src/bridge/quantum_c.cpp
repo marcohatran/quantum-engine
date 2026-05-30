@@ -12,6 +12,7 @@
 #include <string_view>
 #include <vector>
 
+#include "bridge/BridgeError.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 #include "operator/Operator.hpp"
@@ -52,24 +53,27 @@ namespace {
 
 thread_local std::string g_lastError;
 
-void recordError(const std::string& msg) noexcept { g_lastError = msg; }
-
 template <typename F>
 auto guarded(F&& f, decltype(f()) onError) noexcept -> decltype(f()) {
     try {
-        g_lastError.clear();
+        bridge::setLastError("");
         return f();
     } catch (const QuantumError& e) {
-        recordError(e.what());
+        bridge::setLastError(e.what());
     } catch (const std::exception& e) {
-        recordError(e.what());
+        bridge::setLastError(e.what());
     } catch (...) {
-        recordError("unknown C++ exception");
+        bridge::setLastError("unknown C++ exception");
     }
     return onError;
 }
 
 } // namespace
+
+namespace quantum::bridge {
+void setLastError(std::string msg) noexcept { g_lastError = std::move(msg); }
+const char* lastError() noexcept { return g_lastError.c_str(); }
+} // namespace quantum::bridge
 
 // ---------------------------------------------------------------------------
 // Engine lifecycle
@@ -88,7 +92,7 @@ extern "C" void q_destroy_engine(QEngine* engine) {
 }
 
 extern "C" const char* q_last_error(void) {
-    return g_lastError.c_str();
+    return quantum::bridge::lastError();
 }
 
 // ---------------------------------------------------------------------------
