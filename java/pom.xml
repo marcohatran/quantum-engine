@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.quantum-engine</groupId>
+  <artifactId>quantum-engine-jvm</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>Quantum Engine JVM Bridge</name>
+  <description>
+    JNA bindings + Java protobuf for the native Quantum Engine. Drives the
+    C ABI declared in include/quantum/quantum_c.h via JNA. Expected to be
+    embedded in a Spark extension in a later slice.
+  </description>
+
+  <properties>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <protobuf.version>4.33.4</protobuf.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>5.14.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.3</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <!-- JNA needs to find the native lib. Built artifacts land here. -->
+          <argLine>
+            -Djna.library.path=${project.basedir}/../build-debug/src
+          </argLine>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

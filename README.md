@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phases 1–3 complete. Phase 4 in progress — Plan IR + JSON wire format + `PlanBuilder` shipped (the bridge surface the JVM side will speak). Next up in Phase 4: Protobuf binary wire format, the JNI bridge itself, Arrow IPC for batch transport, and the Spark extension.
+> **Status:** Phases 1–3 complete. Phase 4 in progress — Plan IR + JSON + Protobuf wire formats, C ABI, Arrow C Data Interface, and a JVM bridge (Maven + JNA + Java protobuf) all shipped. End-to-end query: build a plan in Java protobuf → ship as bytes through the C ABI → execute natively → read results back. The Spark extension is the remaining major Phase 4 deliverable.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -40,8 +40,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Protobuf wire format** — `src/plan/proto/quantum_plan.proto` mirrors the IR 1:1 (oneof-based unions for `ScalarExpr` and `PlanNode`, enum-typed kinds, repeated children). Generated via `protobuf_generate_cpp` at CMake configure time. `PlanProto` (`planToProtoBytes` / `planFromProtoBytes`) provides binary round-trip; JSON stays as the human-readable debug format. Cross-codec equivalence verified by tests: encode through JSON, decode, encode through proto, decode, and the resulting IR re-encodes to the original JSON string.
 - **C ABI (`include/quantum/quantum_c.h`)** — stable `extern "C"` surface ready for JNI / JNA / Panama from the JVM side. Opaque handles for engine / column / batch / result; column builders for `int64` and `string`; protobuf-encoded plan execution; iteration over result batches; per-column accessors. Exceptions are translated to a thread-local error string surfaced through `q_last_error()`. The JVM bridge in a later slice just wraps these symbols — no further C++ changes needed.
 - **Arrow C Data Interface (`include/quantum/quantum_arrow.h`)** — `ArrowSchema` / `ArrowArray` structs declared verbatim from the [Arrow spec](https://arrow.apache.org/docs/format/CDataInterface.html). `q_column_export_arrow` populates them with pointers INTO an existing `QColumn`'s buffers (zero-copy; the column must outlive the array). `q_column_import_arrow` deep-copies an Arrow array into a new engine-owned column. Supports `"l"` (int64) and `"u"` (utf8) in this slice; other fixed-width types and dict-encoded export are follow-ups. This is the canonical Photon-style data transport that lets any Arrow-aware producer/consumer interop with the engine without an intermediate serialization.
+- **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API; an end-to-end JUnit test builds a `GROUP BY` plan via Java protobuf, registers a source through JNA, executes via the native engine, and reads back per-group results. `quantum_core` is now a SHARED library so JNA can `dlopen` it. The Spark extension in a later slice plugs into this Maven module.
 
-**Tests & benchmarks** — 147 GoogleTest cases. New since previous slice: 4 Arrow bridge tests (zero-copy int64 export, int64 export→import round-trip, string export+roundtrip, unsupported format returns an error).
+**Tests & benchmarks** — 147 C++ tests + 2 Java tests. New since previous slice: Java end-to-end `GROUP BY` over the JNI/JNA boundary, and a Java error-path test for malformed plan bytes.
 
 ## Build & Test
 
@@ -56,6 +57,9 @@ ctest --preset=debug                 # 147 tests, ~4.7s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
+
+# JVM bridge (requires JDK 21 + Maven)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 2 Java tests
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -100,7 +104,8 @@ Key invariants the codebase enforces:
 | **4** | Protobuf wire format (binary, language-portable) | done |
 | **4** | C ABI (`quantum_c.h`) — opaque handles, columns, batches, plan exec | done |
 | **4** | Arrow C Data Interface (zero-copy column transport for int64 + utf8) | done |
-| 4 | JNI bridge (Java/Scala side that produces the IR + ships it to native) | planned |
+| **4** | JVM bridge (Maven + JNA + Java protobuf, end-to-end query from Java) | done |
+| 4 | `QuantumPlanner` Spark extension (intercept Catalyst plan, hand eligible regions to native) | planned |
 | 4 | Arrow IPC for cross-JVM batch transport | planned |
 | 4 | `QuantumPlanner` Spark extension (post-Catalyst plan tagging + handoff) | planned |
 | 4 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |

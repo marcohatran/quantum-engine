@@ -2,7 +2,7 @@
 set(QUANTUM_PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/plan/proto/quantum_plan.proto)
 protobuf_generate_cpp(QUANTUM_PROTO_SRCS QUANTUM_PROTO_HDRS ${QUANTUM_PROTO_FILES})
 
-add_library(quantum_core STATIC
+add_library(quantum_core SHARED
     common/DataType.cpp
     common/Status.cpp
     memory/Arena.cpp
