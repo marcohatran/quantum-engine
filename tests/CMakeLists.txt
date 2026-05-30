@@ -30,6 +30,7 @@ add_executable(quantum_tests
     spill/test_spill_file.cpp
     plan/test_plan_builder.cpp
     plan/test_plan_proto.cpp
+    bridge/test_quantum_c.cpp
     e2e/test_pipeline_smoke.cpp
 )
 
