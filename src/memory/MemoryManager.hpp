@@ -34,6 +34,13 @@ public:
     size_t used()   const noexcept { return used_.load(std::memory_order_relaxed); }
     size_t budget() const noexcept { return budget_; }
 
+    // Fraction of the budget currently in use (0.0 .. 1.0). Operators that
+    // support spill poll this to decide when to flush partial state.
+    double usedFraction() const noexcept {
+        return budget_ == 0 ? 0.0
+                            : static_cast<double>(used()) / static_cast<double>(budget_);
+    }
+
     // Phase 1 stub: no spillable operators registered yet.
     bool spill() noexcept { return false; }
 

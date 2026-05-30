@@ -422,12 +422,53 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
         buildIsValid.push_back(false);
     };
 
+    // Dict-aware fast path: when the join key is a single dict-encoded STRING
+    // column on the probe side, precompute per-batch probe-code -> build-side
+    // chain head ONCE per unique dict entry. Per-row work then collapses to a
+    // single array load + chain walk.
+    const bool dictFastPath = !codec_->isFixedWidth() &&
+                              probeKeys_.size() == 1 &&
+                              keyEvals[0].type().id == TypeId::STRING &&
+                              keyEvals[0].isDictEncoded() &&
+                              !buildEmpty;
+    std::vector<const uint8_t*> dictCodeToSlot;
+    if (dictFastPath) {
+        const ColumnVector& keyCol = keyEvals[0];
+        const size_t        dictN  = keyCol.dictSize();
+        dictCodeToSlot.assign(dictN, nullptr);
+        for (size_t b = 0; b < dictN; ++b) {
+            const int32_t* doff = keyCol.dictOffsets().as<int32_t>();
+            const char*    dval = keyCol.dictValues().as<char>();
+            std::string_view ds(dval + doff[b],
+                                static_cast<size_t>(doff[b + 1] - doff[b]));
+            // Encode this dictionary entry into the var-key format the build
+            // index uses (validity bits + length-prefix + bytes).
+            // We synthesize a one-row ColumnVector with this string via a
+            // tiny StringBuilder.
+            StringBuilder sb(mm_);
+            sb.append(ds);
+            auto tmpCol = sb.build();
+            std::vector<const ColumnVector*> tmpPtrs{&tmpCol};
+            codec_->encodeVar(tmpPtrs, 0, keyBufVar);
+            if (codec_->hasAnyNullVar(keyBufVar.data(), keyBufVar.size())) continue;
+            dictCodeToSlot[b] = indexVar_->find(keyBufVar.data(), keyBufVar.size());
+        }
+    }
+
     for (size_t k = 0; k < pos.size(); ++k) {
         const auto i = static_cast<size_t>(pos.at(k));
 
         const uint8_t* slot = nullptr;
         bool anyNull = false;
-        if (codec_->isFixedWidth()) {
+        if (dictFastPath) {
+            const ColumnVector& keyCol = keyEvals[0];
+            if (!keyCol.validity().isValid(i)) {
+                anyNull = true;
+            } else {
+                const int32_t code = keyCol.values().as<int32_t>()[i];
+                slot = dictCodeToSlot[static_cast<size_t>(code)];
+            }
+        } else if (codec_->isFixedWidth()) {
             codec_->encode(keyPtrs, i, keyBufFixed.data());
             anyNull = codec_->hasAnyNull(keyBufFixed.data());
             if (!anyNull && !buildEmpty) slot = indexFixed_->find(keyBufFixed.data());

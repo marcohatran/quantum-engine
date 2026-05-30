@@ -164,3 +164,120 @@ TEST(SpillHashAggregate, NullKeyGroupSurvivesSpill) {
     // Null group must be present and equal in both runs (2 + 4 + 6 = 12).
     EXPECT_EQ(baseline[std::nullopt], 12);
 }
+
+// --- Fixed and Var path spill ---
+
+namespace {
+
+ColumnBatch intIntBatch(MemoryManager& mm,
+                        const std::vector<int64_t>& keys,
+                        const std::vector<int64_t>& vals) {
+    auto k = ColumnVector::make(Int64, keys.size(), &mm);
+    auto v = ColumnVector::make(Int64, vals.size(), &mm);
+    for (size_t i = 0; i < keys.size(); ++i) {
+        k.typed<int64_t>()[i] = keys[i];
+        v.typed<int64_t>()[i] = vals[i];
+    }
+    std::vector<ColumnVector> cols;
+    cols.push_back(std::move(k));
+    cols.push_back(std::move(v));
+    return ColumnBatch(std::move(cols), PositionList::identity(keys.size()));
+}
+
+} // namespace
+
+TEST(SpillHashAggregate, FixedPathSpillMatchesBaseline) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    auto runFixed = [&](size_t spill) {
+        std::vector<ColumnBatch> src;
+        src.push_back(intIntBatch(mm, {1, 2, 1, 3},     {10, 20, 30, 40}));
+        src.push_back(intIntBatch(mm, {2, 4, 1},        {50, 60, 70}));
+        src.push_back(intIntBatch(mm, {5, 1, 3, 2},     {80, 90, 100, 110}));
+
+        auto scan = std::make_unique<ScanOperator>(
+            &mm, Schema({{"k", Int64}, {"v", Int64}}), std::move(src));
+        std::vector<AggregateFunctionPtr> aggs;
+        aggs.push_back(std::make_unique<SumI64>(std::make_unique<ColumnRef>(1)));
+        aggs.push_back(std::make_unique<CountStar>());
+        HashAggregateOperator op(&mm, std::move(scan), keyOn(0),
+                                 std::move(aggs),
+                                 std::vector<std::string>{"k", "sum", "cnt"},
+                                 spill);
+        std::map<int64_t, std::pair<int64_t, int64_t>> got;
+        op.open();
+        while (auto b = op.getNext()) {
+            if (b->numRows() == 0) continue;
+            for (size_t i = 0; i < b->numRows(); ++i) {
+                got[b->column(0).typed<int64_t>()[i]] = {
+                    b->column(1).typed<int64_t>()[i],
+                    b->column(2).typed<int64_t>()[i]};
+            }
+        }
+        op.close();
+        return got;
+    };
+
+    auto baseline = runFixed(0);
+    auto spilled  = runFixed(2);
+    EXPECT_EQ(spilled, baseline);
+}
+
+TEST(SpillHashAggregate, VarPathSpillMatchesBaselineForCompositeKey) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    auto makeBatch = [&](const std::vector<std::string>& names,
+                         const std::vector<int64_t>&     buckets,
+                         const std::vector<int64_t>&     vals) {
+        StringBuilder sb(&mm);
+        for (const auto& s : names) sb.append(s);
+        auto b = ColumnVector::make(Int64, buckets.size(), &mm);
+        auto v = ColumnVector::make(Int64, vals.size(), &mm);
+        for (size_t i = 0; i < buckets.size(); ++i) {
+            b.typed<int64_t>()[i] = buckets[i];
+            v.typed<int64_t>()[i] = vals[i];
+        }
+        std::vector<ColumnVector> cols;
+        cols.push_back(sb.build());
+        cols.push_back(std::move(b));
+        cols.push_back(std::move(v));
+        return ColumnBatch(std::move(cols), PositionList::identity(names.size()));
+    };
+
+    auto run = [&](size_t spill) {
+        std::vector<ColumnBatch> src;
+        src.push_back(makeBatch({"a", "a", "b"}, {1, 2, 1}, {10, 20, 30}));
+        src.push_back(makeBatch({"b", "a"},      {1, 1},    {40, 50}));
+        src.push_back(makeBatch({"a", "b", "c"}, {2, 1, 1}, {60, 70, 80}));
+
+        auto scan = std::make_unique<ScanOperator>(
+            &mm,
+            Schema({{"name", DataType{TypeId::STRING}}, {"b", Int64}, {"v", Int64}}),
+            std::move(src));
+        std::vector<ExpressionPtr> keys;
+        keys.push_back(std::make_unique<ColumnRef>(0));
+        keys.push_back(std::make_unique<ColumnRef>(1));
+        std::vector<AggregateFunctionPtr> aggs;
+        aggs.push_back(std::make_unique<SumI64>(std::make_unique<ColumnRef>(2)));
+        HashAggregateOperator op(&mm, std::move(scan), std::move(keys),
+                                 std::move(aggs),
+                                 std::vector<std::string>{"name", "b", "sum"},
+                                 spill);
+        std::map<std::pair<std::string, int64_t>, int64_t> got;
+        op.open();
+        while (auto b = op.getNext()) {
+            if (b->numRows() == 0) continue;
+            for (size_t i = 0; i < b->numRows(); ++i) {
+                got[{std::string(b->column(0).stringAt(i)),
+                     b->column(1).typed<int64_t>()[i]}] =
+                    b->column(2).typed<int64_t>()[i];
+            }
+        }
+        op.close();
+        return got;
+    };
+
+    auto baseline = run(0);
+    auto spilled  = run(2);
+    EXPECT_EQ(spilled, baseline);
+}

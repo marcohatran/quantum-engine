@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phase 1 + 2 complete, Phase 3 in progress. Full SQL join family (Inner / Left / Right / Full Outer) over composite int + string keys; STRING and dictionary-encoded STRING fully integrated across Scan / Filter / Project / Aggregate / Join. Spill, Exchange, and AVX2 still pending.
+> **Status:** Phases 1, 2, **and 3 complete.** Full SQL join family (Inner / Left / Right / Full Outer) over composite int + string keys; STRING and dictionary-encoded STRING fully integrated across Scan / Filter / Project / Aggregate / Join with code-aware fast paths; spill-to-disk works for HashAggregate across all three key paths with both group-count and memory-fraction triggers. Phase 4 (JNI bridge + Spark integration), parallel execution, and AVX2 measurement on x86 hardware are next.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -21,7 +21,7 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`HashJoinOperator`** — `Inner` and `LeftOuter` equi-join on any number of fixed-width key columns. Build side is densified into a row store and chained via a `next[]` array indexed by `BytesHashTable`; probe side streams batch-by-batch. NULLs in any key column never match.
 - **Hash infrastructure** — `HashTable` (int64-keyed, used by tests as a perf baseline) and `BytesHashTable` (opaque fixed-width byte-string key, used by both Hash* operators). `KeyCodec` encodes composite group/join keys with validity bits inline.
 
-**Phase 3 — In Progress**
+**Phase 3 — Complete**
 - **`STRING` / variable-width values** — `ColumnVector` gains a second `offsets` buffer (Arrow-compatible layout). `StringBuilder` constructs string columns row-by-row. Strings work as values throughout: scan → filter → project → aggregate-pass-through → join build/probe materialization.
 - **String comparisons** — `BinaryExpr` `Eq` / `Lt` / `Gt` over `STRING` columns via lexicographic `std::string_view` compare; null propagation unchanged.
 - **String GROUP BY / JOIN keys** — `KeyCodec` grows a variable-width encoding path with length-prefixed string columns and inline column-validity bits (so `("", "x")` and `(NULL, "x")` are distinct groups). New `VarBytesHashTable` stores out-of-line keys in a growing arena. `HashAggregate` / `HashJoin` route through it automatically when any key column is `STRING`. Null string keys never match in joins.
@@ -32,9 +32,10 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Dict-aware equality fast path** — `Literal(std::string)` now emits a dict-encoded broadcast (`dictSize=1`), and the STRING `Eq` kernel detects dict-vs-dict inputs, precomputes a `rhsCode → lhsCode` translation table, and compares int32s per row. Measured **~4× throughput** on `dict_size=10` vs the per-row `stringAt` path; gains shrink as dict size grows.
 - **Dict-aware LIKE fast path** — `LikeExpr::eval` on a dict-encoded column evaluates the pattern matcher once per dictionary entry (into a `dictResult[dictSize]` table), then per row just indexes into that table by code. Measured **~3× throughput** at `dict_size=10`, **~3.6×** at `dict_size=100`, **~2.4×** at `dict_size=1000` — LIKE benefits more than `Eq` because per-row pattern matching is the expensive bit.
 - **Code-aware GROUP BY (single STRING key)** — `HashAggregateOperator` adds a `StringFastPath` selected for single-STRING-key aggregates. Maintains a global dictionary across batches; for dict-encoded inputs per-row work shrinks to a `batchCode → globalCode` array lookup plus an array-indexed group state slot. Non-dict batches still intern per row into the same global dictionary so results are identical. Measured on 1M-row aggregation: **~4× throughput** at `dict_size=10` (128M vs 33M items/s), **~3.9×** at 100, **~1.6×** at 1000.
-- **Spill-to-disk (StringFastPath HashAggregate v1)** — `AggregateFunction::merge` added on the numeric aggregates (`SumI64`, `CountStar`, `MinI64`, `MaxI64`, `AvgI64`); `MinString`/`MaxString` raise `NotImplemented` for v1 since their state is out-of-line. New `SpillFile` writes `(keyLen, key, state)` records to a tempfile via `std::filesystem::temp_directory_path()`. When `spillTriggerGroups` is set on `HashAggregateOperator`, each batch that lifts `globalDictReverse_` past the threshold flushes the partial state to disk and resets; before emit, every spill file is drained back into the live state via `internGlobalString` + `agg->merge`. Manual trigger for now; MemoryManager-driven triggering is a follow-up.
+- **Spill-to-disk for HashAggregate** — `AggregateFunction::merge` added on the numeric aggregates; new `SpillFile` writes `(keyLen, key, state)` records to a tempfile via `std::filesystem::temp_directory_path()`. Spill is wired through **all three operator paths** (`StringFastPath` / `Fixed` / `Var`); the trigger is configurable as a group-count (`spillTriggerGroups`) and/or a memory-fraction (`spillFraction`) — the latter polls `MemoryManager::usedFraction()`. Before emit, every spill file is drained back into the live state via `findOrInsert` + `agg->merge`. `MinString`/`MaxString` raise `NotImplemented` on spill (out-of-line state — Phase 4).
+- **Dict-aware HashJoin probe** — when the probe-side join key is a single dict-encoded `STRING` column, the operator precomputes `dictCode → buildSlot` once per unique dict entry; per-row work collapses to an array load + chain walk.
 
-**Tests & benchmarks** — 127 GoogleTest cases. New since previous slice: SpillFile roundtrip (keyed records + null-group sentinel); HashAggregate with aggressive spill thresholds matches the no-spill baseline for SUM / COUNT / MIN / MAX / AVG combinations and preserves the NULL group across spills.
+**Tests & benchmarks** — 130 GoogleTest cases. New since previous slice: spill correctness for `Fixed` (composite int keys) and `Var` (composite string + int) paths matches the no-spill baseline; HashJoin with dict-encoded probe key. The benchmark suite covers validity ops, filter selectivity, projection, full pipeline, HashAggregate cardinality, HashJoin cardinality, dict-vs-plain comparison + LIKE, and string GROUP BY.
 
 ## Build & Test
 
@@ -45,7 +46,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 127 tests, ~1.4s
+ctest --preset=debug                 # 130 tests, ~1.7s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -85,9 +86,13 @@ Key invariants the codebase enforces:
 | **3** | Dict-aware `Eq` fast path (~4× on low-cardinality dict-vs-literal) | done |
 | **3** | Dict-aware `LIKE` fast path (~3× on low-cardinality dict-vs-pattern) | done |
 | **3** | Code-aware GROUP BY for single STRING key (~4× on 1M-row low-cardinality agg) | done |
-| **3** | Spill-to-disk v1 for HashAggregate StringFastPath (manual trigger, numeric merges) | done |
-| 3 | MemoryManager-driven spill trigger, spill for Fixed / Var paths, MinString/MaxString merge, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware HashJoin keys | in progress |
+| **3** | Spill-to-disk for HashAggregate (StringFastPath + Fixed + Var, group-count + memory-fraction triggers) | done |
+| **3** | Dict-aware HashJoin probe (precomputed `dictCode → buildSlot` table) | done |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
+| 4 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
+| 4 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
+| 4 | `MinString`/`MaxString` spill (out-of-line state serialization) | planned |
+| 4 | Dict-merge in HashJoin `concatDense` (preserve dict layout through joins) | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
 

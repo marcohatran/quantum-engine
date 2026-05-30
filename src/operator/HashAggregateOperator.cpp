@@ -33,13 +33,15 @@ HashAggregateOperator::HashAggregateOperator(
         std::vector<ExpressionPtr>        groupKeys,
         std::vector<AggregateFunctionPtr> aggs,
         std::vector<std::string>          outputNames,
-        size_t                            spillTriggerGroups)
+        size_t                            spillTriggerGroups,
+        double                            spillFraction)
     : Operator(mm),
       child_(std::move(child)),
       groupKeys_(std::move(groupKeys)),
       aggs_(std::move(aggs)),
       path_(Path::Var),
-      spillTriggerGroups_(spillTriggerGroups) {
+      spillTriggerGroups_(spillTriggerGroups),
+      spillFraction_(spillFraction) {
 
     if (groupKeys_.empty()) {
         raise(ErrorCode::InvalidArgument,
@@ -170,6 +172,64 @@ void HashAggregateOperator::mergeSpillFiles() {
     spillFiles_.clear();
 }
 
+void HashAggregateOperator::spillFixed() {
+    if (tableFixed_->numGroups() == 0) return;
+    SpillFile file(stateBytes_);
+    for (auto cur = tableFixed_->cursor(); cur.valid(); cur.next()) {
+        file.write(cur.key(), static_cast<int32_t>(codec_->keyBytes()), cur.state());
+    }
+    file.finishWriting();
+    spillFiles_.push_back(std::move(file));
+    tableFixed_ = std::make_unique<BytesHashTable>(codec_->keyBytes(), stateBytes_, mm_);
+}
+
+void HashAggregateOperator::spillVar() {
+    if (tableVar_->numGroups() == 0) return;
+    SpillFile file(stateBytes_);
+    for (auto cur = tableVar_->cursor(); cur.valid(); cur.next()) {
+        file.write(cur.key(), static_cast<int32_t>(cur.keyLen()), cur.state());
+    }
+    file.finishWriting();
+    spillFiles_.push_back(std::move(file));
+    tableVar_ = std::make_unique<VarBytesHashTable>(stateBytes_, mm_);
+}
+
+void HashAggregateOperator::mergeSpillFilesFixed() {
+    if (spillFiles_.empty()) return;
+    InitCtx ctx{&aggs_, &aggOffsets_};
+    g_initCtx = &ctx;
+    for (auto& file : spillFiles_) {
+        auto reader = file.reader();
+        while (reader.next()) {
+            uint8_t* dst = tableFixed_->findOrInsert(reader.key(), initSlab);
+            for (size_t a = 0; a < aggs_.size(); ++a) {
+                aggs_[a]->merge(dst + aggOffsets_[a],
+                                reader.state() + aggOffsets_[a]);
+            }
+        }
+    }
+    g_initCtx = nullptr;
+    spillFiles_.clear();
+}
+
+void HashAggregateOperator::mergeSpillFilesVar() {
+    if (spillFiles_.empty()) return;
+    InitCtx ctx{&aggs_, &aggOffsets_};
+    g_initCtx = &ctx;
+    for (auto& file : spillFiles_) {
+        auto reader = file.reader();
+        while (reader.next()) {
+            uint8_t* dst = tableVar_->findOrInsert(reader.key(), reader.keyLen(), initSlab);
+            for (size_t a = 0; a < aggs_.size(); ++a) {
+                aggs_[a]->merge(dst + aggOffsets_[a],
+                                reader.state() + aggOffsets_[a]);
+            }
+        }
+    }
+    g_initCtx = nullptr;
+    spillFiles_.clear();
+}
+
 void HashAggregateOperator::build() {
     InitCtx ctx{&aggs_, &aggOffsets_};
     g_initCtx = &ctx;
@@ -283,16 +343,35 @@ void HashAggregateOperator::build() {
                         pos);
         }
 
-        // Spill v1 trigger: only on StringFastPath, manually configured.
-        if (path_ == Path::StringFastPath && spillTriggerGroups_ > 0 &&
-            globalDictReverse_.size() >= spillTriggerGroups_) {
-            spillStringFastPath();
+        // Spill v1 trigger: group-count or memory-fraction.
+        if (spillTriggerGroups_ > 0 || spillFraction_ > 0.0) {
+            size_t currentGroups = 0;
+            switch (path_) {
+                case Path::StringFastPath: currentGroups = globalDictReverse_.size(); break;
+                case Path::Fixed:          currentGroups = tableFixed_->numGroups();  break;
+                case Path::Var:            currentGroups = tableVar_->numGroups();    break;
+            }
+            const bool overGroups = spillTriggerGroups_ > 0 &&
+                                    currentGroups >= spillTriggerGroups_;
+            const bool overMemory = spillFraction_ > 0.0 &&
+                                    mm_->usedFraction() >= spillFraction_;
+            if (overGroups || overMemory) {
+                switch (path_) {
+                    case Path::StringFastPath: spillStringFastPath(); break;
+                    case Path::Fixed:          spillFixed();          break;
+                    case Path::Var:            spillVar();            break;
+                }
+            }
         }
     }
 
     g_initCtx = nullptr;
 
-    if (path_ == Path::StringFastPath) mergeSpillFiles();
+    switch (path_) {
+        case Path::StringFastPath: mergeSpillFiles();     break;
+        case Path::Fixed:          mergeSpillFilesFixed(); break;
+        case Path::Var:            mergeSpillFilesVar();   break;
+    }
 
     built_ = true;
 }

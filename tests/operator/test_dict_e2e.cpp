@@ -2,7 +2,9 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "expression/BinaryExpr.hpp"
@@ -203,4 +205,69 @@ TEST(DictE2E, HashJoinWithDictBuildValueColumn) {
     EXPECT_EQ(got.size(), 2u);
     EXPECT_EQ(got[2], (std::pair<std::string,int64_t>{"bob",   20}));
     EXPECT_EQ(got[3], (std::pair<std::string,int64_t>{"carol", 30}));
+}
+
+TEST(DictE2E, HashJoinWithDictEncodedProbeKey) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    // Build side: plain STRING column.
+    auto buildBatch = [&]{
+        StringBuilder sb(&mm);
+        sb.append("alice"); sb.append("bob"); sb.append("carol");
+        auto valCol = ColumnVector::make(Int64, 3, &mm);
+        valCol.typed<int64_t>()[0] = 100;
+        valCol.typed<int64_t>()[1] = 200;
+        valCol.typed<int64_t>()[2] = 300;
+        std::vector<ColumnVector> cols;
+        cols.push_back(sb.build());
+        cols.push_back(std::move(valCol));
+        return ColumnBatch(std::move(cols), PositionList::identity(3));
+    };
+
+    // Probe side: dict-encoded STRING key column — this triggers the
+    // dict-aware fast path in HashJoinOperator's probe loop.
+    auto probeBatch = [&]{
+        DictStringBuilder sb(&mm);
+        sb.append("bob"); sb.append("dan"); sb.append("alice"); sb.append("bob");
+        auto valCol = ColumnVector::make(Int64, 4, &mm);
+        valCol.typed<int64_t>()[0] = 1;
+        valCol.typed<int64_t>()[1] = 2;
+        valCol.typed<int64_t>()[2] = 3;
+        valCol.typed<int64_t>()[3] = 4;
+        std::vector<ColumnVector> cols;
+        cols.push_back(sb.build());
+        cols.push_back(std::move(valCol));
+        return ColumnBatch(std::move(cols), PositionList::identity(4));
+    };
+
+    std::vector<ColumnBatch> buildSrc; buildSrc.push_back(buildBatch());
+    std::vector<ColumnBatch> probeSrc; probeSrc.push_back(probeBatch());
+
+    Schema schema({{"name", DataType{TypeId::STRING}}, {"v", Int64}});
+    auto bScan = std::make_unique<ScanOperator>(&mm, schema, std::move(buildSrc));
+    auto pScan = std::make_unique<ScanOperator>(&mm, schema, std::move(probeSrc));
+
+    HashJoinOperator op(&mm, std::move(bScan), std::move(pScan),
+                        keyOn(0), keyOn(0),
+                        {"bname", "bv", "pname", "pv"});
+
+    // Use multiset since "bob" appears twice in the probe input.
+    std::multiset<std::tuple<std::string, int64_t, int64_t>> got;
+    op.open();
+    while (auto b = op.getNext()) {
+        if (b->numRows() == 0) continue;
+        for (size_t i = 0; i < b->numRows(); ++i) {
+            got.insert({std::string(b->column(0).stringAt(i)),
+                        b->column(1).typed<int64_t>()[i],
+                        b->column(3).typed<int64_t>()[i]});
+        }
+    }
+    op.close();
+
+    decltype(got) want = {
+        {"alice", 100, 3},
+        {"bob",   200, 1},
+        {"bob",   200, 4},
+    };
+    EXPECT_EQ(got, want);
 }

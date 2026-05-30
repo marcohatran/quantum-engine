@@ -40,7 +40,11 @@ public:
                           // Spill v1: in StringFastPath, dump partial state
                           // to disk and reset once codeStates_ holds this many
                           // groups. 0 disables spill (default).
-                          size_t                            spillTriggerGroups = 0);
+                          size_t                            spillTriggerGroups = 0,
+                          // Optional fractional budget trigger: when the
+                          // MemoryManager's usedFraction() rises above this
+                          // (0.0..1.0), force a spill. 0 disables.
+                          double                            spillFraction = 0.0);
 
     void                       open() override;
     std::optional<ColumnBatch> getNext() override;
@@ -64,9 +68,15 @@ private:
     // Serialize the current StringFastPath state to a fresh SpillFile and
     // reset the in-memory dictionaries / states. Idempotent on an empty state.
     void     spillStringFastPath();
+    // Same for Fixed / Var paths: walk the table cursor, dump each (key, state)
+    // record, then replace the table with a fresh one.
+    void     spillFixed();
+    void     spillVar();
     // After all input has been consumed, drain every spill file back into the
-    // current in-memory state via internGlobalString + agg->merge.
+    // current in-memory state via the appropriate find-or-insert + agg->merge.
     void     mergeSpillFiles();
+    void     mergeSpillFilesFixed();
+    void     mergeSpillFilesVar();
 
     OperatorPtr                       child_;
     std::vector<ExpressionPtr>        groupKeys_;
@@ -93,6 +103,7 @@ private:
 
     // Spill v1 state (StringFastPath only).
     size_t                  spillTriggerGroups_ = 0;
+    double                  spillFraction_      = 0.0;
     std::vector<SpillFile>  spillFiles_;
 
     bool built_   = false;
