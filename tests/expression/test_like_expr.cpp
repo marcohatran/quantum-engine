@@ -96,3 +96,45 @@ TEST(LikeExpr, OnlyPercentMatchesAll) {
     auto got = runLike(mm, {"", "abc", "x"}, "%");
     EXPECT_EQ(got, (std::vector<uint8_t>{1, 1, 1}));
 }
+
+#include "vector/DictStringBuilder.hpp"
+
+TEST(LikeExpr, DictEncodedFastPath) {
+    MemoryManager mm(64 * 1024);
+    // A dict-encoded column where the same strings appear multiple times:
+    // pattern is evaluated against each dict entry once, then projected.
+    DictStringBuilder b(&mm);
+    b.append("foobar"); b.append("baz"); b.append("foo");
+    b.append("foobar"); b.append("nope"); b.append("baz");
+    std::vector<ColumnVector> cols;
+    cols.push_back(b.build());
+    ColumnBatch batch(std::move(cols), PositionList::identity(6));
+
+    LikeExpr like(std::make_unique<ColumnRef>(0), "foo%");
+    auto r = like.eval(batch, &mm);
+    EXPECT_EQ(r.typed<uint8_t>()[0], 1);  // foobar
+    EXPECT_EQ(r.typed<uint8_t>()[1], 0);  // baz
+    EXPECT_EQ(r.typed<uint8_t>()[2], 1);  // foo
+    EXPECT_EQ(r.typed<uint8_t>()[3], 1);  // foobar
+    EXPECT_EQ(r.typed<uint8_t>()[4], 0);  // nope
+    EXPECT_EQ(r.typed<uint8_t>()[5], 0);  // baz
+}
+
+TEST(LikeExpr, DictEncodedWithNulls) {
+    MemoryManager mm(64 * 1024);
+    DictStringBuilder b(&mm);
+    b.append("yes");
+    b.appendNull();
+    b.append("no");
+    b.append("yes");
+    std::vector<ColumnVector> cols;
+    cols.push_back(b.build());
+    ColumnBatch batch(std::move(cols), PositionList::identity(4));
+
+    LikeExpr like(std::make_unique<ColumnRef>(0), "yes");
+    auto r = like.eval(batch, &mm);
+    EXPECT_TRUE(r.validity().isValid(0));   EXPECT_EQ(r.typed<uint8_t>()[0], 1);
+    EXPECT_FALSE(r.validity().isValid(1));                                     // null
+    EXPECT_TRUE(r.validity().isValid(2));   EXPECT_EQ(r.typed<uint8_t>()[2], 0);
+    EXPECT_TRUE(r.validity().isValid(3));   EXPECT_EQ(r.typed<uint8_t>()[3], 1);
+}

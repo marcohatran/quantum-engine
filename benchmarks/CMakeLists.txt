@@ -6,6 +6,7 @@ add_executable(quantum_benchmarks
     bench_hash_aggregate.cpp
     bench_hash_join.cpp
     bench_dict_compare.cpp
+    bench_dict_like.cpp
 )
 
 target_link_libraries(quantum_benchmarks

@@ -1,6 +1,7 @@
 #include "expression/LikeExpr.hpp"
 
 #include <string_view>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -60,6 +61,36 @@ ColumnVector LikeExpr::eval(const ColumnBatch& batch, MemoryManager* mm) const {
     const ValidityBitmask& inValidity = in.validity();
     const PositionList&    pos        = batch.positions();
     const std::string_view pat        = pattern_;
+
+    // Dict-aware fast path: evaluate the pattern against each dictionary entry
+    // once, then for each row just do a code-indexed lookup. For a column with
+    // dictSize <<= numRows (the common low-cardinality case) this drops the
+    // pattern-match cost by ~ numRows / dictSize.
+    if (in.isDictEncoded()) {
+        const size_t   dictN = in.dictSize();
+        const int32_t* doff  = in.dictOffsets().as<int32_t>();
+        const char*    dval  = in.dictValues().as<char>();
+
+        std::vector<uint8_t> dictResult(dictN);
+        for (size_t d = 0; d < dictN; ++d) {
+            std::string_view ds(dval + doff[d], static_cast<size_t>(doff[d + 1] - doff[d]));
+            dictResult[d] = likeMatch(ds, pat) ? 1U : 0U;
+        }
+
+        const int32_t* codes = in.values().as<int32_t>();
+        auto runOneDict = [&](size_t i) {
+            const bool isV = inValidity.isValid(i);
+            out.validity().setValid(i, isV);
+            o[i] = isV ? dictResult[static_cast<size_t>(codes[i])] : 0U;
+        };
+        if (pos.isIdentity()) {
+            for (size_t i = 0; i < pos.size(); ++i) runOneDict(i);
+        } else {
+            const auto idx = pos.indices();
+            for (size_t k = 0; k < idx.size(); ++k) runOneDict(static_cast<size_t>(idx[k]));
+        }
+        return out;
+    }
 
     auto runOne = [&](size_t i) {
         const bool isV = inValidity.isValid(i);
