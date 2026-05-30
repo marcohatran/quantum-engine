@@ -13,6 +13,7 @@ add_executable(quantum_tests
     expression/test_column_ref.cpp
     expression/test_binary_expr.cpp
     expression/test_like_expr.cpp
+    expression/test_dict_compare.cpp
     operator/test_scan_operator.cpp
     operator/test_filter_operator.cpp
     operator/test_project_operator.cpp

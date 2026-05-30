@@ -19,22 +19,27 @@ void fillBroadcast(ColumnVector& out, T v) {
     for (size_t i = 0; i < n; ++i) data[i] = v;
 }
 
+// Broadcast a string literal as a dict-encoded ColumnVector with a single
+// dictionary entry. Codes are all zero, so the column footprint is
+// 4 bytes/row regardless of string length, and dict-aware kernels (e.g. the
+// dict-vs-dict equality fast path) can detect the broadcast trivially via
+// dictSize() == 1.
 ColumnVector broadcastString(std::string_view s, size_t n, MemoryManager* mm) {
-    const size_t valBytes = roundUp(s.size() * n, kCacheLineBytes);
-    const size_t offBytes = roundUp((n + 1) * sizeof(int32_t), kCacheLineBytes);
-    Buffer values  = mm->allocate(valBytes);
-    Buffer offsets = mm->allocate(offBytes);
+    Buffer codes = mm->allocate(roundUp(n * sizeof(int32_t), kCacheLineBytes));
+    Buffer dictOff = mm->allocate(roundUp(2 * sizeof(int32_t), kCacheLineBytes));
+    Buffer dictVal = mm->allocate(roundUp(s.size(), kCacheLineBytes));
 
-    int32_t* off = offsets.as<int32_t>();
-    char*    val = values.as<char>();
-    for (size_t i = 0; i < n; ++i) {
-        off[i] = static_cast<int32_t>(i * s.size());
-        if (!s.empty()) std::memcpy(val + i * s.size(), s.data(), s.size());
-    }
-    off[n] = static_cast<int32_t>(n * s.size());
+    // All codes default-zero; values_ buffer is already zeroed by the allocator
+    // contract? Not guaranteed — explicitly memset to be safe.
+    std::memset(codes.data(), 0, codes.size());
 
-    ColumnVector out = ColumnVector::makeVariableWidth(
-        DataType{TypeId::STRING}, n, std::move(offsets), std::move(values), mm);
+    int32_t off[2] = {0, static_cast<int32_t>(s.size())};
+    std::memcpy(dictOff.data(), off, sizeof(off));
+    if (!s.empty()) std::memcpy(dictVal.data(), s.data(), s.size());
+
+    ColumnVector out = ColumnVector::makeDictEncoded(
+        DataType{TypeId::STRING}, n, /*dictSize=*/1,
+        std::move(codes), std::move(dictOff), std::move(dictVal), mm);
     out.validity().setAllValid();
     return out;
 }

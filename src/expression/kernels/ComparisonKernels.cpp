@@ -47,9 +47,60 @@ inline uint8_t cmpString(std::string_view a, std::string_view b) {
     else /* Gt */                       return a >  b ? 1U : 0U;
 }
 
+// Fast path for STRING equality when both sides are dict-encoded. Precompute
+// a translation table mapping every rhs dict code to the equivalent lhs code
+// (or -1 if rhs's string is absent from lhs's dict), then compare codes for
+// each row. Big win for `col = literal` since the literal-broadcast is
+// dict-encoded with dictSize == 1.
+void runStringDictEq(const ColumnVector& lhs, const ColumnVector& rhs,
+                     ColumnVector& out, const PositionList& pos) {
+    uint8_t* o = out.typed<uint8_t>();
+    out.validity().setAllNull();
+
+    const size_t   lhsDictN = lhs.dictSize();
+    const size_t   rhsDictN = rhs.dictSize();
+    const int32_t* lhsCodes = lhs.values().as<int32_t>();
+    const int32_t* rhsCodes = rhs.values().as<int32_t>();
+
+    // Translate each rhs code to its equivalent lhs code (or -1 on miss).
+    std::vector<int32_t> rhsToLhs(rhsDictN, -1);
+    for (size_t r = 0; r < rhsDictN; ++r) {
+        const std::string_view rs(rhs.dictValues().as<char>() + rhs.dictOffsets().as<int32_t>()[r],
+                                  static_cast<size_t>(rhs.dictOffsets().as<int32_t>()[r + 1] -
+                                                      rhs.dictOffsets().as<int32_t>()[r]));
+        for (size_t l = 0; l < lhsDictN; ++l) {
+            const std::string_view ls(
+                lhs.dictValues().as<char>() + lhs.dictOffsets().as<int32_t>()[l],
+                static_cast<size_t>(lhs.dictOffsets().as<int32_t>()[l + 1] -
+                                    lhs.dictOffsets().as<int32_t>()[l]));
+            if (ls == rs) { rhsToLhs[r] = static_cast<int32_t>(l); break; }
+        }
+    }
+
+    auto emitOne = [&](size_t i) {
+        const int32_t lc = lhsCodes[i];
+        const int32_t rc = rhsCodes[i];
+        o[i] = (rhsToLhs[static_cast<size_t>(rc)] == lc) ? 1U : 0U;
+    };
+
+    if (pos.isIdentity()) {
+        for (size_t i = 0; i < pos.size(); ++i) emitOne(i);
+    } else {
+        const auto idx = pos.indices();
+        for (size_t k = 0; k < idx.size(); ++k) emitOne(static_cast<size_t>(idx[k]));
+    }
+}
+
 template <CmpOp Op>
 void runString(const ColumnVector& lhs, const ColumnVector& rhs,
                ColumnVector& out, const PositionList& pos) {
+    if constexpr (Op == CmpOp::Eq) {
+        if (lhs.isDictEncoded() && rhs.isDictEncoded()) {
+            runStringDictEq(lhs, rhs, out, pos);
+            return;
+        }
+    }
+
     uint8_t* o = out.typed<uint8_t>();
     out.validity().setAllNull();
 

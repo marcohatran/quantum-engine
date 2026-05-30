@@ -29,8 +29,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`MinString` / `MaxString` aggregates** — lexicographic MIN/MAX over `STRING` columns, NULL-skipping, NULL for all-null groups. Per-group state is an `int32` index into an aggregate-owned `std::vector<std::string>`; finalize emits via `StringBuilder`.
 - **`LikeExpr`** — SQL `LIKE` with `%` (any substring) and `_` (any single char). Anchored, iterative non-backtracking matcher. Null inputs propagate; pattern is a constant `std::string` for Phase 3.
 - **Dictionary-encoded STRING columns** — `ColumnVector` grows a third layout: `values_` holds `int32` codes; `dictOffsets_` + `dictValues_` hold the shared dictionary. `DictStringBuilder` builds dict columns row-by-row with dedup. `stringAt()` dispatches uniformly so existing kernels (compare, LIKE, MIN/MAX) and GROUP BY/JOIN key codecs work unchanged. Dict layout is preserved through `clone` / `selectActive` / `HashJoin gather`; `HashJoin concatDense` currently decodes mixed-dict inputs to regular STRING (dict-merge is a follow-up).
+- **Dict-aware equality fast path** — `Literal(std::string)` now emits a dict-encoded broadcast (`dictSize=1`), and the STRING `Eq` kernel detects dict-vs-dict inputs, precomputes a `rhsCode → lhsCode` translation table, and compares int32s per row. Measured **~4× throughput** on `dict_size=10` vs the per-row `stringAt` path; gains shrink as dict size grows.
 
-**Tests & benchmarks** — 110 GoogleTest cases. New since previous slice: `DictStringBuilder` (basic, null, empty, consecutive codes); dict-encoded layout end-to-end through Filter / Project / GROUP BY string key / HashJoin (build-side dict column flows through gather correctly); cross-layout `BinaryExpr::Eq` (dict vs regular STRING). Google Benchmark suite covers validity ops, filter selectivity sweeps, projection, full pipeline, HashAggregate cardinality sweeps, and HashJoin cardinality sweeps.
+**Tests & benchmarks** — 115 GoogleTest cases. New since previous slice: literal-in-dict / literal-absent-from-dict / disjoint-dicts / all-match dict equality; `Lt` fallback through `stringAt` still correct. New `bench_dict_compare` sweeps dict cardinality {10, 100, 1000} for dict-vs-literal and plain-vs-literal `Eq`.
 
 ## Build & Test
 
@@ -41,7 +42,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 110 tests, ~1.1s
+ctest --preset=debug                 # 115 tests, ~1.2s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -77,7 +78,8 @@ Key invariants the codebase enforces:
 | **3** | RIGHT OUTER and FULL OUTER joins (with build-side matched tracking) | done |
 | **3** | MIN/MAX(string) aggregates; SQL `LIKE` expression with `%` / `_` | done |
 | **3** | Dictionary-encoded STRING columns (layout + builder + dict-aware gather) | done |
-| 3 | Spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware comparison fast paths | in progress |
+| **3** | Dict-aware `Eq` fast path (~4× on low-cardinality dict-vs-literal) | done |
+| 3 | Spill-to-disk, AVX2 kernels, Exchange operator, intra-operator parallelism, dict-merge in HashJoin concat, code-aware GROUP BY / JOIN hashing | in progress |
 | 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
