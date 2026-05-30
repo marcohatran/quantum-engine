@@ -2,31 +2,34 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "expression/Expression.hpp"
 #include "hash/BytesHashTable.hpp"
 #include "hash/KeyCodec.hpp"
+#include "hash/VarBytesHashTable.hpp"
 #include "operator/Operator.hpp"
 
 namespace quantum {
 
 enum class JoinType { Inner, LeftOuter };
 
-// Equi-join on any number of fixed-width key columns. Two-phase execution:
+// Equi-join on any number of fixed-width or variable-width key columns.
+// Two-phase execution:
 //   1. Build (first getNext call): drain the build side into a dense row store
-//      and populate a BytesHashTable whose key is the encoded composite of
-//      all build-key columns. Duplicate keys form a chain via next_[].
+//      and populate a hash table whose key is the encoded composite of all
+//      build-key columns. Duplicate keys chain via next_[].
 //   2. Probe (subsequent calls): for each probe batch, encode each row's key
 //      and walk the chain. NULL in any probe key column means no match
 //      (LEFT OUTER still emits a row with NULL build columns).
 //
+// Internally uses BytesHashTable when every key column is fixed-width and
+// VarBytesHashTable when any key column is variable-width (e.g. STRING).
+//
 // JoinType controls miss behaviour:
 //   - Inner:     skip the row.
 //   - LeftOuter: emit one output row with probe values and NULL build cols.
-//
-// Phase 2 scope: Inner + LeftOuter, fixed-width keys only, all input columns
-// passed through. RIGHT/FULL OUTER, string keys, and spill come later.
 class HashJoinOperator final : public Operator {
 public:
     HashJoinOperator(MemoryManager*               mm,
@@ -53,10 +56,11 @@ private:
     JoinType                   joinType_;
     Schema                     outSchema_;
 
-    std::unique_ptr<KeyCodec>       codec_;
-    std::optional<ColumnBatch>      rowStore_;
-    std::unique_ptr<BytesHashTable> index_;
-    std::vector<int32_t>            next_;
+    std::unique_ptr<KeyCodec>          codec_;
+    std::optional<ColumnBatch>         rowStore_;
+    std::unique_ptr<BytesHashTable>    indexFixed_;
+    std::unique_ptr<VarBytesHashTable> indexVar_;
+    std::vector<int32_t>               next_;
 
     bool built_ = false;
 };

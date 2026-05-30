@@ -2,11 +2,13 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "expression/Expression.hpp"
 #include "hash/BytesHashTable.hpp"
 #include "hash/KeyCodec.hpp"
+#include "hash/VarBytesHashTable.hpp"
 #include "operator/AggregateFunction.hpp"
 #include "operator/Operator.hpp"
 
@@ -17,13 +19,12 @@ namespace quantum {
 // table, then emit one batch holding (key cols..., agg cols...) for every
 // distinct group. Subsequent getNext() calls return nullopt.
 //
-// NULL semantics: each key column's validity is encoded into the composite
-// key bytes, so e.g. (NULL, 1) and (NULL, 2) form distinct groups, matching
-// SQL GROUP BY behaviour.
+// Internally uses BytesHashTable for all-fixed-width keys (cache-friendly
+// inline keys) and VarBytesHashTable when any key column is variable-width
+// (e.g. STRING). KeyCodec chooses the mode.
 //
-// Phase 2 scope: any number of fixed-width key columns (BOOL/INT32/INT64/
-// FLOAT64), all aggregates listed in AggregateFunction.hpp. No spill, no
-// batched emission yet.
+// NULL semantics: each key column's validity is encoded into the key, so e.g.
+// (NULL, 1) and (NULL, 2) form distinct groups.
 class HashAggregateOperator final : public Operator {
 public:
     HashAggregateOperator(MemoryManager*                    mm,
@@ -40,6 +41,8 @@ public:
 private:
     void        build();
     ColumnBatch emit();
+    ColumnBatch emitFixed();
+    ColumnBatch emitVar();
 
     OperatorPtr                       child_;
     std::vector<ExpressionPtr>        groupKeys_;
@@ -51,9 +54,10 @@ private:
     std::vector<size_t> aggOffsets_;
     size_t              stateBytes_ = 0;
 
-    std::unique_ptr<BytesHashTable> table_;
-    bool                            built_   = false;
-    bool                            emitted_ = false;
+    std::unique_ptr<BytesHashTable>    tableFixed_;
+    std::unique_ptr<VarBytesHashTable> tableVar_;
+    bool                               built_   = false;
+    bool                               emitted_ = false;
 };
 
 } // namespace quantum

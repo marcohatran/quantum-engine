@@ -2,50 +2,79 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "vector/ColumnVector.hpp"
 
 namespace quantum {
 
-// Composite-key codec. Encodes a set of key columns (one row at a time) into
-// a flat fixed-width byte buffer suitable for BytesHashTable lookup.
+// Composite-key codec. Two modes selected at construction by inspecting the
+// key column types:
 //
-// Layout per key:
-//   [validity bits: ceil(N/8) bytes, rounded to 1][col0 value][col1 value]...
+//   isFixedWidth() == true  — every column is fixed-width. Encoded keys have
+//     a constant size keyBytes() and live in a pre-allocated buffer:
+//       [validity bits][col0 value][col1 value]...
 //
-// The validity bits guarantee that two rows with different NULL columns map to
-// different keys (matching SQL GROUP BY semantics that NULL is its own group).
+//   isFixedWidth() == false — at least one column is variable-width (STRING).
+//     Encoded keys are variable-length; callers pass a std::vector<uint8_t>
+//     buffer to encodeVar(). Layout:
+//       [validity bits]
+//       per column in order:
+//         fixed-width col: exactly `w` bytes (zero-filled when NULL)
+//         var-width col:   [int32 length][bytes] (length=0 when NULL)
+//
+// Both modes encode each column's validity bit into the header so two rows
+// with different NULL patterns map to different keys (matching SQL GROUP BY
+// semantics that NULL is its own group).
 class KeyCodec {
 public:
     explicit KeyCodec(const std::vector<DataType>& keyTypes);
 
-    size_t numColumns() const noexcept { return offsets_.size(); }
-    size_t keyBytes()   const noexcept { return keyBytes_; }
+    size_t numColumns() const noexcept { return types_.size(); }
+    bool   isFixedWidth() const noexcept { return fixedWidth_; }
+
+    // --- Fixed-width-only API (valid iff isFixedWidth()) ---
+
+    size_t keyBytes()      const noexcept { return keyBytes_; }
     size_t validityBytes() const noexcept { return validityBytes_; }
 
-    // Encode the row at index `row` of `keyCols` into `out`. `out` must point
-    // to at least `keyBytes()` writable bytes. `keyCols.size()` must match
-    // numColumns().
     void encode(const std::vector<const ColumnVector*>& keyCols,
                 size_t                                  row,
                 uint8_t*                                out) const;
 
-    // True if any of the encoded columns had a NULL bit in this key buffer.
-    // Used by HashJoin to skip probe rows where any key column is NULL.
     bool hasAnyNull(const uint8_t* key) const noexcept;
 
-    // Decode a single column value from a key buffer back into the slot at
-    // index `row` of `outCol`. Validity bit is also copied. Used when emitting
-    // the group-key columns from HashAggregate's output.
-    void decode(const uint8_t*       key,
-                size_t               colIdx,
-                ColumnVector&        outCol,
-                size_t               row) const;
+    void decode(const uint8_t* key,
+                size_t         colIdx,
+                ColumnVector&  outCol,
+                size_t         outRow) const;
+
+    // --- Variable-width API (works in both modes) ---
+
+    void encodeVar(const std::vector<const ColumnVector*>& keyCols,
+                   size_t                                  row,
+                   std::vector<uint8_t>&                   out) const;
+
+    bool hasAnyNullVar(const uint8_t* key, size_t len) const noexcept;
+
+    // Walks the encoded variable-width key. For each column in order,
+    // invokes visit(colIdx, isValid, bytes, bytesLen). For fixed-width
+    // columns, bytes points at `fixedWidth()` bytes regardless of validity.
+    // For variable-width columns, bytes/length describe the value bytes;
+    // bytes is non-null but length may be 0.
+    using VarVisitor = std::function<void(size_t  colIdx,
+                                          bool    isValid,
+                                          const uint8_t* bytes,
+                                          size_t  bytesLen)>;
+    void decodeVar(const uint8_t* key, size_t len, const VarVisitor& visit) const;
 
 private:
     std::vector<DataType> types_;
-    std::vector<size_t>   offsets_;  // byte offset of each column's value
+    bool                  fixedWidth_;
+
+    // Fixed-width-only fields:
+    std::vector<size_t>   offsets_;
     size_t                validityBytes_ = 0;
     size_t                keyBytes_      = 0;
 };

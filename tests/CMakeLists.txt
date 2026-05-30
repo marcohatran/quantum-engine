@@ -18,6 +18,7 @@ add_executable(quantum_tests
     operator/test_hash_aggregate_operator.cpp
     operator/test_hash_join_operator.cpp
     operator/test_string_join.cpp
+    operator/test_string_keys.cpp
     hash/test_hash_table.cpp
     e2e/test_pipeline_smoke.cpp
 )

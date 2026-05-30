@@ -16,6 +16,7 @@ add_library(quantum_core STATIC
     expression/kernels/ComparisonKernels.cpp
     hash/HashTable.cpp
     hash/BytesHashTable.cpp
+    hash/VarBytesHashTable.cpp
     hash/KeyCodec.cpp
     operator/ScanOperator.cpp
     operator/FilterOperator.cpp

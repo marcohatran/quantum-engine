@@ -5,6 +5,7 @@
 #include "common/Bits.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
+#include "vector/StringBuilder.hpp"
 
 namespace quantum {
 
@@ -15,6 +16,25 @@ constexpr int32_t kEndOfChain = -1;
 void initEndOfChain(uint8_t* state) {
     int32_t v = kEndOfChain;
     std::memcpy(state, &v, sizeof(v));
+}
+
+ColumnVector emptyColumn(DataType type, MemoryManager* mm) {
+    if (type.isFixedWidth()) {
+        return ColumnVector::make(type, 0, mm);
+    }
+    StringBuilder b(mm);
+    return b.build();
+}
+
+ColumnVector allNullColumn(DataType type, size_t n, MemoryManager* mm) {
+    if (type.isFixedWidth()) {
+        ColumnVector c = ColumnVector::make(type, n, mm);
+        c.validity().setAllNull();
+        return c;
+    }
+    StringBuilder b(mm);
+    for (size_t i = 0; i < n; ++i) b.appendNull();
+    return b.build();
 }
 
 ColumnVector concatFixedWidthColumn(
@@ -40,11 +60,7 @@ ColumnVector concatFixedWidthColumn(
 ColumnVector concatVariableWidthColumn(
         const std::vector<ColumnBatch>& batches, size_t col,
         size_t total, DataType type, MemoryManager* mm) {
-    // Pass 1: sum total bytes and build offset array.
     size_t totalBytes = 0;
-    for (const auto& b : batches) totalBytes += b.column(col).values().size();
-    // Actual data bytes (not the rounded buffer size). Need to walk offsets.
-    totalBytes = 0;
     for (const auto& b : batches) {
         const auto& src = b.column(col);
         const int32_t* off = src.offsets().as<int32_t>();
@@ -78,7 +94,6 @@ ColumnVector concatVariableWidthColumn(
     ColumnVector out = ColumnVector::makeVariableWidth(
         type, total, std::move(offsetsBuf), std::move(valuesBuf), mm);
     out.validity().setAllValid();
-    // Copy validity from each batch into the right slice.
     size_t row = 0;
     for (const auto& b : batches) {
         const auto& src = b.column(col);
@@ -236,11 +251,6 @@ HashJoinOperator::HashJoinOperator(MemoryManager*               mm,
                   "HashJoin: key {} types differ (build={}, probe={})",
                   i, buildTypes[i].toString(), probeTypes[i].toString());
         }
-        if (!buildTypes[i].isFixedWidth()) {
-            raise(ErrorCode::NotImplemented,
-                  "HashJoin: variable-width key type {} not supported",
-                  buildTypes[i].toString());
-        }
     }
     codec_ = std::make_unique<KeyCodec>(buildTypes);
 
@@ -274,21 +284,23 @@ void HashJoinOperator::build() {
     }
 
     if (dense.empty()) {
-        // Empty build — still materialize an empty row store with the build
-        // schema's column placeholders so LEFT OUTER probes can construct
-        // the output schema correctly.
         const Schema& bs = build_->outputSchema();
         std::vector<ColumnVector> emptyCols;
         emptyCols.reserve(bs.numFields());
         for (size_t c = 0; c < bs.numFields(); ++c) {
-            emptyCols.push_back(ColumnVector::make(bs.field(c).type, 0, mm_));
+            emptyCols.push_back(emptyColumn(bs.field(c).type, mm_));
         }
         rowStore_ = ColumnBatch(std::move(emptyCols), PositionList::identity(0));
     } else {
         rowStore_ = concatDense(std::move(dense), mm_);
     }
 
-    index_ = std::make_unique<BytesHashTable>(codec_->keyBytes(), sizeof(int32_t), mm_);
+    if (codec_->isFixedWidth()) {
+        indexFixed_ = std::make_unique<BytesHashTable>(
+            codec_->keyBytes(), sizeof(int32_t), mm_);
+    } else {
+        indexVar_ = std::make_unique<VarBytesHashTable>(sizeof(int32_t), mm_);
+    }
     next_.assign(rowStore_->numRows(), kEndOfChain);
 
     if (rowStore_->numRows() == 0) {
@@ -296,7 +308,6 @@ void HashJoinOperator::build() {
         return;
     }
 
-    // Evaluate every build key over the dense row store and encode per-row.
     std::vector<ColumnVector> keyEvals;
     keyEvals.reserve(buildKeys_.size());
     for (const auto& e : buildKeys_) keyEvals.push_back(e->eval(*rowStore_, mm_));
@@ -304,13 +315,22 @@ void HashJoinOperator::build() {
     keyPtrs.reserve(keyEvals.size());
     for (const auto& c : keyEvals) keyPtrs.push_back(&c);
 
-    std::vector<uint8_t> keyBuf(codec_->keyBytes());
+    std::vector<uint8_t> keyBufFixed(codec_->isFixedWidth() ? codec_->keyBytes() : 0);
+    std::vector<uint8_t> keyBufVar;
 
     for (size_t i = 0; i < rowStore_->numRows(); ++i) {
-        codec_->encode(keyPtrs, i, keyBuf.data());
-        if (codec_->hasAnyNull(keyBuf.data())) continue;  // null keys never match
-        uint8_t* slot = index_->findOrInsert(keyBuf.data(), initEndOfChain);
-        int32_t  prevHead;
+        uint8_t* slot = nullptr;
+        if (codec_->isFixedWidth()) {
+            codec_->encode(keyPtrs, i, keyBufFixed.data());
+            if (codec_->hasAnyNull(keyBufFixed.data())) continue;
+            slot = indexFixed_->findOrInsert(keyBufFixed.data(), initEndOfChain);
+        } else {
+            codec_->encodeVar(keyPtrs, i, keyBufVar);
+            if (codec_->hasAnyNullVar(keyBufVar.data(), keyBufVar.size())) continue;
+            slot = indexVar_->findOrInsert(
+                keyBufVar.data(), keyBufVar.size(), initEndOfChain);
+        }
+        int32_t prevHead;
         std::memcpy(&prevHead, slot, sizeof(prevHead));
         next_[i] = prevHead;
         int32_t newHead = static_cast<int32_t>(i);
@@ -338,7 +358,8 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
     const bool leftOuter   = (joinType_ == JoinType::LeftOuter);
     const bool buildEmpty  = (rowStore_->numRows() == 0);
 
-    std::vector<uint8_t> keyBuf(codec_->keyBytes());
+    std::vector<uint8_t> keyBufFixed(codec_->isFixedWidth() ? codec_->keyBytes() : 0);
+    std::vector<uint8_t> keyBufVar;
     std::vector<int32_t> probeIdx;
     std::vector<int32_t> buildIdx;
     std::vector<bool>    buildIsValid;
@@ -351,22 +372,26 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
 
     for (size_t k = 0; k < pos.size(); ++k) {
         const auto i = static_cast<size_t>(pos.at(k));
-        codec_->encode(keyPtrs, i, keyBuf.data());
 
-        if (codec_->hasAnyNull(keyBuf.data())) {
-            if (leftOuter) emitUnmatched(i);
-            continue;
+        const uint8_t* slot = nullptr;
+        bool anyNull = false;
+        if (codec_->isFixedWidth()) {
+            codec_->encode(keyPtrs, i, keyBufFixed.data());
+            anyNull = codec_->hasAnyNull(keyBufFixed.data());
+            if (!anyNull && !buildEmpty) slot = indexFixed_->find(keyBufFixed.data());
+        } else {
+            codec_->encodeVar(keyPtrs, i, keyBufVar);
+            anyNull = codec_->hasAnyNullVar(keyBufVar.data(), keyBufVar.size());
+            if (!anyNull && !buildEmpty) {
+                slot = indexVar_->find(keyBufVar.data(), keyBufVar.size());
+            }
         }
-        if (buildEmpty) {
+
+        if (anyNull || buildEmpty || slot == nullptr) {
             if (leftOuter) emitUnmatched(i);
             continue;
         }
 
-        const uint8_t* slot = index_->find(keyBuf.data());
-        if (slot == nullptr) {
-            if (leftOuter) emitUnmatched(i);
-            continue;
-        }
         int32_t cur;
         std::memcpy(&cur, slot, sizeof(cur));
         while (cur != kEndOfChain) {
@@ -381,10 +406,11 @@ std::optional<ColumnBatch> HashJoinOperator::probeOne() {
     outCols.reserve(rowStore_->numColumns() + in->numColumns());
 
     for (size_t c = 0; c < rowStore_->numColumns(); ++c) {
+        const auto& srcCol  = rowStore_->column(c);
+        const auto  type    = srcCol.type();
         ColumnVector col = buildEmpty
-            ? ColumnVector::make(rowStore_->column(c).type(), buildIdx.size(), mm_)
-            : gather(rowStore_->column(c), buildIdx, mm_);
-        if (buildEmpty) col.validity().setAllNull();
+            ? allNullColumn(type, buildIdx.size(), mm_)
+            : gather(srcCol, buildIdx, mm_);
         for (size_t k = 0; k < buildIsValid.size(); ++k) {
             if (!buildIsValid[k]) col.validity().setValid(k, false);
         }
