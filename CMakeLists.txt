@@ -25,6 +25,7 @@ include(Simd)
 
 find_package(fmt CONFIG REQUIRED)
 find_package(absl CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 enable_testing()
 add_subdirectory(src)

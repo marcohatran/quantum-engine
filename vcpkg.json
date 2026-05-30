@@ -7,6 +7,7 @@
   "dependencies": [
     "fmt",
     "abseil",
+    "nlohmann-json",
     {
       "name": "gtest",
       "platform": "!uwp"

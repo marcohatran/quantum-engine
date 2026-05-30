@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phases 1, 2, **and 3 complete.** Full SQL join family (Inner / Left / Right / Full Outer) over composite int + string keys; STRING and dictionary-encoded STRING fully integrated across Scan / Filter / Project / Aggregate / Join with code-aware fast paths; spill-to-disk works for HashAggregate across all three key paths with both group-count and memory-fraction triggers. Phase 4 (JNI bridge + Spark integration), parallel execution, and AVX2 measurement on x86 hardware are next.
+> **Status:** Phases 1–3 complete. Phase 4 in progress — Plan IR + JSON wire format + `PlanBuilder` shipped (the bridge surface the JVM side will speak). Next up in Phase 4: Protobuf binary wire format, the JNI bridge itself, Arrow IPC for batch transport, and the Spark extension.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -35,7 +35,10 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Spill-to-disk for HashAggregate** — `AggregateFunction::merge` added on the numeric aggregates; new `SpillFile` writes `(keyLen, key, state)` records to a tempfile via `std::filesystem::temp_directory_path()`. Spill is wired through **all three operator paths** (`StringFastPath` / `Fixed` / `Var`); the trigger is configurable as a group-count (`spillTriggerGroups`) and/or a memory-fraction (`spillFraction`) — the latter polls `MemoryManager::usedFraction()`. Before emit, every spill file is drained back into the live state via `findOrInsert` + `agg->merge`. `MinString`/`MaxString` raise `NotImplemented` on spill (out-of-line state — Phase 4).
 - **Dict-aware HashJoin probe** — when the probe-side join key is a single dict-encoded `STRING` column, the operator precomputes `dictCode → buildSlot` once per unique dict entry; per-row work collapses to an array load + chain walk.
 
-**Tests & benchmarks** — 130 GoogleTest cases. New since previous slice: spill correctness for `Fixed` (composite int keys) and `Var` (composite string + int) paths matches the no-spill baseline; HashJoin with dict-encoded probe key. The benchmark suite covers validity ops, filter selectivity, projection, full pipeline, HashAggregate cardinality, HashJoin cardinality, dict-vs-plain comparison + LIKE, and string GROUP BY.
+**Phase 4 — In Progress**
+- **Plan IR + JSON wire format + builder** — new `src/plan/` module defines a `PlanNode` / `ScalarExpr` IR (Scan / Filter / Project / HashAggregate / HashJoin + Literal / ColumnRef / BinaryOp / Like). `PlanJson` round-trips the IR through JSON via nlohmann-json (Protobuf wire format is the next slice). `PlanBuilder` walks the IR and constructs the engine's `Operator` tree, with a `SourceCatalog` (string-keyed map of `vector<ColumnBatch>`) supplying actual data to each scan node at execution time. This is the bridge surface that the JVM side will speak — Spark's Catalyst plan becomes a `PlanNode` IR, gets serialized, and crosses JNI as either JSON (for prototyping) or Protobuf (for production).
+
+**Tests & benchmarks** — 135 GoogleTest cases. New since previous slice: end-to-end scan-filter-project from an IR round-tripped through JSON; HashAggregate (SUM + COUNT_STAR) built directly from a JSON plan string; HashJoin built from IR; scalar expression and literal JSON round-trips.
 
 ## Build & Test
 
@@ -46,7 +49,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 130 tests, ~1.7s
+ctest --preset=debug                 # 135 tests, ~2.3s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -57,6 +60,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ## Architecture at a Glance
 
 ```
+plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson (wire format)
 operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
@@ -88,7 +92,11 @@ Key invariants the codebase enforces:
 | **3** | Code-aware GROUP BY for single STRING key (~4× on 1M-row low-cardinality agg) | done |
 | **3** | Spill-to-disk for HashAggregate (StringFastPath + Fixed + Var, group-count + memory-fraction triggers) | done |
 | **3** | Dict-aware HashJoin probe (precomputed `dictCode → buildSlot` table) | done |
-| 4 | JNI bridge with Protobuf wire format + `QuantumPlanner` Spark extension | planned |
+| **4** | Plan IR + JSON wire format + PlanBuilder | done |
+| 4 | Protobuf wire format (binary, language-portable replacement for JSON) | planned |
+| 4 | JNI bridge (Java/Scala side that produces the IR + ships it to native) | planned |
+| 4 | Arrow IPC for cross-JVM batch transport | planned |
+| 4 | `QuantumPlanner` Spark extension (post-Catalyst plan tagging + handoff) | planned |
 | 4 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
 | 4 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
 | 4 | `MinString`/`MaxString` spill (out-of-line state serialization) | planned |

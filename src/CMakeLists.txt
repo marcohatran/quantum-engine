@@ -27,6 +27,9 @@ add_library(quantum_core STATIC
     operator/HashAggregateOperator.cpp
     operator/HashJoinOperator.cpp
     spill/SpillFile.cpp
+    plan/Plan.cpp
+    plan/PlanBuilder.cpp
+    plan/PlanJson.cpp
 )
 
 target_include_directories(quantum_core
@@ -43,6 +46,7 @@ target_link_libraries(quantum_core
         absl::span
         absl::strings
         absl::inlined_vector
+        nlohmann_json::nlohmann_json
 )
 
 target_compile_features(quantum_core PUBLIC cxx_std_20)
