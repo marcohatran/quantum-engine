@@ -13,9 +13,12 @@ add_library(quantum_core STATIC
     expression/BinaryExpr.cpp
     expression/kernels/ArithmeticKernels.cpp
     expression/kernels/ComparisonKernels.cpp
+    hash/HashTable.cpp
     operator/ScanOperator.cpp
     operator/FilterOperator.cpp
     operator/ProjectOperator.cpp
+    operator/AggregateFunction.cpp
+    operator/HashAggregateOperator.cpp
 )
 
 target_include_directories(quantum_core

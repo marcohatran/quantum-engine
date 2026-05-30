@@ -3,6 +3,7 @@ add_executable(quantum_benchmarks
     bench_filter.cpp
     bench_project.cpp
     bench_pipeline.cpp
+    bench_hash_aggregate.cpp
 )
 
 target_link_libraries(quantum_benchmarks
