@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phases 1–3 complete. Phase 4 in progress — Plan IR + JSON + Protobuf wire formats, C ABI, Arrow C Data Interface, JVM bridge (Maven + JNA + Java protobuf), and a Spark `SessionExtension` scaffold all shipped. End-to-end query works from Java protobuf through the native engine and back. Spark extension currently observes Catalyst plans without rewriting them; the actual native-execution rewrite (detect eligible HashAggregate / HashJoin shapes, hand to the C ABI) is the final headline Phase 4 piece.
+> **Status:** Phases 1–4 complete. A `SELECT k, SUM(v) FROM kv GROUP BY k` written in Spark SQL now runs natively in the C++ engine via `QuantumExtension` → Catalyst-plan rewrite → protobuf IR → JNA → C ABI → native operators, then returns rows back to Spark. Phase 5 (Storage I/O — Parquet / Iceberg / Delta) is next.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -35,15 +35,15 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Spill-to-disk for HashAggregate** — `AggregateFunction::merge` added on the numeric aggregates; new `SpillFile` writes `(keyLen, key, state)` records to a tempfile via `std::filesystem::temp_directory_path()`. Spill is wired through **all three operator paths** (`StringFastPath` / `Fixed` / `Var`); the trigger is configurable as a group-count (`spillTriggerGroups`) and/or a memory-fraction (`spillFraction`) — the latter polls `MemoryManager::usedFraction()`. Before emit, every spill file is drained back into the live state via `findOrInsert` + `agg->merge`. `MinString`/`MaxString` raise `NotImplemented` on spill (out-of-line state — Phase 4).
 - **Dict-aware HashJoin probe** — when the probe-side join key is a single dict-encoded `STRING` column, the operator precomputes `dictCode → buildSlot` once per unique dict entry; per-row work collapses to an array load + chain walk.
 
-**Phase 4 — In Progress**
-- **Plan IR + JSON wire format + builder** — new `src/plan/` module defines a `PlanNode` / `ScalarExpr` IR (Scan / Filter / Project / HashAggregate / HashJoin + Literal / ColumnRef / BinaryOp / Like). `PlanJson` round-trips the IR through JSON via nlohmann-json. `PlanBuilder` walks the IR and constructs the engine's `Operator` tree, with a `SourceCatalog` (string-keyed map of `vector<ColumnBatch>`) supplying actual data to each scan node at execution time. This is the bridge surface that the JVM side will speak — Spark's Catalyst plan becomes a `PlanNode` IR, gets serialized, and crosses JNI.
-- **Protobuf wire format** — `src/plan/proto/quantum_plan.proto` mirrors the IR 1:1 (oneof-based unions for `ScalarExpr` and `PlanNode`, enum-typed kinds, repeated children). Generated via `protobuf_generate_cpp` at CMake configure time. `PlanProto` (`planToProtoBytes` / `planFromProtoBytes`) provides binary round-trip; JSON stays as the human-readable debug format. Cross-codec equivalence verified by tests: encode through JSON, decode, encode through proto, decode, and the resulting IR re-encodes to the original JSON string.
-- **C ABI (`include/quantum/quantum_c.h`)** — stable `extern "C"` surface ready for JNI / JNA / Panama from the JVM side. Opaque handles for engine / column / batch / result; column builders for `int64` and `string`; protobuf-encoded plan execution; iteration over result batches; per-column accessors. Exceptions are translated to a thread-local error string surfaced through `q_last_error()`. The JVM bridge in a later slice just wraps these symbols — no further C++ changes needed.
-- **Arrow C Data Interface (`include/quantum/quantum_arrow.h`)** — `ArrowSchema` / `ArrowArray` structs declared verbatim from the [Arrow spec](https://arrow.apache.org/docs/format/CDataInterface.html). `q_column_export_arrow` populates them with pointers INTO an existing `QColumn`'s buffers (zero-copy; the column must outlive the array). `q_column_import_arrow` deep-copies an Arrow array into a new engine-owned column. Supports `"l"` (int64) and `"u"` (utf8) in this slice; other fixed-width types and dict-encoded export are follow-ups. This is the canonical Photon-style data transport that lets any Arrow-aware producer/consumer interop with the engine without an intermediate serialization.
-- **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API; an end-to-end JUnit test builds a `GROUP BY` plan via Java protobuf, registers a source through JNA, executes via the native engine, and reads back per-group results. `quantum_core` is now a SHARED library so JNA can `dlopen` it.
-- **Spark extension (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook that registers a `QuantumStrategy` planner. Wired in via `.withExtensions(new QuantumExtension())` or `spark.sql.extensions=quantum.spark.QuantumExtension`. The strategy currently observes every `LogicalPlan` it sees (recorded in an `AtomicReference` for tests) and returns `Nil` so Spark falls back to its default planning. The integration test boots a local `SparkSession`, runs `spark.sql(...)`, verifies results match and the strategy fired. Full plan-rewriting — detecting eligible `HashAggregate` / `HashJoin` shapes and handing them to the C ABI — is the next slice.
+**Phase 4 — Complete**
+- **Plan IR + JSON wire format + builder** — new `src/plan/` module defines a `PlanNode` / `ScalarExpr` IR (Scan / Filter / Project / HashAggregate / HashJoin + Literal / ColumnRef / BinaryOp / Like). `PlanJson` round-trips the IR through JSON via nlohmann-json. `PlanBuilder` walks the IR and constructs the engine's `Operator` tree, with a `SourceCatalog` (string-keyed map of `vector<ColumnBatch>`) supplying actual data to each scan node at execution time.
+- **Protobuf wire format** — `src/plan/proto/quantum_plan.proto` mirrors the IR 1:1 (oneof-based unions for `ScalarExpr` and `PlanNode`, enum-typed kinds, repeated children). Generated via `protobuf_generate_cpp` at CMake configure time. `PlanProto` (`planToProtoBytes` / `planFromProtoBytes`) provides binary round-trip; JSON stays as the human-readable debug format.
+- **C ABI (`include/quantum/quantum_c.h`)** — stable `extern "C"` surface for JNI / JNA / Panama. Opaque handles for engine / column / batch / result; column builders for `int64` and `string`; protobuf-encoded plan execution; iteration over result batches; per-column accessors. Exceptions are translated to a thread-local error string surfaced through `q_last_error()`.
+- **Arrow C Data Interface (`include/quantum/quantum_arrow.h`)** — `ArrowSchema` / `ArrowArray` structs declared verbatim from the [Arrow spec](https://arrow.apache.org/docs/format/CDataInterface.html). `q_column_export_arrow` populates them with pointers INTO an existing `QColumn`'s buffers (zero-copy). `q_column_import_arrow` deep-copies an Arrow array into a new engine-owned column. Supports `"l"` (int64) and `"u"` (utf8) currently.
+- **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
+- **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Tests & benchmarks** — 147 C++ tests + 3 JVM tests (2 JUnit + 1 ScalaTest-style via JUnit-Jupiter under scala-maven-plugin). New since previous slice: Spark SessionExtension loads cleanly, planner strategy fires on a real SQL query.
+**Tests & benchmarks** — 147 C++ tests + 4 JVM tests. New since previous slice: end-to-end Spark SQL `SELECT k, SUM(v) GROUP BY k` runs natively through Catalyst → QuantumStrategy → QuantumExec → C ABI → native engine → InternalRow back to Spark.
 
 ## Build & Test
 
@@ -107,12 +107,13 @@ Key invariants the codebase enforces:
 | **4** | Arrow C Data Interface (zero-copy column transport for int64 + utf8) | done |
 | **4** | JVM bridge (Maven + JNA + Java protobuf, end-to-end query from Java) | done |
 | **4** | Spark SessionExtension scaffold (`QuantumExtension` + planner strategy) | done |
-| 4 | Spark plan rewriter — detect eligible SparkPlan shapes, hand to native | in progress |
-| 4 | Arrow IPC for cross-JVM batch transport | planned |
-| 4 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
-| 4 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
-| 4 | `MinString`/`MaxString` spill (out-of-line state serialization) | planned |
-| 4 | Dict-merge in HashJoin `concatDense` (preserve dict layout through joins) | planned |
+| **4** | Spark plan rewriter: `Aggregate(group=long, Sum(long))` over `LocalRelation` runs natively end-to-end | done |
+| 5 | Broader plan-shape coverage (other aggregates, joins, multi-column keys, AQE) | planned |
+| 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |
+| 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
+| 5 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
+| 5 | `MinString`/`MaxString` spill (out-of-line state serialization) | planned |
+| 5 | Dict-merge in HashJoin `concatDense` (preserve dict layout through joins) | planned |
 | 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
 
