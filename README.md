@@ -48,8 +48,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **CSV reader (`src/io/CsvReader.{hpp,cpp}`)** — line-based parser covering `BOOL` / `INT32` / `INT64` / `FLOAT64` / `STRING`, with empty-field-as-NULL and double-quoted fields (incl. `""` for an embedded quote). Configurable batch size via `FileFormatOptions`.
 - **`FileScanOperator` (`src/operator/FileScanOperator.hpp`)** — thin adapter that wraps any `FileFormatReader` as an `Operator`, so CSV input slots in below `Filter` / `Project` / `HashAggregate` / `HashJoin` exactly like the existing in-memory `ScanOperator`.
 - **Parquet reader (`src/io/ParquetReader.{hpp,cpp}`)** — built on Apache Arrow's `parquet::arrow` C++ API (installed via Homebrew to sidestep vcpkg's thrift/bison friction). Supports `BOOL` / `INT32` / `INT64` / `FLOAT64` / `STRING` (regular + LARGE_STRING) Parquet columns. The full file is loaded into an Arrow `Table` at construction so the schema is available before `open()` (required by downstream operators like `ProjectOperator` that compute their output schema at construction time); `nextBatch` yields slices of `options.batchSize` rows. Dict-encoded Parquet columns are read as plain STRING for now (re-dict-encoding into the engine's `DictStringBuilder` layout is a follow-up).
+- **Object-store filesystem layer (`src/io/FileSystem.{hpp,cpp}`)** — single `io::openReadable(uri)` helper dispatches on URI scheme through `arrow::fs::FileSystemFromUri`. Bare paths and `file://` go to the local FS; `s3://bucket/key`, `gs://bucket/key`, and `abfs[s]://…` go to the corresponding Arrow filesystem (provided the Arrow build includes them — Homebrew's does). S3 is initialized lazily on first use via `arrow::fs::InitializeS3`. Plumbed into `ParquetReader`, so `ParquetReader("s3://bucket/key.parquet", &mm)` works the same as a local path. Credentials follow the AWS SDK's standard chain (env vars / `~/.aws/credentials` / instance profile).
 
-**Tests & benchmarks** — 155 C++ tests + 4 JVM tests. New since previous slice: Parquet roundtrip (ints + strings), Parquet batched read with configurable batchSize, and an end-to-end `Parquet → Filter(v>15) → Project(k, v*10)` pipeline against a tempfile written via Arrow's parquet writer.
+**Tests & benchmarks** — 162 C++ tests + 4 JVM tests. New since previous slice: FileSystem URI-dispatch tests (local path, `file://` URI, missing file, unknown scheme, S3-scheme recognition without a live bucket), `ParquetReader` reading via `file://` URI to exercise the same code path as `s3://`.
 
 ## Build & Test
 
@@ -60,7 +61,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 155 tests, ~9s (Parquet adds Arrow startup)
+ctest --preset=debug                 # 162 tests, ~10s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -76,7 +77,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ```
 bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
 plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
-io/          → FileFormat reader interface + CsvReader + ParquetReader (Iceberg/Delta to come)
+io/          → FileFormat interface + CsvReader + ParquetReader + FileSystem (URI dispatch: file:// / s3:// / gs:// / abfs://)
 operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
@@ -117,8 +118,9 @@ Key invariants the codebase enforces:
 | **4** | Spark plan rewriter: `Aggregate(group=long, Sum(long))` over `LocalRelation` runs natively end-to-end | done |
 | **5** | Pluggable `FileFormat` reader interface + `CsvReader` + `FileScanOperator` | done |
 | **5** | Parquet reader (via Apache Arrow's `parquet::arrow` C++ API, int / float / string) | done |
+| **5** | Object-store filesystem layer (S3 / GCS / Azure Blob via Arrow URI dispatch) | done |
 | 5 | Iceberg / Delta table-format readers | planned |
-| 5 | S3 / ADLS / GCS object-store backends + NVMe disk cache | planned |
+| 5 | NVMe disk cache for object-store reads | planned |
 | 5 | Broader Spark plan-shape coverage (other aggregates, joins, multi-column keys, AQE) | planned |
 | 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |
 | 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |

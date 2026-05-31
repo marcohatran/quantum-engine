@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 
 #include "common/Status.hpp"
+#include "io/FileSystem.hpp"
 #include "memory/MemoryManager.hpp"
 #include "vector/StringBuilder.hpp"
 
@@ -113,13 +114,7 @@ ParquetReader::ParquetReader(std::string       path,
     // Eagerly load the file. We need the schema available before open()
     // because downstream operators (ProjectOperator) call outputSchema()
     // at construction time — they can't wait until execution begins.
-    auto infile_result = arrow::io::ReadableFile::Open(path_);
-    if (!infile_result.ok()) {
-        raise(ErrorCode::InvalidArgument,
-              "ParquetReader: failed to open '{}': {}",
-              path_, infile_result.status().ToString());
-    }
-    auto infile = infile_result.ValueOrDie();
+    auto infile = io::openReadable(path_);
 
     auto reader_result = parquet::arrow::OpenFile(infile, arrow::default_memory_pool());
     if (!reader_result.ok()) {

@@ -128,6 +128,27 @@ TEST(ParquetReader, BatchSizeOptionSplitsLargeFile) {
     EXPECT_EQ(batches, 4u);   // 3 + 3 + 3 + 1
 }
 
+TEST(ParquetReader, ReadsViaFileScheme) {
+    MemoryManager mm(1 << 20);
+    auto path = writeSampleParquet(
+        {7, 8, 9},
+        {70, 80, 90},
+        {"x", "y", "z"},
+        "parquet_uri_");
+
+    // Pass a file:// URI through the same constructor — exercises the
+    // io::resolveUri / openReadable path used for s3:// in production.
+    ParquetReader reader("file://" + path, &mm);
+    reader.open();
+    auto batch = reader.nextBatch();
+    ASSERT_TRUE(batch.has_value());
+    EXPECT_EQ(batch->numRows(), 3u);
+    EXPECT_EQ(batch->column(0).typed<int64_t>()[2], 9);
+    EXPECT_EQ(batch->column(2).stringAt(0), "x");
+    reader.close();
+    cleanup(path);
+}
+
 TEST(FileScan, ParquetThroughFilterAndProject) {
     MemoryManager mm(1 << 20);
     auto path = writeSampleParquet(
