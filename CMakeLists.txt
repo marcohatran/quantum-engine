@@ -28,6 +28,13 @@ find_package(absl CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
 
+# Apache Arrow + Parquet from Homebrew (we sidestep vcpkg's arrow because
+# its parquet feature pulls thrift, which fails to build against macOS's
+# stock bison). The brew bottle ships with both libraries.
+list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/apache-arrow")
+find_package(Arrow CONFIG REQUIRED)
+find_package(Parquet CONFIG REQUIRED)
+
 enable_testing()
 add_subdirectory(src)
 

@@ -32,6 +32,7 @@ add_library(quantum_core SHARED
     operator/HashJoinOperator.cpp
     spill/SpillFile.cpp
     io/CsvReader.cpp
+    io/ParquetReader.cpp
     plan/Plan.cpp
     plan/PlanBuilder.cpp
     plan/PlanJson.cpp
@@ -58,6 +59,8 @@ target_link_libraries(quantum_core
         absl::inlined_vector
         nlohmann_json::nlohmann_json
         protobuf::libprotobuf
+        Arrow::arrow_shared
+        Parquet::parquet_shared
 )
 
 target_compile_features(quantum_core PUBLIC cxx_std_20)

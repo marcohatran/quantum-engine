@@ -47,8 +47,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Pluggable `FileFormat` reader (`src/io/FileFormat.hpp`)** — abstract interface for on-disk readers. `open()` / `nextBatch() → optional<ColumnBatch>` / `close()` / `schema()`. The same shape is what the future Parquet / Iceberg / Delta readers will implement.
 - **CSV reader (`src/io/CsvReader.{hpp,cpp}`)** — line-based parser covering `BOOL` / `INT32` / `INT64` / `FLOAT64` / `STRING`, with empty-field-as-NULL and double-quoted fields (incl. `""` for an embedded quote). Configurable batch size via `FileFormatOptions`.
 - **`FileScanOperator` (`src/operator/FileScanOperator.hpp`)** — thin adapter that wraps any `FileFormatReader` as an `Operator`, so CSV input slots in below `Filter` / `Project` / `HashAggregate` / `HashJoin` exactly like the existing in-memory `ScanOperator`.
+- **Parquet reader (`src/io/ParquetReader.{hpp,cpp}`)** — built on Apache Arrow's `parquet::arrow` C++ API (installed via Homebrew to sidestep vcpkg's thrift/bison friction). Supports `BOOL` / `INT32` / `INT64` / `FLOAT64` / `STRING` (regular + LARGE_STRING) Parquet columns. The full file is loaded into an Arrow `Table` at construction so the schema is available before `open()` (required by downstream operators like `ProjectOperator` that compute their output schema at construction time); `nextBatch` yields slices of `options.batchSize` rows. Dict-encoded Parquet columns are read as plain STRING for now (re-dict-encoding into the engine's `DictStringBuilder` layout is a follow-up).
 
-**Tests & benchmarks** — 152 C++ tests + 4 JVM tests. New since previous slice: CSV basic/null/quoted/batched reads and an end-to-end `CSV → Filter(v>15) → Project(k, v+100)` pipeline reading from a tempfile.
+**Tests & benchmarks** — 155 C++ tests + 4 JVM tests. New since previous slice: Parquet roundtrip (ints + strings), Parquet batched read with configurable batchSize, and an end-to-end `Parquet → Filter(v>15) → Project(k, v*10)` pipeline against a tempfile written via Arrow's parquet writer.
 
 ## Build & Test
 
@@ -59,7 +60,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 152 tests, ~5.4s
+ctest --preset=debug                 # 155 tests, ~9s (Parquet adds Arrow startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -75,7 +76,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ```
 bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
 plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
-io/          → FileFormat reader interface + CsvReader (Parquet/Iceberg/Delta to come)
+io/          → FileFormat reader interface + CsvReader + ParquetReader (Iceberg/Delta to come)
 operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
@@ -115,7 +116,7 @@ Key invariants the codebase enforces:
 | **4** | Spark SessionExtension scaffold (`QuantumExtension` + planner strategy) | done |
 | **4** | Spark plan rewriter: `Aggregate(group=long, Sum(long))` over `LocalRelation` runs natively end-to-end | done |
 | **5** | Pluggable `FileFormat` reader interface + `CsvReader` + `FileScanOperator` | done |
-| 5 | Parquet reader (real columnar format with dict encoding + RLE + compression) | in progress |
+| **5** | Parquet reader (via Apache Arrow's `parquet::arrow` C++ API, int / float / string) | done |
 | 5 | Iceberg / Delta table-format readers | planned |
 | 5 | S3 / ADLS / GCS object-store backends + NVMe disk cache | planned |
 | 5 | Broader Spark plan-shape coverage (other aggregates, joins, multi-column keys, AQE) | planned |
