@@ -31,6 +31,7 @@ add_library(quantum_core SHARED
     operator/HashAggregateOperator.cpp
     operator/HashJoinOperator.cpp
     spill/SpillFile.cpp
+    io/CsvReader.cpp
     plan/Plan.cpp
     plan/PlanBuilder.cpp
     plan/PlanJson.cpp

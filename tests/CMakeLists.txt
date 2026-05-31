@@ -32,6 +32,7 @@ add_executable(quantum_tests
     plan/test_plan_proto.cpp
     bridge/test_quantum_c.cpp
     bridge/test_quantum_arrow.cpp
+    io/test_csv_reader.cpp
     e2e/test_pipeline_smoke.cpp
 )
 

@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phases 1–4 complete. A `SELECT k, SUM(v) FROM kv GROUP BY k` written in Spark SQL now runs natively in the C++ engine via `QuantumExtension` → Catalyst-plan rewrite → protobuf IR → JNA → C ABI → native operators, then returns rows back to Spark. Phase 5 (Storage I/O — Parquet / Iceberg / Delta) is next.
+> **Status:** Phases 1–4 complete. Phase 5 in progress — pluggable `FileFormat` abstraction with a CSV reader landed; Parquet / Iceberg / Delta backends slot into the same shape. A `SELECT k, SUM(v) FROM kv GROUP BY k` written in Spark SQL now runs natively in the C++ engine via `QuantumExtension` → Catalyst-plan rewrite → protobuf IR → JNA → C ABI → native operators, then returns rows back to Spark.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -43,7 +43,12 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Tests & benchmarks** — 147 C++ tests + 4 JVM tests. New since previous slice: end-to-end Spark SQL `SELECT k, SUM(v) GROUP BY k` runs natively through Catalyst → QuantumStrategy → QuantumExec → C ABI → native engine → InternalRow back to Spark.
+**Phase 5 — In Progress**
+- **Pluggable `FileFormat` reader (`src/io/FileFormat.hpp`)** — abstract interface for on-disk readers. `open()` / `nextBatch() → optional<ColumnBatch>` / `close()` / `schema()`. The same shape is what the future Parquet / Iceberg / Delta readers will implement.
+- **CSV reader (`src/io/CsvReader.{hpp,cpp}`)** — line-based parser covering `BOOL` / `INT32` / `INT64` / `FLOAT64` / `STRING`, with empty-field-as-NULL and double-quoted fields (incl. `""` for an embedded quote). Configurable batch size via `FileFormatOptions`.
+- **`FileScanOperator` (`src/operator/FileScanOperator.hpp`)** — thin adapter that wraps any `FileFormatReader` as an `Operator`, so CSV input slots in below `Filter` / `Project` / `HashAggregate` / `HashJoin` exactly like the existing in-memory `ScanOperator`.
+
+**Tests & benchmarks** — 152 C++ tests + 4 JVM tests. New since previous slice: CSV basic/null/quoted/batched reads and an end-to-end `CSV → Filter(v>15) → Project(k, v+100)` pipeline reading from a tempfile.
 
 ## Build & Test
 
@@ -54,13 +59,13 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 147 tests, ~4.7s
+ctest --preset=debug                 # 152 tests, ~5.4s
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 3 tests (JNA + Spark extension)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 4 tests (JNA + Spark extension)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -70,7 +75,8 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ```
 bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
 plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
-operator/    → Scan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
+io/          → FileFormat reader interface + CsvReader (Parquet/Iceberg/Delta to come)
+operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
 spill/       → SpillFile (HashAggregate v1)
@@ -108,13 +114,16 @@ Key invariants the codebase enforces:
 | **4** | JVM bridge (Maven + JNA + Java protobuf, end-to-end query from Java) | done |
 | **4** | Spark SessionExtension scaffold (`QuantumExtension` + planner strategy) | done |
 | **4** | Spark plan rewriter: `Aggregate(group=long, Sum(long))` over `LocalRelation` runs natively end-to-end | done |
-| 5 | Broader plan-shape coverage (other aggregates, joins, multi-column keys, AQE) | planned |
+| **5** | Pluggable `FileFormat` reader interface + `CsvReader` + `FileScanOperator` | done |
+| 5 | Parquet reader (real columnar format with dict encoding + RLE + compression) | in progress |
+| 5 | Iceberg / Delta table-format readers | planned |
+| 5 | S3 / ADLS / GCS object-store backends + NVMe disk cache | planned |
+| 5 | Broader Spark plan-shape coverage (other aggregates, joins, multi-column keys, AQE) | planned |
 | 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |
 | 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
 | 5 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
 | 5 | `MinString`/`MaxString` spill (out-of-line state serialization) | planned |
 | 5 | Dict-merge in HashJoin `concatDense` (preserve dict layout through joins) | planned |
-| 5 | Storage I/O — Parquet, Iceberg, Delta over S3 / ADLS / GCS, NVMe cache | planned |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
 
 ## License
