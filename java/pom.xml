@@ -12,16 +12,18 @@
 
   <name>Quantum Engine JVM Bridge</name>
   <description>
-    JNA bindings + Java protobuf for the native Quantum Engine. Drives the
-    C ABI declared in include/quantum/quantum_c.h via JNA. Expected to be
-    embedded in a Spark extension in a later slice.
+    JNA bindings + Java protobuf for the native Quantum Engine, plus a
+    Scala SparkSessionExtension that registers a planning strategy.
   </description>
 
   <properties>
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <protobuf.version>4.33.4</protobuf.version>
+    <scala.binary.version>2.13</scala.binary.version>
+    <scala.version>2.13.14</scala.version>
+    <spark.version>3.5.4</spark.version>
   </properties>
 
   <dependencies>
@@ -36,6 +38,20 @@
       <version>${protobuf.version}</version>
     </dependency>
 
+    <!-- Scala + Spark, provided-scope so the consuming Spark cluster
+         supplies its own copies at runtime. Maven Surefire pulls them
+         in for tests via the explicit test scope below. -->
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>${scala.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${spark.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
@@ -45,15 +61,53 @@
   </dependencies>
 
   <build>
+    <sourceDirectory>src/main/java</sourceDirectory>
+    <testSourceDirectory>src/test/java</testSourceDirectory>
     <plugins>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.9.2</version>
+        <executions>
+          <execution>
+            <id>scala-compile</id>
+            <goals><goal>compile</goal></goals>
+          </execution>
+          <execution>
+            <id>scala-test-compile</id>
+            <goals><goal>testCompile</goal></goals>
+          </execution>
+        </executions>
+        <configuration>
+          <scalaVersion>${scala.version}</scalaVersion>
+          <args>
+            <arg>-deprecation</arg>
+          </args>
+        </configuration>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
         <configuration>
-          <!-- JNA needs to find the native lib. Built artifacts land here. -->
+          <!-- JNA needs to find the native lib. Spark on Java 17+ needs the
+               module-system add-opens to reflect into JDK internals. -->
           <argLine>
             -Djna.library.path=${project.basedir}/../build-debug/src
+            --add-opens=java.base/java.lang=ALL-UNNAMED
+            --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+            --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+            --add-opens=java.base/java.io=ALL-UNNAMED
+            --add-opens=java.base/java.net=ALL-UNNAMED
+            --add-opens=java.base/java.nio=ALL-UNNAMED
+            --add-opens=java.base/java.util=ALL-UNNAMED
+            --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+            --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+            --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+            --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+            --add-opens=java.base/sun.security.action=ALL-UNNAMED
+            --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
           </argLine>
         </configuration>
       </plugin>

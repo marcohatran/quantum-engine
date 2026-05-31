@@ -2,7 +2,7 @@
 
 Quantum Engine is an **open-core C++ vectorized execution engine** designed to replace Apache Spark's JVM core with a high-performance native implementation. Inspired by proprietary solutions like Databricks Photon, Quantum Engine brings bare-metal, SIMD-accelerated execution to the open-source big-data ecosystem — without vendor lock-in.
 
-> **Status:** Phases 1–3 complete. Phase 4 in progress — Plan IR + JSON + Protobuf wire formats, C ABI, Arrow C Data Interface, and a JVM bridge (Maven + JNA + Java protobuf) all shipped. End-to-end query: build a plan in Java protobuf → ship as bytes through the C ABI → execute natively → read results back. The Spark extension is the remaining major Phase 4 deliverable.
+> **Status:** Phases 1–3 complete. Phase 4 in progress — Plan IR + JSON + Protobuf wire formats, C ABI, Arrow C Data Interface, JVM bridge (Maven + JNA + Java protobuf), and a Spark `SessionExtension` scaffold all shipped. End-to-end query works from Java protobuf through the native engine and back. Spark extension currently observes Catalyst plans without rewriting them; the actual native-execution rewrite (detect eligible HashAggregate / HashJoin shapes, hand to the C ABI) is the final headline Phase 4 piece.
 
 See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the full seven-layer design.
 
@@ -40,9 +40,10 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Protobuf wire format** — `src/plan/proto/quantum_plan.proto` mirrors the IR 1:1 (oneof-based unions for `ScalarExpr` and `PlanNode`, enum-typed kinds, repeated children). Generated via `protobuf_generate_cpp` at CMake configure time. `PlanProto` (`planToProtoBytes` / `planFromProtoBytes`) provides binary round-trip; JSON stays as the human-readable debug format. Cross-codec equivalence verified by tests: encode through JSON, decode, encode through proto, decode, and the resulting IR re-encodes to the original JSON string.
 - **C ABI (`include/quantum/quantum_c.h`)** — stable `extern "C"` surface ready for JNI / JNA / Panama from the JVM side. Opaque handles for engine / column / batch / result; column builders for `int64` and `string`; protobuf-encoded plan execution; iteration over result batches; per-column accessors. Exceptions are translated to a thread-local error string surfaced through `q_last_error()`. The JVM bridge in a later slice just wraps these symbols — no further C++ changes needed.
 - **Arrow C Data Interface (`include/quantum/quantum_arrow.h`)** — `ArrowSchema` / `ArrowArray` structs declared verbatim from the [Arrow spec](https://arrow.apache.org/docs/format/CDataInterface.html). `q_column_export_arrow` populates them with pointers INTO an existing `QColumn`'s buffers (zero-copy; the column must outlive the array). `q_column_import_arrow` deep-copies an Arrow array into a new engine-owned column. Supports `"l"` (int64) and `"u"` (utf8) in this slice; other fixed-width types and dict-encoded export are follow-ups. This is the canonical Photon-style data transport that lets any Arrow-aware producer/consumer interop with the engine without an intermediate serialization.
-- **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API; an end-to-end JUnit test builds a `GROUP BY` plan via Java protobuf, registers a source through JNA, executes via the native engine, and reads back per-group results. `quantum_core` is now a SHARED library so JNA can `dlopen` it. The Spark extension in a later slice plugs into this Maven module.
+- **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API; an end-to-end JUnit test builds a `GROUP BY` plan via Java protobuf, registers a source through JNA, executes via the native engine, and reads back per-group results. `quantum_core` is now a SHARED library so JNA can `dlopen` it.
+- **Spark extension (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook that registers a `QuantumStrategy` planner. Wired in via `.withExtensions(new QuantumExtension())` or `spark.sql.extensions=quantum.spark.QuantumExtension`. The strategy currently observes every `LogicalPlan` it sees (recorded in an `AtomicReference` for tests) and returns `Nil` so Spark falls back to its default planning. The integration test boots a local `SparkSession`, runs `spark.sql(...)`, verifies results match and the strategy fired. Full plan-rewriting — detecting eligible `HashAggregate` / `HashJoin` shapes and handing them to the C ABI — is the next slice.
 
-**Tests & benchmarks** — 147 C++ tests + 2 Java tests. New since previous slice: Java end-to-end `GROUP BY` over the JNI/JNA boundary, and a Java error-path test for malformed plan bytes.
+**Tests & benchmarks** — 147 C++ tests + 3 JVM tests (2 JUnit + 1 ScalaTest-style via JUnit-Jupiter under scala-maven-plugin). New since previous slice: Spark SessionExtension loads cleanly, planner strategy fires on a real SQL query.
 
 ## Build & Test
 
@@ -58,8 +59,8 @@ ctest --preset=debug                 # 147 tests, ~4.7s
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
-# JVM bridge (requires JDK 21 + Maven)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 2 Java tests
+# JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 3 tests (JNA + Spark extension)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -105,9 +106,9 @@ Key invariants the codebase enforces:
 | **4** | C ABI (`quantum_c.h`) — opaque handles, columns, batches, plan exec | done |
 | **4** | Arrow C Data Interface (zero-copy column transport for int64 + utf8) | done |
 | **4** | JVM bridge (Maven + JNA + Java protobuf, end-to-end query from Java) | done |
-| 4 | `QuantumPlanner` Spark extension (intercept Catalyst plan, hand eligible regions to native) | planned |
+| **4** | Spark SessionExtension scaffold (`QuantumExtension` + planner strategy) | done |
+| 4 | Spark plan rewriter — detect eligible SparkPlan shapes, hand to native | in progress |
 | 4 | Arrow IPC for cross-JVM batch transport | planned |
-| 4 | `QuantumPlanner` Spark extension (post-Catalyst plan tagging + handoff) | planned |
 | 4 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
 | 4 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
 | 4 | `MinString`/`MaxString` spill (out-of-line state serialization) | planned |
