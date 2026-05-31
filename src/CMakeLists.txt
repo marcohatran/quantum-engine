@@ -32,6 +32,7 @@ add_library(quantum_core SHARED
     operator/HashJoinOperator.cpp
     spill/SpillFile.cpp
     io/CsvReader.cpp
+    io/DeltaTableReader.cpp
     io/FileSystem.cpp
     io/ParquetReader.cpp
     plan/Plan.cpp

@@ -49,8 +49,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`FileScanOperator` (`src/operator/FileScanOperator.hpp`)** — thin adapter that wraps any `FileFormatReader` as an `Operator`, so CSV input slots in below `Filter` / `Project` / `HashAggregate` / `HashJoin` exactly like the existing in-memory `ScanOperator`.
 - **Parquet reader (`src/io/ParquetReader.{hpp,cpp}`)** — built on Apache Arrow's `parquet::arrow` C++ API (installed via Homebrew to sidestep vcpkg's thrift/bison friction). Supports `BOOL` / `INT32` / `INT64` / `FLOAT64` / `STRING` (regular + LARGE_STRING) Parquet columns. The full file is loaded into an Arrow `Table` at construction so the schema is available before `open()` (required by downstream operators like `ProjectOperator` that compute their output schema at construction time); `nextBatch` yields slices of `options.batchSize` rows. Dict-encoded Parquet columns are read as plain STRING for now (re-dict-encoding into the engine's `DictStringBuilder` layout is a follow-up).
 - **Object-store filesystem layer (`src/io/FileSystem.{hpp,cpp}`)** — single `io::openReadable(uri)` helper dispatches on URI scheme through `arrow::fs::FileSystemFromUri`. Bare paths and `file://` go to the local FS; `s3://bucket/key`, `gs://bucket/key`, and `abfs[s]://…` go to the corresponding Arrow filesystem (provided the Arrow build includes them — Homebrew's does). S3 is initialized lazily on first use via `arrow::fs::InitializeS3`. Plumbed into `ParquetReader`, so `ParquetReader("s3://bucket/key.parquet", &mm)` works the same as a local path. Credentials follow the AWS SDK's standard chain (env vars / `~/.aws/credentials` / instance profile).
+- **Delta Lake table reader (`src/io/DeltaTableReader.{hpp,cpp}`)** — minimum-viable Delta reader. Lists `<root>/_delta_log/*.json`, replays `add` / `remove` actions in version order, and streams batches from each surviving Parquet file via the existing `ParquetReader`. Implements `FileFormatReader` so it slots into `FileScanOperator` (and the rest of the operator tree) with no special-casing. URI scheme inherits from the FS layer — `DeltaTableReader("s3://bucket/my-delta-table", &mm)` works the same as a local directory. Schema is derived from the first surviving Parquet file; checkpoint `.parquet` log files are ignored for now (commit-log-only replay).
 
-**Tests & benchmarks** — 162 C++ tests + 4 JVM tests. New since previous slice: FileSystem URI-dispatch tests (local path, `file://` URI, missing file, unknown scheme, S3-scheme recognition without a live bucket), `ParquetReader` reading via `file://` URI to exercise the same code path as `s3://`.
+**Tests & benchmarks** — 167 C++ tests + 4 JVM tests. New since previous slice: Delta single-add, remove-cancels-earlier-add (versioned commit replay), multi-file concatenation, `file://` URI dispatch, and end-to-end `Delta → Filter(v>20)` pipeline against a programmatically-written Delta table on disk.
 
 ## Build & Test
 
@@ -61,7 +62,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 162 tests, ~10s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 167 tests, ~19s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -77,7 +78,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ```
 bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
 plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
-io/          → FileFormat interface + CsvReader + ParquetReader + FileSystem (URI dispatch: file:// / s3:// / gs:// / abfs://)
+io/          → FileFormat + CsvReader + ParquetReader + DeltaTableReader + FileSystem (file:// / s3:// / gs:// / abfs://)
 operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
@@ -119,7 +120,9 @@ Key invariants the codebase enforces:
 | **5** | Pluggable `FileFormat` reader interface + `CsvReader` + `FileScanOperator` | done |
 | **5** | Parquet reader (via Apache Arrow's `parquet::arrow` C++ API, int / float / string) | done |
 | **5** | Object-store filesystem layer (S3 / GCS / Azure Blob via Arrow URI dispatch) | done |
-| 5 | Iceberg / Delta table-format readers | planned |
+| **5** | Delta Lake table reader (JSON commit-log replay, add/remove resolution) | done |
+| 5 | Iceberg table reader (needs Avro for manifest files) | planned |
+| 5 | Delta: checkpoint `.parquet` log support, partition pruning, schema evolution | planned |
 | 5 | NVMe disk cache for object-store reads | planned |
 | 5 | Broader Spark plan-shape coverage (other aggregates, joins, multi-column keys, AQE) | planned |
 | 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |

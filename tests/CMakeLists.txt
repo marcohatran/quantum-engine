@@ -33,6 +33,7 @@ add_executable(quantum_tests
     bridge/test_quantum_c.cpp
     bridge/test_quantum_arrow.cpp
     io/test_csv_reader.cpp
+    io/test_delta_table_reader.cpp
     io/test_filesystem.cpp
     io/test_parquet_reader.cpp
     e2e/test_pipeline_smoke.cpp
