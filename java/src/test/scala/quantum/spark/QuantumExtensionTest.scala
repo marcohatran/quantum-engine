@@ -66,4 +66,88 @@ class QuantumExtensionTest {
                "; seen plan classes = " + QuantumStrategy.observedClasses +
                "; last plan =\n" + QuantumStrategy.lastObservedPlan.map(_.treeString).getOrElse(""))
   }
+
+  /** Phase 5.5: COUNT(*) goes through native AGG_COUNT_STAR. */
+  @Test
+  def countStarExecutesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (2L, 20L), (1L, 30L), (3L, 40L), (2L, 50L), (1L, 60L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_count")
+
+    val rows = spark.sql("SELECT k, COUNT(*) AS n FROM kv_count GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 3L), (2L, 2L), (3L, 1L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "COUNT(*) should route through native; flag = " + QuantumStrategy.lastTranslation)
+  }
+
+  /** Phase 5.5: MIN and MAX over a Long column. */
+  @Test
+  def minMaxExecuteNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (1L, 99L), (1L, 50L), (2L, 7L), (2L, 8L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_minmax")
+
+    val rows = spark.sql("SELECT k, MIN(v) AS lo, MAX(v) AS hi FROM kv_minmax GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1), r.getLong(2)))
+      .sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 10L, 99L), (2L, 7L, 8L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "MIN/MAX should route through native; flag = " + QuantumStrategy.lastTranslation)
+  }
+
+  /** Phase 5.5: AVG returns a Double output column through the bridge. */
+  @Test
+  def avgReturnsDoubleThroughBridge(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (1L, 20L), (1L, 30L), (2L, 100L), (2L, 200L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_avg")
+
+    val rows = spark.sql("SELECT k, AVG(v) AS a FROM kv_avg GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getDouble(1)))
+      .sortBy(_._1).toSeq
+
+    assertEquals(2, rows.size)
+    assertEquals(1L,   rows(0)._1); assertEquals(20.0,  rows(0)._2, 1e-9)
+    assertEquals(2L,   rows(1)._1); assertEquals(150.0, rows(1)._2, 1e-9)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "AVG should route through native; flag = " + QuantumStrategy.lastTranslation)
+  }
+
+  /** Phase 5.5: SUM + COUNT + MIN + MAX + AVG in a single Aggregate node. */
+  @Test
+  def fiveAggregatesInOneQueryExecuteNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (1L, 20L), (1L, 30L), (2L, 100L), (2L, 200L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_combo")
+
+    val rows = spark.sql(
+      """SELECT k,
+        |       SUM(v)   AS s,
+        |       COUNT(*) AS n,
+        |       MIN(v)   AS lo,
+        |       MAX(v)   AS hi,
+        |       AVG(v)   AS a
+        |  FROM kv_combo GROUP BY k""".stripMargin)
+      .collect()
+      .map(r => (r.getLong(0), r.getLong(1), r.getLong(2), r.getLong(3), r.getLong(4), r.getDouble(5)))
+      .sortBy(_._1).toSeq
+
+    assertEquals(Seq(
+      (1L,  60L, 3L, 10L,  30L,  20.0),
+      (2L, 300L, 2L, 100L, 200L, 150.0)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Combined aggs should route through native; flag = " + QuantumStrategy.lastTranslation)
+  }
 }

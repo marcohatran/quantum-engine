@@ -118,6 +118,10 @@ q_type_t q_batch_col_type(const QBatch* b, size_t col);
 // the column is not INT64.
 const int64_t* q_batch_col_int64(const QBatch* b, size_t col);
 
+// Pointer to the contiguous double values for column `col`. Returns NULL if
+// the column is not FLOAT64.
+const double*  q_batch_col_float64(const QBatch* b, size_t col);
+
 // Row-level validity check (1 = valid, 0 = NULL).
 int q_batch_col_valid(const QBatch* b, size_t col, size_t row);
 

@@ -69,6 +69,7 @@ public final class QuantumEngine {
         long       q_batch_num_cols(Batch b);
         int        q_batch_col_type(Batch b, long col);
         Pointer    q_batch_col_int64(Batch b, long col);
+        Pointer    q_batch_col_float64(Batch b, long col);
         int        q_batch_col_valid(Batch b, long col, long row);
         long       q_batch_col_string_at(Batch b, long col, long row,
                                          PointerByReference out_ptr);
@@ -149,6 +150,10 @@ public final class QuantumEngine {
     public static long[] batchColInt64(Batch b, long c, long n) {
         Pointer p = NATIVE.q_batch_col_int64(b, c);
         return p.getLongArray(0, (int) n);
+    }
+    public static double[] batchColFloat64(Batch b, long c, long n) {
+        Pointer p = NATIVE.q_batch_col_float64(b, c);
+        return p.getDoubleArray(0, (int) n);
     }
     public static boolean batchColValid(Batch b, long c, long r) {
         return NATIVE.q_batch_col_valid(b, c, r) != 0;

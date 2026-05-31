@@ -261,6 +261,13 @@ extern "C" const int64_t* q_batch_col_int64(const QBatch* b, size_t col) {
     return c.typed<int64_t>();
 }
 
+extern "C" const double* q_batch_col_float64(const QBatch* b, size_t col) {
+    if (!b) return nullptr;
+    const auto& c = b->batch.column(col);
+    if (c.type().id != TypeId::FLOAT64) return nullptr;
+    return c.typed<double>();
+}
+
 extern "C" int q_batch_col_valid(const QBatch* b, size_t col, size_t row) {
     if (!b) return 0;
     return b->batch.column(col).validity().isValid(row) ? 1 : 0;
