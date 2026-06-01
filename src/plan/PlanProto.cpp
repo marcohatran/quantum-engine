@@ -244,6 +244,23 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
             for (const auto& p : x.paths) m->add_paths(p);
             m->set_format(x.format);
             if (x.schema.has_value()) encodeSchema(*x.schema, m->mutable_schema());
+            if (x.partition_columns.numFields() > 0) {
+                encodeSchema(x.partition_columns, m->mutable_partition_columns());
+                for (const auto& row : x.partition_values) {
+                    auto* pvRow = m->add_partition_values();
+                    for (const auto& lit : row) {
+                        // Each partition Literal -> proto Literal.
+                        auto* outLit = pvRow->add_values();
+                        std::visit([&](const auto& v) {
+                            using T = std::decay_t<decltype(v)>;
+                            if constexpr (std::is_same_v<T, bool>)             outLit->set_bool_value(v);
+                            else if constexpr (std::is_same_v<T, int64_t>)     outLit->set_int64_value(v);
+                            else if constexpr (std::is_same_v<T, double>)      outLit->set_double_value(v);
+                            else if constexpr (std::is_same_v<T, std::string>) outLit->set_string_value(v);
+                        }, lit.value);
+                    }
+                }
+            }
         } else if constexpr (std::is_same_v<T, std::unique_ptr<FilterNode>>) {
             auto* m = out->mutable_filter();
             encodePlan(x->child, m->mutable_child());
@@ -282,6 +299,27 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
             for (const auto& p : msg.file_scan().paths()) n.paths.push_back(p);
             n.format = msg.file_scan().format();
             if (msg.file_scan().has_schema()) n.schema = decodeSchema(msg.file_scan().schema());
+            if (msg.file_scan().has_partition_columns()) {
+                n.partition_columns = decodeSchema(msg.file_scan().partition_columns());
+                for (const auto& row : msg.file_scan().partition_values()) {
+                    std::vector<LiteralExpr> outRow;
+                    outRow.reserve(static_cast<size_t>(row.values_size()));
+                    for (const auto& lit : row.values()) {
+                        LiteralExpr e;
+                        switch (lit.value_case()) {
+                            case proto::Literal::kBoolValue:   e.value = lit.bool_value();   break;
+                            case proto::Literal::kInt64Value:  e.value = lit.int64_value();  break;
+                            case proto::Literal::kDoubleValue: e.value = lit.double_value(); break;
+                            case proto::Literal::kStringValue: e.value = std::string(lit.string_value()); break;
+                            default:
+                                raise(ErrorCode::InvalidArgument,
+                                      "PlanProto: empty partition Literal");
+                        }
+                        outRow.push_back(std::move(e));
+                    }
+                    n.partition_values.push_back(std::move(outRow));
+                }
+            }
             return PlanNode{std::move(n)};
         }
         case proto::PlanNode::kFilter: {

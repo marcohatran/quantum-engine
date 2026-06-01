@@ -120,6 +120,17 @@ message FileScanNode {
   // file's own metadata. Provided for plans that want positional
   // column-index agreement across rewriters.
   Schema          schema = 3;
+  // Hive-style partition columns. `partition_columns` lists the partition
+  // field names + types (positional). `partition_values` is one row per
+  // path; each row holds one Literal per partition column. The engine
+  // synthesizes these as constant columns appended to each batch from
+  // the file. Empty => no partition columns (the common case).
+  Schema                     partition_columns = 4;
+  repeated PartitionValueRow partition_values  = 5;
+}
+
+message PartitionValueRow {
+  repeated Literal values = 1;
 }
 
 message FilterNode {

@@ -7949,6 +7949,69 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      * <code>.quantum.plan.proto.Schema schema = 3;</code>
      */
     quantum.plan.proto.QuantumPlan.SchemaOrBuilder getSchemaOrBuilder();
+
+    /**
+     * <pre>
+     * Hive-style partition columns. `partition_columns` lists the partition
+     * field names + types (positional). `partition_values` is one row per
+     * path; each row holds one Literal per partition column. The engine
+     * synthesizes these as constant columns appended to each batch from
+     * the file. Empty =&gt; no partition columns (the common case).
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+     * @return Whether the partitionColumns field is set.
+     */
+    boolean hasPartitionColumns();
+    /**
+     * <pre>
+     * Hive-style partition columns. `partition_columns` lists the partition
+     * field names + types (positional). `partition_values` is one row per
+     * path; each row holds one Literal per partition column. The engine
+     * synthesizes these as constant columns appended to each batch from
+     * the file. Empty =&gt; no partition columns (the common case).
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+     * @return The partitionColumns.
+     */
+    quantum.plan.proto.QuantumPlan.Schema getPartitionColumns();
+    /**
+     * <pre>
+     * Hive-style partition columns. `partition_columns` lists the partition
+     * field names + types (positional). `partition_values` is one row per
+     * path; each row holds one Literal per partition column. The engine
+     * synthesizes these as constant columns appended to each batch from
+     * the file. Empty =&gt; no partition columns (the common case).
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+     */
+    quantum.plan.proto.QuantumPlan.SchemaOrBuilder getPartitionColumnsOrBuilder();
+
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    java.util.List<quantum.plan.proto.QuantumPlan.PartitionValueRow> 
+        getPartitionValuesList();
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    quantum.plan.proto.QuantumPlan.PartitionValueRow getPartitionValues(int index);
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    int getPartitionValuesCount();
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    java.util.List<? extends quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder> 
+        getPartitionValuesOrBuilderList();
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder getPartitionValuesOrBuilder(
+        int index);
   }
   /**
    * <pre>
@@ -7986,6 +8049,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       paths_ =
           com.google.protobuf.LazyStringArrayList.emptyList();
       format_ = "";
+      partitionValues_ = java.util.Collections.emptyList();
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -8122,6 +8186,97 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       return schema_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : schema_;
     }
 
+    public static final int PARTITION_COLUMNS_FIELD_NUMBER = 4;
+    private quantum.plan.proto.QuantumPlan.Schema partitionColumns_;
+    /**
+     * <pre>
+     * Hive-style partition columns. `partition_columns` lists the partition
+     * field names + types (positional). `partition_values` is one row per
+     * path; each row holds one Literal per partition column. The engine
+     * synthesizes these as constant columns appended to each batch from
+     * the file. Empty =&gt; no partition columns (the common case).
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+     * @return Whether the partitionColumns field is set.
+     */
+    @java.lang.Override
+    public boolean hasPartitionColumns() {
+      return ((bitField0_ & 0x00000002) != 0);
+    }
+    /**
+     * <pre>
+     * Hive-style partition columns. `partition_columns` lists the partition
+     * field names + types (positional). `partition_values` is one row per
+     * path; each row holds one Literal per partition column. The engine
+     * synthesizes these as constant columns appended to each batch from
+     * the file. Empty =&gt; no partition columns (the common case).
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+     * @return The partitionColumns.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.Schema getPartitionColumns() {
+      return partitionColumns_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : partitionColumns_;
+    }
+    /**
+     * <pre>
+     * Hive-style partition columns. `partition_columns` lists the partition
+     * field names + types (positional). `partition_values` is one row per
+     * path; each row holds one Literal per partition column. The engine
+     * synthesizes these as constant columns appended to each batch from
+     * the file. Empty =&gt; no partition columns (the common case).
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.SchemaOrBuilder getPartitionColumnsOrBuilder() {
+      return partitionColumns_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : partitionColumns_;
+    }
+
+    public static final int PARTITION_VALUES_FIELD_NUMBER = 5;
+    @SuppressWarnings("serial")
+    private java.util.List<quantum.plan.proto.QuantumPlan.PartitionValueRow> partitionValues_;
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    @java.lang.Override
+    public java.util.List<quantum.plan.proto.QuantumPlan.PartitionValueRow> getPartitionValuesList() {
+      return partitionValues_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    @java.lang.Override
+    public java.util.List<? extends quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder> 
+        getPartitionValuesOrBuilderList() {
+      return partitionValues_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    @java.lang.Override
+    public int getPartitionValuesCount() {
+      return partitionValues_.size();
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PartitionValueRow getPartitionValues(int index) {
+      return partitionValues_.get(index);
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder getPartitionValuesOrBuilder(
+        int index) {
+      return partitionValues_.get(index);
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -8144,6 +8299,12 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       }
       if (((bitField0_ & 0x00000001) != 0)) {
         output.writeMessage(3, getSchema());
+      }
+      if (((bitField0_ & 0x00000002) != 0)) {
+        output.writeMessage(4, getPartitionColumns());
+      }
+      for (int i = 0; i < partitionValues_.size(); i++) {
+        output.writeMessage(5, partitionValues_.get(i));
       }
       getUnknownFields().writeTo(output);
     }
@@ -8169,6 +8330,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(3, getSchema());
       }
+      if (((bitField0_ & 0x00000002) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(4, getPartitionColumns());
+      }
+      for (int i = 0; i < partitionValues_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(5, partitionValues_.get(i));
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -8193,6 +8362,13 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (!getSchema()
             .equals(other.getSchema())) return false;
       }
+      if (hasPartitionColumns() != other.hasPartitionColumns()) return false;
+      if (hasPartitionColumns()) {
+        if (!getPartitionColumns()
+            .equals(other.getPartitionColumns())) return false;
+      }
+      if (!getPartitionValuesList()
+          .equals(other.getPartitionValuesList())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -8213,6 +8389,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (hasSchema()) {
         hash = (37 * hash) + SCHEMA_FIELD_NUMBER;
         hash = (53 * hash) + getSchema().hashCode();
+      }
+      if (hasPartitionColumns()) {
+        hash = (37 * hash) + PARTITION_COLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + getPartitionColumns().hashCode();
+      }
+      if (getPartitionValuesCount() > 0) {
+        hash = (37 * hash) + PARTITION_VALUES_FIELD_NUMBER;
+        hash = (53 * hash) + getPartitionValuesList().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -8356,6 +8540,8 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (com.google.protobuf.GeneratedMessage
                 .alwaysUseFieldBuilders) {
           internalGetSchemaFieldBuilder();
+          internalGetPartitionColumnsFieldBuilder();
+          internalGetPartitionValuesFieldBuilder();
         }
       }
       @java.lang.Override
@@ -8370,6 +8556,18 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           schemaBuilder_.dispose();
           schemaBuilder_ = null;
         }
+        partitionColumns_ = null;
+        if (partitionColumnsBuilder_ != null) {
+          partitionColumnsBuilder_.dispose();
+          partitionColumnsBuilder_ = null;
+        }
+        if (partitionValuesBuilder_ == null) {
+          partitionValues_ = java.util.Collections.emptyList();
+        } else {
+          partitionValues_ = null;
+          partitionValuesBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000010);
         return this;
       }
 
@@ -8396,9 +8594,22 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       @java.lang.Override
       public quantum.plan.proto.QuantumPlan.FileScanNode buildPartial() {
         quantum.plan.proto.QuantumPlan.FileScanNode result = new quantum.plan.proto.QuantumPlan.FileScanNode(this);
+        buildPartialRepeatedFields(result);
         if (bitField0_ != 0) { buildPartial0(result); }
         onBuilt();
         return result;
+      }
+
+      private void buildPartialRepeatedFields(quantum.plan.proto.QuantumPlan.FileScanNode result) {
+        if (partitionValuesBuilder_ == null) {
+          if (((bitField0_ & 0x00000010) != 0)) {
+            partitionValues_ = java.util.Collections.unmodifiableList(partitionValues_);
+            bitField0_ = (bitField0_ & ~0x00000010);
+          }
+          result.partitionValues_ = partitionValues_;
+        } else {
+          result.partitionValues_ = partitionValuesBuilder_.build();
+        }
       }
 
       private void buildPartial0(quantum.plan.proto.QuantumPlan.FileScanNode result) {
@@ -8416,6 +8627,12 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
               ? schema_
               : schemaBuilder_.build();
           to_bitField0_ |= 0x00000001;
+        }
+        if (((from_bitField0_ & 0x00000008) != 0)) {
+          result.partitionColumns_ = partitionColumnsBuilder_ == null
+              ? partitionColumns_
+              : partitionColumnsBuilder_.build();
+          to_bitField0_ |= 0x00000002;
         }
         result.bitField0_ |= to_bitField0_;
       }
@@ -8449,6 +8666,35 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         }
         if (other.hasSchema()) {
           mergeSchema(other.getSchema());
+        }
+        if (other.hasPartitionColumns()) {
+          mergePartitionColumns(other.getPartitionColumns());
+        }
+        if (partitionValuesBuilder_ == null) {
+          if (!other.partitionValues_.isEmpty()) {
+            if (partitionValues_.isEmpty()) {
+              partitionValues_ = other.partitionValues_;
+              bitField0_ = (bitField0_ & ~0x00000010);
+            } else {
+              ensurePartitionValuesIsMutable();
+              partitionValues_.addAll(other.partitionValues_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.partitionValues_.isEmpty()) {
+            if (partitionValuesBuilder_.isEmpty()) {
+              partitionValuesBuilder_.dispose();
+              partitionValuesBuilder_ = null;
+              partitionValues_ = other.partitionValues_;
+              bitField0_ = (bitField0_ & ~0x00000010);
+              partitionValuesBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   internalGetPartitionValuesFieldBuilder() : null;
+            } else {
+              partitionValuesBuilder_.addAllMessages(other.partitionValues_);
+            }
+          }
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -8494,6 +8740,26 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
                 bitField0_ |= 0x00000004;
                 break;
               } // case 26
+              case 34: {
+                input.readMessage(
+                    internalGetPartitionColumnsFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00000008;
+                break;
+              } // case 34
+              case 42: {
+                quantum.plan.proto.QuantumPlan.PartitionValueRow m =
+                    input.readMessage(
+                        quantum.plan.proto.QuantumPlan.PartitionValueRow.parser(),
+                        extensionRegistry);
+                if (partitionValuesBuilder_ == null) {
+                  ensurePartitionValuesIsMutable();
+                  partitionValues_.add(m);
+                } else {
+                  partitionValuesBuilder_.addMessage(m);
+                }
+                break;
+              } // case 42
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -8869,6 +9135,439 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         return schemaBuilder_;
       }
 
+      private quantum.plan.proto.QuantumPlan.Schema partitionColumns_;
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.Schema, quantum.plan.proto.QuantumPlan.Schema.Builder, quantum.plan.proto.QuantumPlan.SchemaOrBuilder> partitionColumnsBuilder_;
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       * @return Whether the partitionColumns field is set.
+       */
+      public boolean hasPartitionColumns() {
+        return ((bitField0_ & 0x00000008) != 0);
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       * @return The partitionColumns.
+       */
+      public quantum.plan.proto.QuantumPlan.Schema getPartitionColumns() {
+        if (partitionColumnsBuilder_ == null) {
+          return partitionColumns_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : partitionColumns_;
+        } else {
+          return partitionColumnsBuilder_.getMessage();
+        }
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      public Builder setPartitionColumns(quantum.plan.proto.QuantumPlan.Schema value) {
+        if (partitionColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          partitionColumns_ = value;
+        } else {
+          partitionColumnsBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      public Builder setPartitionColumns(
+          quantum.plan.proto.QuantumPlan.Schema.Builder builderForValue) {
+        if (partitionColumnsBuilder_ == null) {
+          partitionColumns_ = builderForValue.build();
+        } else {
+          partitionColumnsBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      public Builder mergePartitionColumns(quantum.plan.proto.QuantumPlan.Schema value) {
+        if (partitionColumnsBuilder_ == null) {
+          if (((bitField0_ & 0x00000008) != 0) &&
+            partitionColumns_ != null &&
+            partitionColumns_ != quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance()) {
+            getPartitionColumnsBuilder().mergeFrom(value);
+          } else {
+            partitionColumns_ = value;
+          }
+        } else {
+          partitionColumnsBuilder_.mergeFrom(value);
+        }
+        if (partitionColumns_ != null) {
+          bitField0_ |= 0x00000008;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      public Builder clearPartitionColumns() {
+        bitField0_ = (bitField0_ & ~0x00000008);
+        partitionColumns_ = null;
+        if (partitionColumnsBuilder_ != null) {
+          partitionColumnsBuilder_.dispose();
+          partitionColumnsBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.Schema.Builder getPartitionColumnsBuilder() {
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return internalGetPartitionColumnsFieldBuilder().getBuilder();
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.SchemaOrBuilder getPartitionColumnsOrBuilder() {
+        if (partitionColumnsBuilder_ != null) {
+          return partitionColumnsBuilder_.getMessageOrBuilder();
+        } else {
+          return partitionColumns_ == null ?
+              quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : partitionColumns_;
+        }
+      }
+      /**
+       * <pre>
+       * Hive-style partition columns. `partition_columns` lists the partition
+       * field names + types (positional). `partition_values` is one row per
+       * path; each row holds one Literal per partition column. The engine
+       * synthesizes these as constant columns appended to each batch from
+       * the file. Empty =&gt; no partition columns (the common case).
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema partition_columns = 4;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.Schema, quantum.plan.proto.QuantumPlan.Schema.Builder, quantum.plan.proto.QuantumPlan.SchemaOrBuilder> 
+          internalGetPartitionColumnsFieldBuilder() {
+        if (partitionColumnsBuilder_ == null) {
+          partitionColumnsBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.Schema, quantum.plan.proto.QuantumPlan.Schema.Builder, quantum.plan.proto.QuantumPlan.SchemaOrBuilder>(
+                  getPartitionColumns(),
+                  getParentForChildren(),
+                  isClean());
+          partitionColumns_ = null;
+        }
+        return partitionColumnsBuilder_;
+      }
+
+      private java.util.List<quantum.plan.proto.QuantumPlan.PartitionValueRow> partitionValues_ =
+        java.util.Collections.emptyList();
+      private void ensurePartitionValuesIsMutable() {
+        if (!((bitField0_ & 0x00000010) != 0)) {
+          partitionValues_ = new java.util.ArrayList<quantum.plan.proto.QuantumPlan.PartitionValueRow>(partitionValues_);
+          bitField0_ |= 0x00000010;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PartitionValueRow, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder, quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder> partitionValuesBuilder_;
+
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.PartitionValueRow> getPartitionValuesList() {
+        if (partitionValuesBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(partitionValues_);
+        } else {
+          return partitionValuesBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public int getPartitionValuesCount() {
+        if (partitionValuesBuilder_ == null) {
+          return partitionValues_.size();
+        } else {
+          return partitionValuesBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow getPartitionValues(int index) {
+        if (partitionValuesBuilder_ == null) {
+          return partitionValues_.get(index);
+        } else {
+          return partitionValuesBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder setPartitionValues(
+          int index, quantum.plan.proto.QuantumPlan.PartitionValueRow value) {
+        if (partitionValuesBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensurePartitionValuesIsMutable();
+          partitionValues_.set(index, value);
+          onChanged();
+        } else {
+          partitionValuesBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder setPartitionValues(
+          int index, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder builderForValue) {
+        if (partitionValuesBuilder_ == null) {
+          ensurePartitionValuesIsMutable();
+          partitionValues_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          partitionValuesBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder addPartitionValues(quantum.plan.proto.QuantumPlan.PartitionValueRow value) {
+        if (partitionValuesBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensurePartitionValuesIsMutable();
+          partitionValues_.add(value);
+          onChanged();
+        } else {
+          partitionValuesBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder addPartitionValues(
+          int index, quantum.plan.proto.QuantumPlan.PartitionValueRow value) {
+        if (partitionValuesBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensurePartitionValuesIsMutable();
+          partitionValues_.add(index, value);
+          onChanged();
+        } else {
+          partitionValuesBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder addPartitionValues(
+          quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder builderForValue) {
+        if (partitionValuesBuilder_ == null) {
+          ensurePartitionValuesIsMutable();
+          partitionValues_.add(builderForValue.build());
+          onChanged();
+        } else {
+          partitionValuesBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder addPartitionValues(
+          int index, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder builderForValue) {
+        if (partitionValuesBuilder_ == null) {
+          ensurePartitionValuesIsMutable();
+          partitionValues_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          partitionValuesBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder addAllPartitionValues(
+          java.lang.Iterable<? extends quantum.plan.proto.QuantumPlan.PartitionValueRow> values) {
+        if (partitionValuesBuilder_ == null) {
+          ensurePartitionValuesIsMutable();
+          com.google.protobuf.AbstractMessageLite.Builder.addAll(
+              values, partitionValues_);
+          onChanged();
+        } else {
+          partitionValuesBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder clearPartitionValues() {
+        if (partitionValuesBuilder_ == null) {
+          partitionValues_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000010);
+          onChanged();
+        } else {
+          partitionValuesBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public Builder removePartitionValues(int index) {
+        if (partitionValuesBuilder_ == null) {
+          ensurePartitionValuesIsMutable();
+          partitionValues_.remove(index);
+          onChanged();
+        } else {
+          partitionValuesBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder getPartitionValuesBuilder(
+          int index) {
+        return internalGetPartitionValuesFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder getPartitionValuesOrBuilder(
+          int index) {
+        if (partitionValuesBuilder_ == null) {
+          return partitionValues_.get(index);  } else {
+          return partitionValuesBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public java.util.List<? extends quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder> 
+           getPartitionValuesOrBuilderList() {
+        if (partitionValuesBuilder_ != null) {
+          return partitionValuesBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(partitionValues_);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder addPartitionValuesBuilder() {
+        return internalGetPartitionValuesFieldBuilder().addBuilder(
+            quantum.plan.proto.QuantumPlan.PartitionValueRow.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder addPartitionValuesBuilder(
+          int index) {
+        return internalGetPartitionValuesFieldBuilder().addBuilder(
+            index, quantum.plan.proto.QuantumPlan.PartitionValueRow.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PartitionValueRow partition_values = 5;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder> 
+           getPartitionValuesBuilderList() {
+        return internalGetPartitionValuesFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PartitionValueRow, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder, quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder> 
+          internalGetPartitionValuesFieldBuilder() {
+        if (partitionValuesBuilder_ == null) {
+          partitionValuesBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              quantum.plan.proto.QuantumPlan.PartitionValueRow, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder, quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder>(
+                  partitionValues_,
+                  ((bitField0_ & 0x00000010) != 0),
+                  getParentForChildren(),
+                  isClean());
+          partitionValues_ = null;
+        }
+        return partitionValuesBuilder_;
+      }
+
       // @@protoc_insertion_point(builder_scope:quantum.plan.proto.FileScanNode)
     }
 
@@ -8915,6 +9614,746 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
 
     @java.lang.Override
     public quantum.plan.proto.QuantumPlan.FileScanNode getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface PartitionValueRowOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:quantum.plan.proto.PartitionValueRow)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    java.util.List<quantum.plan.proto.QuantumPlan.Literal> 
+        getValuesList();
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    quantum.plan.proto.QuantumPlan.Literal getValues(int index);
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    int getValuesCount();
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    java.util.List<? extends quantum.plan.proto.QuantumPlan.LiteralOrBuilder> 
+        getValuesOrBuilderList();
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    quantum.plan.proto.QuantumPlan.LiteralOrBuilder getValuesOrBuilder(
+        int index);
+  }
+  /**
+   * Protobuf type {@code quantum.plan.proto.PartitionValueRow}
+   */
+  public static final class PartitionValueRow extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:quantum.plan.proto.PartitionValueRow)
+      PartitionValueRowOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "PartitionValueRow");
+    }
+    // Use PartitionValueRow.newBuilder() to construct.
+    private PartitionValueRow(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private PartitionValueRow() {
+      values_ = java.util.Collections.emptyList();
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_PartitionValueRow_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_PartitionValueRow_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              quantum.plan.proto.QuantumPlan.PartitionValueRow.class, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder.class);
+    }
+
+    public static final int VALUES_FIELD_NUMBER = 1;
+    @SuppressWarnings("serial")
+    private java.util.List<quantum.plan.proto.QuantumPlan.Literal> values_;
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    @java.lang.Override
+    public java.util.List<quantum.plan.proto.QuantumPlan.Literal> getValuesList() {
+      return values_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    @java.lang.Override
+    public java.util.List<? extends quantum.plan.proto.QuantumPlan.LiteralOrBuilder> 
+        getValuesOrBuilderList() {
+      return values_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    @java.lang.Override
+    public int getValuesCount() {
+      return values_.size();
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.Literal getValues(int index) {
+      return values_.get(index);
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.LiteralOrBuilder getValuesOrBuilder(
+        int index) {
+      return values_.get(index);
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      for (int i = 0; i < values_.size(); i++) {
+        output.writeMessage(1, values_.get(i));
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      for (int i = 0; i < values_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, values_.get(i));
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof quantum.plan.proto.QuantumPlan.PartitionValueRow)) {
+        return super.equals(obj);
+      }
+      quantum.plan.proto.QuantumPlan.PartitionValueRow other = (quantum.plan.proto.QuantumPlan.PartitionValueRow) obj;
+
+      if (!getValuesList()
+          .equals(other.getValuesList())) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      if (getValuesCount() > 0) {
+        hash = (37 * hash) + VALUES_FIELD_NUMBER;
+        hash = (53 * hash) + getValuesList().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(quantum.plan.proto.QuantumPlan.PartitionValueRow prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code quantum.plan.proto.PartitionValueRow}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:quantum.plan.proto.PartitionValueRow)
+        quantum.plan.proto.QuantumPlan.PartitionValueRowOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_PartitionValueRow_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_PartitionValueRow_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                quantum.plan.proto.QuantumPlan.PartitionValueRow.class, quantum.plan.proto.QuantumPlan.PartitionValueRow.Builder.class);
+      }
+
+      // Construct using quantum.plan.proto.QuantumPlan.PartitionValueRow.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        if (valuesBuilder_ == null) {
+          values_ = java.util.Collections.emptyList();
+        } else {
+          values_ = null;
+          valuesBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000001);
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_PartitionValueRow_descriptor;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow getDefaultInstanceForType() {
+        return quantum.plan.proto.QuantumPlan.PartitionValueRow.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow build() {
+        quantum.plan.proto.QuantumPlan.PartitionValueRow result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.PartitionValueRow buildPartial() {
+        quantum.plan.proto.QuantumPlan.PartitionValueRow result = new quantum.plan.proto.QuantumPlan.PartitionValueRow(this);
+        buildPartialRepeatedFields(result);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartialRepeatedFields(quantum.plan.proto.QuantumPlan.PartitionValueRow result) {
+        if (valuesBuilder_ == null) {
+          if (((bitField0_ & 0x00000001) != 0)) {
+            values_ = java.util.Collections.unmodifiableList(values_);
+            bitField0_ = (bitField0_ & ~0x00000001);
+          }
+          result.values_ = values_;
+        } else {
+          result.values_ = valuesBuilder_.build();
+        }
+      }
+
+      private void buildPartial0(quantum.plan.proto.QuantumPlan.PartitionValueRow result) {
+        int from_bitField0_ = bitField0_;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof quantum.plan.proto.QuantumPlan.PartitionValueRow) {
+          return mergeFrom((quantum.plan.proto.QuantumPlan.PartitionValueRow)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(quantum.plan.proto.QuantumPlan.PartitionValueRow other) {
+        if (other == quantum.plan.proto.QuantumPlan.PartitionValueRow.getDefaultInstance()) return this;
+        if (valuesBuilder_ == null) {
+          if (!other.values_.isEmpty()) {
+            if (values_.isEmpty()) {
+              values_ = other.values_;
+              bitField0_ = (bitField0_ & ~0x00000001);
+            } else {
+              ensureValuesIsMutable();
+              values_.addAll(other.values_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.values_.isEmpty()) {
+            if (valuesBuilder_.isEmpty()) {
+              valuesBuilder_.dispose();
+              valuesBuilder_ = null;
+              values_ = other.values_;
+              bitField0_ = (bitField0_ & ~0x00000001);
+              valuesBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   internalGetValuesFieldBuilder() : null;
+            } else {
+              valuesBuilder_.addAllMessages(other.values_);
+            }
+          }
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                quantum.plan.proto.QuantumPlan.Literal m =
+                    input.readMessage(
+                        quantum.plan.proto.QuantumPlan.Literal.parser(),
+                        extensionRegistry);
+                if (valuesBuilder_ == null) {
+                  ensureValuesIsMutable();
+                  values_.add(m);
+                } else {
+                  valuesBuilder_.addMessage(m);
+                }
+                break;
+              } // case 10
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private java.util.List<quantum.plan.proto.QuantumPlan.Literal> values_ =
+        java.util.Collections.emptyList();
+      private void ensureValuesIsMutable() {
+        if (!((bitField0_ & 0x00000001) != 0)) {
+          values_ = new java.util.ArrayList<quantum.plan.proto.QuantumPlan.Literal>(values_);
+          bitField0_ |= 0x00000001;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.Literal, quantum.plan.proto.QuantumPlan.Literal.Builder, quantum.plan.proto.QuantumPlan.LiteralOrBuilder> valuesBuilder_;
+
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.Literal> getValuesList() {
+        if (valuesBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(values_);
+        } else {
+          return valuesBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public int getValuesCount() {
+        if (valuesBuilder_ == null) {
+          return values_.size();
+        } else {
+          return valuesBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.Literal getValues(int index) {
+        if (valuesBuilder_ == null) {
+          return values_.get(index);
+        } else {
+          return valuesBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder setValues(
+          int index, quantum.plan.proto.QuantumPlan.Literal value) {
+        if (valuesBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureValuesIsMutable();
+          values_.set(index, value);
+          onChanged();
+        } else {
+          valuesBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder setValues(
+          int index, quantum.plan.proto.QuantumPlan.Literal.Builder builderForValue) {
+        if (valuesBuilder_ == null) {
+          ensureValuesIsMutable();
+          values_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          valuesBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder addValues(quantum.plan.proto.QuantumPlan.Literal value) {
+        if (valuesBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureValuesIsMutable();
+          values_.add(value);
+          onChanged();
+        } else {
+          valuesBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder addValues(
+          int index, quantum.plan.proto.QuantumPlan.Literal value) {
+        if (valuesBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureValuesIsMutable();
+          values_.add(index, value);
+          onChanged();
+        } else {
+          valuesBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder addValues(
+          quantum.plan.proto.QuantumPlan.Literal.Builder builderForValue) {
+        if (valuesBuilder_ == null) {
+          ensureValuesIsMutable();
+          values_.add(builderForValue.build());
+          onChanged();
+        } else {
+          valuesBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder addValues(
+          int index, quantum.plan.proto.QuantumPlan.Literal.Builder builderForValue) {
+        if (valuesBuilder_ == null) {
+          ensureValuesIsMutable();
+          values_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          valuesBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder addAllValues(
+          java.lang.Iterable<? extends quantum.plan.proto.QuantumPlan.Literal> values) {
+        if (valuesBuilder_ == null) {
+          ensureValuesIsMutable();
+          com.google.protobuf.AbstractMessageLite.Builder.addAll(
+              values, values_);
+          onChanged();
+        } else {
+          valuesBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder clearValues() {
+        if (valuesBuilder_ == null) {
+          values_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000001);
+          onChanged();
+        } else {
+          valuesBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public Builder removeValues(int index) {
+        if (valuesBuilder_ == null) {
+          ensureValuesIsMutable();
+          values_.remove(index);
+          onChanged();
+        } else {
+          valuesBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.Literal.Builder getValuesBuilder(
+          int index) {
+        return internalGetValuesFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.LiteralOrBuilder getValuesOrBuilder(
+          int index) {
+        if (valuesBuilder_ == null) {
+          return values_.get(index);  } else {
+          return valuesBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public java.util.List<? extends quantum.plan.proto.QuantumPlan.LiteralOrBuilder> 
+           getValuesOrBuilderList() {
+        if (valuesBuilder_ != null) {
+          return valuesBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(values_);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.Literal.Builder addValuesBuilder() {
+        return internalGetValuesFieldBuilder().addBuilder(
+            quantum.plan.proto.QuantumPlan.Literal.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.Literal.Builder addValuesBuilder(
+          int index) {
+        return internalGetValuesFieldBuilder().addBuilder(
+            index, quantum.plan.proto.QuantumPlan.Literal.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.Literal values = 1;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.Literal.Builder> 
+           getValuesBuilderList() {
+        return internalGetValuesFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.Literal, quantum.plan.proto.QuantumPlan.Literal.Builder, quantum.plan.proto.QuantumPlan.LiteralOrBuilder> 
+          internalGetValuesFieldBuilder() {
+        if (valuesBuilder_ == null) {
+          valuesBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              quantum.plan.proto.QuantumPlan.Literal, quantum.plan.proto.QuantumPlan.Literal.Builder, quantum.plan.proto.QuantumPlan.LiteralOrBuilder>(
+                  values_,
+                  ((bitField0_ & 0x00000001) != 0),
+                  getParentForChildren(),
+                  isClean());
+          values_ = null;
+        }
+        return valuesBuilder_;
+      }
+
+      // @@protoc_insertion_point(builder_scope:quantum.plan.proto.PartitionValueRow)
+    }
+
+    // @@protoc_insertion_point(class_scope:quantum.plan.proto.PartitionValueRow)
+    private static final quantum.plan.proto.QuantumPlan.PartitionValueRow DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new quantum.plan.proto.QuantumPlan.PartitionValueRow();
+    }
+
+    public static quantum.plan.proto.QuantumPlan.PartitionValueRow getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<PartitionValueRow>
+        PARSER = new com.google.protobuf.AbstractParser<PartitionValueRow>() {
+      @java.lang.Override
+      public PartitionValueRow parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<PartitionValueRow> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<PartitionValueRow> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PartitionValueRow getDefaultInstanceForType() {
       return DEFAULT_INSTANCE;
     }
 
@@ -16060,6 +17499,11 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_quantum_plan_proto_PartitionValueRow_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_quantum_plan_proto_PartitionValueRow_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_quantum_plan_proto_FilterNode_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -16117,47 +17561,51 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       ".proto.TypeId\022-\n\005input\030\003 \001(\0132\036.quantum.p" +
       "lan.proto.ScalarExpr\"I\n\010ScanNode\022\021\n\tsour" +
       "ce_id\030\001 \001(\t\022*\n\006schema\030\002 \001(\0132\032.quantum.pl" +
-      "an.proto.Schema\"Y\n\014FileScanNode\022\r\n\005paths" +
-      "\030\001 \003(\t\022\016\n\006format\030\002 \001(\t\022*\n\006schema\030\003 \001(\0132\032" +
-      ".quantum.plan.proto.Schema\"l\n\nFilterNode" +
-      "\022+\n\005child\030\001 \001(\0132\034.quantum.plan.proto.Pla" +
-      "nNode\0221\n\tpredicate\030\002 \001(\0132\036.quantum.plan." +
-      "proto.ScalarExpr\"\177\n\013ProjectNode\022+\n\005child" +
-      "\030\001 \001(\0132\034.quantum.plan.proto.PlanNode\022-\n\005" +
-      "exprs\030\002 \003(\0132\036.quantum.plan.proto.ScalarE" +
-      "xpr\022\024\n\014output_names\030\003 \003(\t\"\301\001\n\021HashAggreg" +
-      "ateNode\022+\n\005child\030\001 \001(\0132\034.quantum.plan.pr" +
-      "oto.PlanNode\0222\n\ngroup_keys\030\002 \003(\0132\036.quant" +
-      "um.plan.proto.ScalarExpr\0225\n\naggregates\030\003" +
-      " \003(\0132!.quantum.plan.proto.AggregateSpec\022" +
-      "\024\n\014output_names\030\004 \003(\t\"\227\002\n\014HashJoinNode\022+" +
-      "\n\005build\030\001 \001(\0132\034.quantum.plan.proto.PlanN" +
-      "ode\022+\n\005probe\030\002 \001(\0132\034.quantum.plan.proto." +
-      "PlanNode\0222\n\nbuild_keys\030\003 \003(\0132\036.quantum.p" +
-      "lan.proto.ScalarExpr\0222\n\nprobe_keys\030\004 \003(\013" +
-      "2\036.quantum.plan.proto.ScalarExpr\022/\n\tjoin" +
-      "_type\030\005 \001(\0162\034.quantum.plan.proto.JoinTyp" +
-      "e\022\024\n\014output_names\030\006 \003(\t\"\317\002\n\010PlanNode\022,\n\004" +
-      "scan\030\001 \001(\0132\034.quantum.plan.proto.ScanNode" +
-      "H\000\0220\n\006filter\030\002 \001(\0132\036.quantum.plan.proto." +
-      "FilterNodeH\000\0222\n\007project\030\003 \001(\0132\037.quantum." +
-      "plan.proto.ProjectNodeH\000\0229\n\010hash_agg\030\004 \001" +
-      "(\0132%.quantum.plan.proto.HashAggregateNod" +
-      "eH\000\0225\n\thash_join\030\005 \001(\0132 .quantum.plan.pr" +
-      "oto.HashJoinNodeH\000\0225\n\tfile_scan\030\006 \001(\0132 ." +
-      "quantum.plan.proto.FileScanNodeH\000B\006\n\004nod" +
-      "e*Z\n\006TypeId\022\r\n\tTYPE_BOOL\020\000\022\016\n\nTYPE_INT32" +
-      "\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TYPE_FLOAT64\020\003\022\017\n\013" +
-      "TYPE_STRING\020\004*\240\001\n\014BinaryOpType\022\r\n\tBINOP_" +
-      "ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\tBINOP_MUL\020\002\022\014\n\010B" +
-      "INOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022\014\n\010BINOP_GT\020\005\022\r\n" +
-      "\tBINOP_LTE\020\006\022\r\n\tBINOP_GTE\020\007\022\r\n\tBINOP_AND" +
-      "\020\010\022\014\n\010BINOP_OR\020\t*W\n\rAggregateKind\022\013\n\007AGG" +
-      "_SUM\020\000\022\022\n\016AGG_COUNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022" +
-      "\013\n\007AGG_MAX\020\003\022\013\n\007AGG_AVG\020\004*Z\n\010JoinType\022\016\n" +
-      "\nJOIN_INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JO" +
-      "IN_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006p" +
-      "roto3"
+      "an.proto.Schema\"\321\001\n\014FileScanNode\022\r\n\005path" +
+      "s\030\001 \003(\t\022\016\n\006format\030\002 \001(\t\022*\n\006schema\030\003 \001(\0132" +
+      "\032.quantum.plan.proto.Schema\0225\n\021partition" +
+      "_columns\030\004 \001(\0132\032.quantum.plan.proto.Sche" +
+      "ma\022?\n\020partition_values\030\005 \003(\0132%.quantum.p" +
+      "lan.proto.PartitionValueRow\"@\n\021Partition" +
+      "ValueRow\022+\n\006values\030\001 \003(\0132\033.quantum.plan." +
+      "proto.Literal\"l\n\nFilterNode\022+\n\005child\030\001 \001" +
+      "(\0132\034.quantum.plan.proto.PlanNode\0221\n\tpred" +
+      "icate\030\002 \001(\0132\036.quantum.plan.proto.ScalarE" +
+      "xpr\"\177\n\013ProjectNode\022+\n\005child\030\001 \001(\0132\034.quan" +
+      "tum.plan.proto.PlanNode\022-\n\005exprs\030\002 \003(\0132\036" +
+      ".quantum.plan.proto.ScalarExpr\022\024\n\014output" +
+      "_names\030\003 \003(\t\"\301\001\n\021HashAggregateNode\022+\n\005ch" +
+      "ild\030\001 \001(\0132\034.quantum.plan.proto.PlanNode\022" +
+      "2\n\ngroup_keys\030\002 \003(\0132\036.quantum.plan.proto" +
+      ".ScalarExpr\0225\n\naggregates\030\003 \003(\0132!.quantu" +
+      "m.plan.proto.AggregateSpec\022\024\n\014output_nam" +
+      "es\030\004 \003(\t\"\227\002\n\014HashJoinNode\022+\n\005build\030\001 \001(\013" +
+      "2\034.quantum.plan.proto.PlanNode\022+\n\005probe\030" +
+      "\002 \001(\0132\034.quantum.plan.proto.PlanNode\0222\n\nb" +
+      "uild_keys\030\003 \003(\0132\036.quantum.plan.proto.Sca" +
+      "larExpr\0222\n\nprobe_keys\030\004 \003(\0132\036.quantum.pl" +
+      "an.proto.ScalarExpr\022/\n\tjoin_type\030\005 \001(\0162\034" +
+      ".quantum.plan.proto.JoinType\022\024\n\014output_n" +
+      "ames\030\006 \003(\t\"\317\002\n\010PlanNode\022,\n\004scan\030\001 \001(\0132\034." +
+      "quantum.plan.proto.ScanNodeH\000\0220\n\006filter\030" +
+      "\002 \001(\0132\036.quantum.plan.proto.FilterNodeH\000\022" +
+      "2\n\007project\030\003 \001(\0132\037.quantum.plan.proto.Pr" +
+      "ojectNodeH\000\0229\n\010hash_agg\030\004 \001(\0132%.quantum." +
+      "plan.proto.HashAggregateNodeH\000\0225\n\thash_j" +
+      "oin\030\005 \001(\0132 .quantum.plan.proto.HashJoinN" +
+      "odeH\000\0225\n\tfile_scan\030\006 \001(\0132 .quantum.plan." +
+      "proto.FileScanNodeH\000B\006\n\004node*Z\n\006TypeId\022\r" +
+      "\n\tTYPE_BOOL\020\000\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_IN" +
+      "T64\020\002\022\020\n\014TYPE_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004" +
+      "*\240\001\n\014BinaryOpType\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINO" +
+      "P_SUB\020\001\022\r\n\tBINOP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010" +
+      "BINOP_LT\020\004\022\014\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022" +
+      "\r\n\tBINOP_GTE\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_O" +
+      "R\020\t*W\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG" +
+      "_COUNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022" +
+      "\013\n\007AGG_AVG\020\004*Z\n\010JoinType\022\016\n\nJOIN_INNER\020\000" +
+      "\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JOIN_RIGHT_OUTE" +
+      "R\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -16222,33 +17670,39 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_FileScanNode_descriptor,
-        new java.lang.String[] { "Paths", "Format", "Schema", });
-    internal_static_quantum_plan_proto_FilterNode_descriptor =
+        new java.lang.String[] { "Paths", "Format", "Schema", "PartitionColumns", "PartitionValues", });
+    internal_static_quantum_plan_proto_PartitionValueRow_descriptor =
       getDescriptor().getMessageType(10);
+    internal_static_quantum_plan_proto_PartitionValueRow_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_quantum_plan_proto_PartitionValueRow_descriptor,
+        new java.lang.String[] { "Values", });
+    internal_static_quantum_plan_proto_FilterNode_descriptor =
+      getDescriptor().getMessageType(11);
     internal_static_quantum_plan_proto_FilterNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_FilterNode_descriptor,
         new java.lang.String[] { "Child", "Predicate", });
     internal_static_quantum_plan_proto_ProjectNode_descriptor =
-      getDescriptor().getMessageType(11);
+      getDescriptor().getMessageType(12);
     internal_static_quantum_plan_proto_ProjectNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_ProjectNode_descriptor,
         new java.lang.String[] { "Child", "Exprs", "OutputNames", });
     internal_static_quantum_plan_proto_HashAggregateNode_descriptor =
-      getDescriptor().getMessageType(12);
+      getDescriptor().getMessageType(13);
     internal_static_quantum_plan_proto_HashAggregateNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashAggregateNode_descriptor,
         new java.lang.String[] { "Child", "GroupKeys", "Aggregates", "OutputNames", });
     internal_static_quantum_plan_proto_HashJoinNode_descriptor =
-      getDescriptor().getMessageType(13);
+      getDescriptor().getMessageType(14);
     internal_static_quantum_plan_proto_HashJoinNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashJoinNode_descriptor,
         new java.lang.String[] { "Build", "Probe", "BuildKeys", "ProbeKeys", "JoinType", "OutputNames", });
     internal_static_quantum_plan_proto_PlanNode_descriptor =
-      getDescriptor().getMessageType(14);
+      getDescriptor().getMessageType(15);
     internal_static_quantum_plan_proto_PlanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_PlanNode_descriptor,

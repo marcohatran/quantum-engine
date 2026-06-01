@@ -36,6 +36,7 @@ add_library(quantum_core SHARED
     io/DeltaTableReader.cpp
     io/FileSystem.cpp
     io/ParquetReader.cpp
+    io/PartitionedFileReader.cpp
     plan/Plan.cpp
     plan/PlanBuilder.cpp
     plan/PlanJson.cpp

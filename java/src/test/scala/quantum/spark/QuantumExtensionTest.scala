@@ -495,6 +495,53 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.16: Hive-style partitioned Parquet. Writes a 2-partition dataset
+   * (year=2024 + year=2025), queries it, verifies the synthesized partition
+   * column appears in both GROUP BY and result.
+   */
+  @Test
+  def partitionedParquetSynthesizesPartitionColumns(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (2024L, 1L, 10L), (2024L, 2L, 20L),
+      (2025L, 3L, 30L), (2025L, 4L, 40L))
+      .toDF("year", "k", "v")
+
+    val tmpDir = java.nio.file.Files.createTempDirectory("quantum_part_").toFile
+    val tablePath = new java.io.File(tmpDir, "data").getAbsolutePath
+    df.write.mode("overwrite").partitionBy("year").parquet(tablePath)
+
+    // Confirm Spark wrote `year=2024/` and `year=2025/` dirs.
+    val partDirs = new java.io.File(tablePath).listFiles()
+      .filter(_.getName.startsWith("year="))
+      .map(_.getName).sorted.toSeq
+    assertEquals(Seq("year=2024", "year=2025"), partDirs)
+
+    // GROUP BY the partition column. The native engine receives `year` as
+    // a constant column synthesized per-file by PartitionedFileReader.
+    // Spark infers IntegerType for `year=2024` partition values. Our
+    // strategy widens Int -> Int64 internally and narrows back to Int
+    // when materializing the result row.
+    val rows = spark.read.parquet(tablePath)
+      .groupBy("year").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+      .collect()
+      .map(r => (r.getInt(0), r.getLong(1)))
+      .sortBy(_._1)
+      .toSeq
+
+    assertEquals(Seq((2024, 30L), (2025, 70L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Partitioned Parquet should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+
+    def rmRf(f: java.io.File): Unit = {
+      if (f.isDirectory) f.listFiles().foreach(rmRf); f.delete()
+    }
+    rmRf(tmpDir)
+  }
+
+  /**
    * Phase 5.11: WHERE pushdown composes with FileScanNode. The predicate
    * stack should wrap a single FilterNode around the FileScan, identical
    * to how it wraps a ScanNode for in-memory sources.

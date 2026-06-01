@@ -62,10 +62,22 @@ sealed trait DataSource {
 final case class InMemorySource(lr: LocalRelation) extends DataSource {
   override def output: Seq[Attribute] = lr.output
 }
+/**
+ * A path-resident data source. `output` is the full output schema (Spark's
+ * `LogicalRelation.output`), which for Hive-style partitioned relations is
+ * `dataColumns ++ partitionColumns` — partition columns come from the
+ * directory path, not the file, and we synthesize them as constants.
+ *
+ * `partitionCols` and `partitionValuesPerPath` are non-empty iff the
+ * relation has partition columns. `partitionValuesPerPath(i)` is the
+ * per-column literal values for `paths(i)` (parallel arrays).
+ */
 final case class FileSource(
     paths: Seq[String],
     format: String,
-    override val output: Seq[Attribute]) extends DataSource
+    override val output: Seq[Attribute],
+    partitionCols: Seq[Attribute] = Seq.empty,
+    partitionValuesPerPath: Seq[Seq[Any]] = Seq.empty) extends DataSource
 
 object QuantumStrategy {
   // Thread-local sinks for tests: the most-recent LogicalPlan considered, and
@@ -201,15 +213,30 @@ object QuantumStrategy {
         case LogicalRelation(hr: HadoopFsRelation, output, _, _) =>
           hr.fileFormat match {
             case _: ParquetFileFormat =>
-              // The native ConcatFileReader handles N>=1 part files; the
-              // strategy just needs to hand them all over in stable order.
-              val paths = hr.location.inputFiles.toSeq.sorted
+              // For Hive-style partitioned relations, ask the FileIndex for
+              // (PartitionDirectory: values + files). For unpartitioned, this
+              // returns one entry with an empty `values` row and all files.
+              // Either way we get the per-file partition value lookup.
+              val partDirs = hr.location.listFiles(Nil, Nil)
+              val partitionFields = hr.partitionSchema.fields.toSeq
+              // Build a flat list of (path, partitionValuesRow) pairs in a
+              // stable order, then sort by path.
+              val flat: Seq[(String, Seq[Any])] = partDirs.flatMap { pd =>
+                val vals: Seq[Any] = partitionFields.indices.map { i =>
+                  if (pd.values.isNullAt(i)) null
+                  else pd.values.get(i, partitionFields(i).dataType)
+                }
+                pd.files.map(f => (f.getPath.toString, vals))
+              }.sortBy(_._1)
+              val paths        = flat.map(_._1)
+              val partValuesPP = flat.map(_._2)
               if (paths.isEmpty) {
                 lastTranslated.set("reject: Parquet LogicalRelation has no files")
                 None
               } else {
                 val m = output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
-                Some((FileSource(paths, "parquet", output), m, Seq.empty))
+                val partitionCols = output.takeRight(partitionFields.size)
+                Some((FileSource(paths, "parquet", output, partitionCols, partValuesPP), m, Seq.empty))
               }
             case other =>
               lastTranslated.set(s"reject: unsupported HadoopFsRelation format $other")
@@ -245,8 +272,8 @@ object QuantumStrategy {
       }
 
     def isSupportedColType(t: DataType): Boolean = t match {
-      case LongType | StringType => true
-      case _                     => false
+      case LongType | StringType | IntegerType => true
+      case _                                   => false
     }
 
     val (dataSource, exprIdToCol, pushedFilters) = peel(child) match {
@@ -338,9 +365,12 @@ object QuantumStrategy {
     //     file source the scan is a FileScanNode and no data marshalling
     //     happens — the engine opens the file itself via io::FileSystem.
     def protoTypeFor(t: DataType): QuantumPlan.TypeId = t match {
-      case LongType   => QuantumPlan.TypeId.TYPE_INT64
-      case StringType => QuantumPlan.TypeId.TYPE_STRING
-      case other      => throw new IllegalStateException(s"unsupported source col type $other")
+      case LongType    => QuantumPlan.TypeId.TYPE_INT64
+      // IntegerType is widened to INT64 in the engine; QuantumExec narrows
+      // back to Int when materializing the Spark row.
+      case IntegerType => QuantumPlan.TypeId.TYPE_INT64
+      case StringType  => QuantumPlan.TypeId.TYPE_STRING
+      case other       => throw new IllegalStateException(s"unsupported source col type $other")
     }
     val (sourceId, scan) = dataSource match {
       case InMemorySource(_) =>
@@ -355,11 +385,50 @@ object QuantumStrategy {
           .setScan(QuantumPlan.ScanNode.newBuilder().setSourceId(sid).setSchema(schemaB))
           .build()
         (sid, s)
-      case FileSource(paths, format, _) =>
+      case FileSource(paths, format, _, partitionCols, partitionValuesPerPath) =>
         val fs = QuantumPlan.FileScanNode.newBuilder().setFormat(format)
         paths.foreach(fs.addPaths)
-        // FileScanNode.schema is left unset — the reader derives it from
-        // the file's own metadata.
+        if (partitionCols.nonEmpty) {
+          val partSchemaB = QuantumPlan.Schema.newBuilder()
+          partitionCols.foreach { a =>
+            partSchemaB.addFields(QuantumPlan.Field.newBuilder()
+              .setName(a.name)
+              .setType(protoTypeFor(a.dataType)))
+          }
+          fs.setPartitionColumns(partSchemaB)
+          partitionValuesPerPath.foreach { row =>
+            val pvRow = QuantumPlan.PartitionValueRow.newBuilder()
+            row.zip(partitionCols).foreach { case (v, attr) =>
+              val litB = QuantumPlan.Literal.newBuilder()
+              (v, attr.dataType) match {
+                case (null, _) =>
+                  // No native NULL literal for partition values yet — set
+                  // the typed zero. (Partition NULLs are rare in practice;
+                  // a real fix needs a NULL_LITERAL kind in the proto.)
+                  attr.dataType match {
+                    case LongType    => litB.setInt64Value(0L)
+                    case IntegerType => litB.setInt64Value(0L)
+                    case DoubleType  => litB.setDoubleValue(0.0)
+                    case BooleanType => litB.setBoolValue(false)
+                    case StringType  => litB.setStringValue("")
+                    case _ =>
+                  }
+                case (n: java.lang.Long,    LongType)    => litB.setInt64Value(n)
+                case (n: java.lang.Integer, IntegerType) => litB.setInt64Value(n.longValue)
+                case (n: java.lang.Double,  DoubleType)  => litB.setDoubleValue(n)
+                case (b: java.lang.Boolean, BooleanType) => litB.setBoolValue(b)
+                case (u: UTF8String,        StringType)  => litB.setStringValue(u.toString)
+                case (s: String,            StringType)  => litB.setStringValue(s)
+                case _ =>
+                  throw new IllegalStateException(
+                    s"Unsupported partition value $v (${if (v == null) "null" else v.getClass.getName}) " +
+                    s"for column ${attr.name}:${attr.dataType}")
+              }
+              pvRow.addValues(litB)
+            }
+            fs.addPartitionValues(pvRow)
+          }
+        }
         val s = QuantumPlan.PlanNode.newBuilder().setFileScan(fs).build()
         ("", s)
     }
@@ -442,6 +511,10 @@ object QuantumStrategy {
           lr.output(c).dataType match {
             case LongType =>
               LongColumn(data.map(_.getLong(c)))
+            case IntegerType =>
+              // Widen Int -> Long for the native LongColumn. Output is
+              // narrowed back to Int in QuantumExec.
+              LongColumn(data.map(_.getInt(c).toLong))
             case StringType =>
               StringColumn(data.map { row =>
                 if (row.isNullAt(c)) null else row.getString(c)

@@ -13,6 +13,7 @@
 #include "io/ConcatFileReader.hpp"
 #include "io/DeltaTableReader.hpp"
 #include "io/ParquetReader.hpp"
+#include "io/PartitionedFileReader.hpp"
 #include "operator/AggregateFunction.hpp"
 #include "operator/FileScanOperator.hpp"
 #include "operator/FilterOperator.hpp"
@@ -143,16 +144,48 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
                       "PlanBuilder: FileScanNode has no paths");
             }
             if (n.format == "parquet") {
-                // Single-path: skip the ConcatFileReader wrapper to keep the
-                // common case allocation-free.
+                const bool partitioned = n.partition_columns.numFields() > 0;
+                if (partitioned && n.partition_values.size() != n.paths.size()) {
+                    raise(ErrorCode::InvalidArgument,
+                          "PlanBuilder: FileScanNode has {} paths but {} partition-value rows",
+                          n.paths.size(), n.partition_values.size());
+                }
+                auto wrapPartitioned = [&](FileFormatReaderPtr inner, size_t pathIdx)
+                    -> FileFormatReaderPtr {
+                    if (!partitioned) return inner;
+                    std::vector<PartitionValue> values;
+                    values.reserve(n.partition_columns.numFields());
+                    for (const auto& lit : n.partition_values[pathIdx]) {
+                        std::visit([&](const auto& v) {
+                            using T = std::decay_t<decltype(v)>;
+                            if constexpr (std::is_same_v<T, bool>) {
+                                values.emplace_back(static_cast<bool>(v));
+                            } else if constexpr (std::is_same_v<T, int64_t>) {
+                                values.emplace_back(static_cast<int64_t>(v));
+                            } else if constexpr (std::is_same_v<T, double>) {
+                                values.emplace_back(static_cast<double>(v));
+                            } else if constexpr (std::is_same_v<T, std::string>) {
+                                values.emplace_back(v);
+                            }
+                        }, lit.value);
+                    }
+                    return std::make_unique<PartitionedFileReader>(
+                        std::move(inner),
+                        std::vector<Field>(n.partition_columns.fields()),
+                        std::move(values),
+                        mm_);
+                };
+
                 if (n.paths.size() == 1) {
                     auto reader = std::make_unique<ParquetReader>(n.paths.front(), mm_);
-                    return std::make_unique<FileScanOperator>(mm_, std::move(reader));
+                    auto wrapped = wrapPartitioned(std::move(reader), 0);
+                    return std::make_unique<FileScanOperator>(mm_, std::move(wrapped));
                 }
                 std::vector<FileFormatReaderPtr> readers;
                 readers.reserve(n.paths.size());
-                for (const auto& p : n.paths) {
-                    readers.push_back(std::make_unique<ParquetReader>(p, mm_));
+                for (size_t i = 0; i < n.paths.size(); ++i) {
+                    auto pr = std::make_unique<ParquetReader>(n.paths[i], mm_);
+                    readers.push_back(wrapPartitioned(std::move(pr), i));
                 }
                 auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
                 return std::make_unique<FileScanOperator>(mm_, std::move(concat));

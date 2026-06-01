@@ -183,3 +183,58 @@ TEST(FileScanPlan, UnknownFormatRejects) {
     SourceCatalog catalog;
     EXPECT_THROW(pb.build(plan, catalog), QuantumError);
 }
+
+TEST(FileScanPlan, PartitionedParquetSynthesizesConstantColumns) {
+    // Simulate two "partitions": year=2024 has one file, year=2025 has another.
+    auto p1 = tempPath("filescan_part_a_");
+    auto p2 = tempPath("filescan_part_b_");
+    writeKvParquet(p1, {1, 2}, {10, 20});
+    writeKvParquet(p2, {3, 4}, {30, 40});
+
+    FileScanNode fs;
+    fs.paths  = {p1, p2};
+    fs.format = "parquet";
+    fs.partition_columns = Schema(std::vector<Field>{{"year", Int64}});
+    fs.partition_values  = {
+        { LiteralExpr{int64_t{2024}} },
+        { LiteralExpr{int64_t{2025}} }
+    };
+
+    auto agg = std::make_unique<HashAggregateNode>();
+    agg->child = PlanNode{std::move(fs)};
+    // GROUP BY the synthesized partition col `year` (positionally col 2 — after
+    // file's k (col 0) and v (col 1)).
+    agg->group_keys.push_back(ColumnRefExpr{2});
+    AggregateSpec sumSpec;
+    sumSpec.kind      = AggregateKind::Sum;
+    sumSpec.inputType = Int64;
+    sumSpec.input     = ColumnRefExpr{1};
+    agg->aggregates.push_back(std::move(sumSpec));
+    agg->output_names = {"year", "sum_v"};
+
+    PlanNode plan{std::move(agg)};
+
+    MemoryManager mm(1 << 20);
+    PlanBuilder pb(&mm);
+    SourceCatalog catalog;
+    auto op = pb.build(plan, catalog);
+
+    op->open();
+    std::vector<std::pair<int64_t, int64_t>> got;
+    while (auto batch = op->getNext()) {
+        auto dense = batch->selectActive(&mm);
+        for (size_t i = 0; i < dense.numRows(); ++i) {
+            got.emplace_back(dense.column(0).typed<int64_t>()[i],
+                             dense.column(1).typed<int64_t>()[i]);
+        }
+    }
+    op->close();
+    std::sort(got.begin(), got.end());
+
+    // year=2024 -> 10+20=30; year=2025 -> 30+40=70.
+    EXPECT_EQ(got, (std::vector<std::pair<int64_t, int64_t>>{
+        {2024, 30}, {2025, 70}}));
+
+    std::filesystem::remove(p1);
+    std::filesystem::remove(p2);
+}

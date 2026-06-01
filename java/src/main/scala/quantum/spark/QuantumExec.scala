@@ -4,7 +4,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.types.{DoubleType, LongType, StringType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import quantum.QuantumEngine
 
@@ -78,10 +78,12 @@ case class QuantumExec(
           while (c < nOut) {
             val physCol = physicalIndex(c).toLong
             colData(c) = output(c).dataType match {
-              case LongType   => QuantumEngine.batchColInt64(out, physCol, nRows)
-              case DoubleType => QuantumEngine.batchColFloat64(out, physCol, nRows)
-              case StringType => null  // sentinel: read per-row via batchColStringAt
-              case other      =>
+              case LongType    => QuantumEngine.batchColInt64(out, physCol, nRows)
+              // Int outputs are stored as INT64 natively; narrow at row time.
+              case IntegerType => QuantumEngine.batchColInt64(out, physCol, nRows)
+              case DoubleType  => QuantumEngine.batchColFloat64(out, physCol, nRows)
+              case StringType  => null  // sentinel: read per-row via batchColStringAt
+              case other       =>
                 throw new RuntimeException(
                   s"QuantumExec: unsupported output type $other for column ${output(c).name}")
             }
@@ -101,6 +103,8 @@ case class QuantumExec(
                 values(ci) = output(ci).dataType match {
                   case LongType =>
                     (colData(ci).asInstanceOf[Array[Long]](r.toInt): java.lang.Long)
+                  case IntegerType =>
+                    (colData(ci).asInstanceOf[Array[Long]](r.toInt).toInt: java.lang.Integer)
                   case DoubleType =>
                     (colData(ci).asInstanceOf[Array[Double]](r.toInt): java.lang.Double)
                   case StringType =>

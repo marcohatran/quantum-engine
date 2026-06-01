@@ -78,10 +78,18 @@ struct ScanNode {
 
 // FileScan: native engine reads the file(s) directly via io::FileSystem.
 // `format` selects the reader ("parquet" or "delta").
+//
+// Hive-style partition columns are carried by `partition_columns` (field
+// names + types) and `partition_values` (one row per path, each row one
+// LiteralExpr per partition column). When non-empty, each ParquetReader is
+// wrapped in a PartitionedFileReader that synthesizes the partition columns
+// as constants appended to every batch. Empty => no partition columns.
 struct FileScanNode {
-    std::vector<std::string>   paths;
-    std::string                format;
-    std::optional<Schema>      schema;  // unset => derive from file metadata
+    std::vector<std::string>                paths;
+    std::string                             format;
+    std::optional<Schema>                   schema;
+    Schema                                  partition_columns;
+    std::vector<std::vector<LiteralExpr>>   partition_values;  // [path_idx][col_idx]
 };
 
 struct FilterNode;
