@@ -45,6 +45,18 @@ TEST(FileSystem, ResolveFileUriDispatchesToLocalFs) {
     std::filesystem::remove(path);
 }
 
+// Hadoop's URI form for local paths omits the authority ("file:/some/path"
+// rather than "file:///some/path"). Delta Lake hands paths to us in this
+// shape, so we have to normalize before Arrow's FileSystemFromUri rejects it.
+TEST(FileSystem, ResolveHadoopStyleFileUri) {
+    auto path = makeTempFile("fs_hadoop_uri_", "hello-hadoop");
+    auto [fs, resolved] = io::resolveUri("file:" + path);
+    ASSERT_NE(fs, nullptr);
+    EXPECT_EQ(fs->type_name(), "local");
+    EXPECT_NE(resolved.find("fs_hadoop_uri_"), std::string::npos);
+    std::filesystem::remove(path);
+}
+
 TEST(FileSystem, OpenReadableLoadsBytes) {
     auto path = makeTempFile("fs_open_", "twelve_bytes");
     auto file = io::openReadable(path);

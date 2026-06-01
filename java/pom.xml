@@ -58,6 +58,15 @@
       <version>5.10.3</version>
       <scope>test</scope>
     </dependency>
+
+    <!-- Delta Lake for Spark 3.5. Test-scope so the rest of the build stays
+         independent of Delta; only the Delta JVM test exercises it. -->
+    <dependency>
+      <groupId>io.delta</groupId>
+      <artifactId>delta-spark_${scala.binary.version}</artifactId>
+      <version>3.2.0</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

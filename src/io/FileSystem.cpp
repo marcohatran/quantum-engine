@@ -19,6 +19,18 @@ bool hasUriScheme(std::string_view s) {
     return colon != std::string_view::npos && colon > 0;
 }
 
+// Hadoop's URI form for a local path omits the authority, producing
+// `file:/some/path` (one slash). Arrow's FileSystemFromUri expects the
+// standard `file:///some/path` form (three slashes — scheme, empty
+// authority, absolute path). Normalize so callers can pass either.
+std::string normalizeUri(std::string s) {
+    if (s.rfind("file:/", 0) == 0 && s.rfind("file://", 0) != 0) {
+        // "file:/x" -> "file:///x"
+        return "file:///" + s.substr(6);
+    }
+    return s;
+}
+
 // Arrow requires a global Initialize/Finalize pair for the S3 client. We
 // initialize lazily on first S3 use and never finalize — the program exit
 // reclaims everything anyway.
@@ -43,10 +55,10 @@ void ensureS3Initialized() {
 
 std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>
 resolveUri(std::string_view uri) {
-    std::string uriStr(uri);
+    std::string uriStr = normalizeUri(std::string(uri));
 
     // Plain local path with no scheme — wrap as file://.
-    if (!hasUriScheme(uri)) {
+    if (!hasUriScheme(uriStr)) {
         std::string out_path;
         auto fs_result = arrow::fs::FileSystemFromUri("file://" + uriStr, &out_path);
         if (!fs_result.ok()) {
@@ -57,7 +69,7 @@ resolveUri(std::string_view uri) {
         return {fs_result.ValueOrDie(), out_path};
     }
 
-    if (uri.starts_with("s3://")) ensureS3Initialized();
+    if (uriStr.starts_with("s3://")) ensureS3Initialized();
 
     std::string out_path;
     auto fs_result = arrow::fs::FileSystemFromUri(uriStr, &out_path);
