@@ -54,8 +54,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Multi-column GROUP BY + WHERE pushdown (`quantum.spark.QuantumStrategy`)** — `GROUP BY (k1, k2, …)` over any number of Long columns now routes through the native composite-key path (`BytesHashTable` + `KeyCodec`). `WHERE …` clauses are translated to `FilterNode`s wrapped around the Scan; conjunctions are flattened, so `WHERE a > 1 AND b < 5` becomes a chain of two single-clause Filters (the native `BinaryOp` has no `AND` yet). Predicates can reference any combination of Long `AttributeReference`s and Long/Int literals via `>`, `<`, `=`; unsupported predicates make the strategy decline (Spark falls back to its own planner). Each predicate is translated against the column-map valid at the depth where the `Filter` was peeled, so renaming `Project`s above the `Filter` don't break translation.
 - **String columns through the JNA bridge (`QuantumEngine.columnString`, `QuantumExec`'s `InputColumn` ADT)** — Spark `StringType` columns marshal to the native engine via `q_column_string`. JVM-side helper packs UTF-8 bytes into per-row JNA `Memory` blocks plus a (ptr-array, len-array) pair, with an optional validity bitmap when any value is null. `QuantumExec` now takes a sealed `InputColumn` ADT (`LongColumn | StringColumn`) and dispatches at column-build time. Output reading dispatches per declared dataType: `LongType` and `DoubleType` pull contiguous arrays once per batch, `StringType` reads row-by-row via `q_batch_col_string_at` and wraps in `UTF8String` for Spark.
 - **String GROUP BY (`quantum.spark.QuantumStrategy`)** — the strategy's LocalRelation type check now accepts `StringType` columns in addition to `LongType`. Schema fields in the proto plan reflect each column's declared type (`TYPE_INT64` / `TYPE_STRING`). Group keys, agg inputs, and outputs work for any supported mix of Long and String. A `GROUP BY name:String` query routes through the engine's `StringFastPath` (single STRING key, global dict); a `GROUP BY (name:String, k2:Long)` composite-key query routes through `VarBytesHashTable` via `KeyCodec`.
+- **AQE compatibility** — the test suite no longer disables `spark.sql.adaptive.enabled` (Spark's AQE). The `LogicalQueryStage`-hides-Aggregate concern from the original 4.7 scaffold doesn't apply to our LocalRelation-backed queries because there's no Exchange below the Aggregate; AQE therefore doesn't create a stage boundary that would wrap the Aggregate. (Multi-partition / shuffle-bearing queries from a real source would still need explicit `LogicalQueryStage` peeling — listed in the roadmap.)
 
-**Tests & benchmarks** — 167 C++ tests + 13 JVM tests. New since previous slice: `GROUP BY name:String` with SUM + COUNT (StringFastPath); mixed `GROUP BY (name:String, k2:Long)` composite key.
+**Tests & benchmarks** — 167 C++ tests + 13 JVM tests. The full JVM suite now runs with AQE enabled (Spark's default), which exercises the strategy through the AQE re-planning path.
 
 ## Build & Test
 
@@ -129,8 +130,9 @@ Key invariants the codebase enforces:
 | **5** | Spark: multi-column GROUP BY (any number of Long keys via KeyCodec) | done |
 | **5** | Spark: WHERE pushdown — Long `<` / `>` / `=` over col/lit; AND-flattened to chained FilterNodes | done |
 | **5** | Spark: String columns through JNA + GROUP BY String / mixed (String, Long) composite keys | done |
+| **5** | Spark: AQE-on by default — LocalRelation queries route natively under `spark.sql.adaptive.enabled=true` | done |
 | 5 | Spark: WHERE on String / Int / Double; GTE / LTE / OR / NOT (needs new BinaryOp / UnaryOp kinds) | planned |
-| 5 | Spark: AQE-friendly pattern matching (`LogicalQueryStage` shape) | planned |
+| 5 | Spark: `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |
 | 5 | Delta: checkpoint `.parquet` log support, partition pruning, schema evolution | planned |
 | 5 | NVMe disk cache for object-store reads | planned |

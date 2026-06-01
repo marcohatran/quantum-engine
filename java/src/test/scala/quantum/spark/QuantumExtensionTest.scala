@@ -16,10 +16,11 @@ class QuantumExtensionTest {
       .master("local[1]")
       .config("spark.ui.enabled", "false")
       .config("spark.sql.shuffle.partitions", "1")
-      // AQE wraps subtrees in LogicalQueryStage, which hides the Aggregate
-      // from our planner strategy. Disable for this slice; AQE-friendly
-      // pattern matching is a follow-up.
-      .config("spark.sql.adaptive.enabled", "false")
+      // AQE is intentionally LEFT ENABLED (Spark's default) — for our
+      // LocalRelation-backed queries there's no Exchange below the Aggregate,
+      // so AQE doesn't create a stage boundary that would wrap the Aggregate
+      // in LogicalQueryStage. Queries with shuffle (multi-partition sources)
+      // would need explicit LogicalQueryStage handling — see roadmap.
       // ConvertToLocalRelation evaluates Filter(LocalRelation) at optimize
       // time when the data is small enough, which would hide the Filter from
       // our planner strategy. Disable it so the filter-pushdown tests can
