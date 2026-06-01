@@ -397,6 +397,30 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.14: WHERE with OR translates to a single FilterNode whose
+   * predicate is a BinaryOp(Or, ...) — chained Filters can't express OR.
+   */
+  @Test
+  def orPredicatePushesAsSingleFilter(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_or")
+
+    // WHERE k = 1 OR k = 3 OR v > 45  ->  keeps {(1,10), (3,30), (5,50)}
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_or WHERE k = 1 OR k = 3 OR v > 45 GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 10L), (3L, 30L), (5L, 50L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 pushed filters")),
+      "OR predicate should be 1 pushed filter; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.12: GTE / LTE predicates translate natively. Native engine
    * gained BinaryOp::Gte/Lte (proto BINOP_GTE/BINOP_LTE), so Catalyst's
    * GreaterThanOrEqual / LessThanOrEqual no longer make the strategy

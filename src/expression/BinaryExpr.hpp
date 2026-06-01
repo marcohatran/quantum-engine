@@ -4,7 +4,7 @@
 
 namespace quantum {
 
-enum class BinaryOp { Add, Sub, Mul, Eq, Lt, Gt, Lte, Gte };
+enum class BinaryOp { Add, Sub, Mul, Eq, Lt, Gt, Lte, Gte, And, Or };
 
 inline bool isArithmeticOp(BinaryOp op) noexcept {
     return op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul;
@@ -13,6 +13,10 @@ inline bool isArithmeticOp(BinaryOp op) noexcept {
 inline bool isComparisonOp(BinaryOp op) noexcept {
     return op == BinaryOp::Eq  || op == BinaryOp::Lt  || op == BinaryOp::Gt ||
            op == BinaryOp::Lte || op == BinaryOp::Gte;
+}
+
+inline bool isLogicalOp(BinaryOp op) noexcept {
+    return op == BinaryOp::And || op == BinaryOp::Or;
 }
 
 class BinaryExpr final : public Expression {

@@ -54,6 +54,8 @@ enum BinaryOpType {
   BINOP_GT  = 5;
   BINOP_LTE = 6;
   BINOP_GTE = 7;
+  BINOP_AND = 8;
+  BINOP_OR  = 9;
 }
 
 message BinaryOp {

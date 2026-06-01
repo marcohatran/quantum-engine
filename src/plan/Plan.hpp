@@ -38,7 +38,7 @@ using ScalarExpr = std::variant<
     std::unique_ptr<LikeOpExpr>
 >;
 
-enum class BinaryOpType { Add, Sub, Mul, Eq, Lt, Gt, Lte, Gte };
+enum class BinaryOpType { Add, Sub, Mul, Eq, Lt, Gt, Lte, Gte, And, Or };
 
 struct BinaryOpExpr {
     BinaryOpType op;

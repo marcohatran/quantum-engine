@@ -5,6 +5,7 @@
 #include "common/Status.hpp"
 #include "expression/kernels/ArithmeticKernels.hpp"
 #include "expression/kernels/ComparisonKernels.hpp"
+#include "expression/kernels/LogicalKernels.hpp"
 
 namespace quantum {
 
@@ -20,8 +21,18 @@ const char* opName(BinaryOp op) noexcept {
         case BinaryOp::Gt:  return ">";
         case BinaryOp::Lte: return "<=";
         case BinaryOp::Gte: return ">=";
+        case BinaryOp::And: return "AND";
+        case BinaryOp::Or:  return "OR";
     }
     return "?";
+}
+
+kernels::LogicalOp toLogical(BinaryOp op) {
+    switch (op) {
+        case BinaryOp::And: return kernels::LogicalOp::And;
+        case BinaryOp::Or:  return kernels::LogicalOp::Or;
+        default: raise(ErrorCode::Internal, "BinaryExpr: not a logical op");
+    }
 }
 
 kernels::ArithOp toArith(BinaryOp op) {
@@ -60,6 +71,10 @@ ColumnVector BinaryExpr::eval(const ColumnBatch& batch, MemoryManager* mm) const
         return kernels::applyArithmetic(toArith(op_), lhsV.type(),
                                         lhsV, rhsV, batch.positions(), mm);
     }
+    if (isLogicalOp(op_)) {
+        return kernels::applyLogical(toLogical(op_),
+                                     lhsV, rhsV, batch.positions(), mm);
+    }
     return kernels::applyComparison(toCmp(op_), lhsV.type(),
                                     lhsV, rhsV, batch.positions(), mm);
 }
@@ -71,7 +86,7 @@ DataType BinaryExpr::resultType(const Schema& s) const {
         raise(ErrorCode::TypeMismatch,
               "BinaryExpr: lhs type {} != rhs type {}", lt.toString(), rt.toString());
     }
-    return isComparisonOp(op_) ? Bool : lt;
+    return (isComparisonOp(op_) || isLogicalOp(op_)) ? Bool : lt;
 }
 
 std::string BinaryExpr::toString() const {

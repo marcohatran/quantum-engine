@@ -207,6 +207,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      * <code>BINOP_GTE = 7;</code>
      */
     BINOP_GTE(7),
+    /**
+     * <code>BINOP_AND = 8;</code>
+     */
+    BINOP_AND(8),
+    /**
+     * <code>BINOP_OR = 9;</code>
+     */
+    BINOP_OR(9),
     UNRECOGNIZED(-1),
     ;
 
@@ -251,6 +259,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      * <code>BINOP_GTE = 7;</code>
      */
     public static final int BINOP_GTE_VALUE = 7;
+    /**
+     * <code>BINOP_AND = 8;</code>
+     */
+    public static final int BINOP_AND_VALUE = 8;
+    /**
+     * <code>BINOP_OR = 9;</code>
+     */
+    public static final int BINOP_OR_VALUE = 9;
 
 
     public final int getNumber() {
@@ -285,6 +301,8 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         case 5: return BINOP_GT;
         case 6: return BINOP_LTE;
         case 7: return BINOP_GTE;
+        case 8: return BINOP_AND;
+        case 9: return BINOP_OR;
         default: return null;
       }
     }
@@ -16130,15 +16148,16 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       "quantum.plan.proto.FileScanNodeH\000B\006\n\004nod" +
       "e*Z\n\006TypeId\022\r\n\tTYPE_BOOL\020\000\022\016\n\nTYPE_INT32" +
       "\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TYPE_FLOAT64\020\003\022\017\n\013" +
-      "TYPE_STRING\020\004*\203\001\n\014BinaryOpType\022\r\n\tBINOP_" +
+      "TYPE_STRING\020\004*\240\001\n\014BinaryOpType\022\r\n\tBINOP_" +
       "ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\tBINOP_MUL\020\002\022\014\n\010B" +
       "INOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022\014\n\010BINOP_GT\020\005\022\r\n" +
-      "\tBINOP_LTE\020\006\022\r\n\tBINOP_GTE\020\007*W\n\rAggregate" +
-      "Kind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_COUNT_STAR\020\001\022\013\n" +
-      "\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007AGG_AVG\020\004*Z\n\010" +
-      "JoinType\022\016\n\nJOIN_INNER\020\000\022\023\n\017JOIN_LEFT_OU" +
-      "TER\020\001\022\024\n\020JOIN_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL" +
-      "_OUTER\020\003b\006proto3"
+      "\tBINOP_LTE\020\006\022\r\n\tBINOP_GTE\020\007\022\r\n\tBINOP_AND" +
+      "\020\010\022\014\n\010BINOP_OR\020\t*W\n\rAggregateKind\022\013\n\007AGG" +
+      "_SUM\020\000\022\022\n\016AGG_COUNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022" +
+      "\013\n\007AGG_MAX\020\003\022\013\n\007AGG_AVG\020\004*Z\n\010JoinType\022\016\n" +
+      "\nJOIN_INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JO" +
+      "IN_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006p" +
+      "roto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,

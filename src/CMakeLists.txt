@@ -20,6 +20,7 @@ add_library(quantum_core SHARED
     expression/LikeExpr.cpp
     expression/kernels/ArithmeticKernels.cpp
     expression/kernels/ComparisonKernels.cpp
+    expression/kernels/LogicalKernels.cpp
     hash/HashTable.cpp
     hash/BytesHashTable.cpp
     hash/VarBytesHashTable.cpp

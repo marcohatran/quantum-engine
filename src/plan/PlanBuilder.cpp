@@ -35,6 +35,8 @@ BinaryOp toBinaryOp(BinaryOpType op) {
         case BinaryOpType::Gt:  return BinaryOp::Gt;
         case BinaryOpType::Lte: return BinaryOp::Lte;
         case BinaryOpType::Gte: return BinaryOp::Gte;
+        case BinaryOpType::And: return BinaryOp::And;
+        case BinaryOpType::Or:  return BinaryOp::Or;
     }
     raise(ErrorCode::Internal, "PlanBuilder: unknown BinaryOpType");
 }
