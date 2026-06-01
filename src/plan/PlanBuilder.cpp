@@ -66,6 +66,9 @@ AggregateFunctionPtr buildAggregate(const AggregateSpec& spec, PlanBuilder& pb) 
         case AggregateKind::CountStar:
             return std::make_unique<CountStar>();
 
+        case AggregateKind::Count:
+            return std::make_unique<CountColumn>(inputExpr());
+
         case AggregateKind::Sum:
             if (spec.inputType.id != TypeId::INT64) {
                 raise(ErrorCode::NotImplemented,

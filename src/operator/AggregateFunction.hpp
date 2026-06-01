@@ -91,6 +91,27 @@ public:
     const Expression* inputExpr() const override { return nullptr; }
 };
 
+// COUNT(col) -> int64. Counts active rows whose input value is non-null.
+// Type-agnostic for the input (only the validity bitmap is read).
+class CountColumn final : public AggregateFunction {
+public:
+    explicit CountColumn(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(int64_t); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Int64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
 // MIN(int64) -> int64. Returns NULL for a group with no non-null inputs.
 // State layout: [int64_t value][uint8_t hasValue][7 bytes padding].
 class MinI64 final : public AggregateFunction {

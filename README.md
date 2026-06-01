@@ -67,8 +67,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Partition filter pushdown** — verified via JVM test: `spark.read.parquet(dir).filter("year = 2025")` over a 3-partition dataset routes natively, and only the `year=2025` partition is in the strategy's `paths`. Spark's `FileIndex` prunes the file set BEFORE the strategy sees the `LogicalRelation`, so no engine-side work was needed.
 - **End-to-end FileScan → HashAgg benchmark (`benchmarks/bench_file_scan_hash_aggregate.cpp`)** — measures the Phase 5 headline path: 1M rows × (k:int64, v:int64), written as Parquet, scanned through `FileScanNode`, aggregated by `k`. Per-iteration timing includes plan construction + `PlanBuilder` + `FileSystem::openReadable` + Arrow Parquet decode + HashAgg over `cardinality` groups. On an Apple M-class laptop with macOS Arrow: ~3.3 M rows/sec across the full path; cardinality has small effect (cardinality=16 → 3.45 M/s vs cardinality=65536 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 - **Unary `NOT` (`src/expression/UnaryExpr.{hpp,cpp}`)** — first unary expression in the engine. Validity-preserving boolean negation: NULL → NULL, true ↔ false. Plan IR adds `UnaryOpExpr` to the `ScalarExpr` variant + `UnaryOpType { Not }` enum; proto adds `UnaryOp` message and `UNOP_NOT` enum (the `ScalarExpr` oneof gets a fifth case). PlanBuilder + PlanProto round-trip. Spark translator handles Catalyst's `Not(child: Expression)` directly. Catalyst's optimizer rewrites `NOT (a = b)` to `a != b` and `NOT (a > b)` to `a <= b`, so the Spark-visible cases for `Not` are mostly `NOT IN`, `NOT EXISTS`, and explicit `NOT(bool_expr)`.
+- **`COUNT(col)` non-star aggregate** — new `CountColumn` `AggregateFunction` that counts active rows whose input column value is non-null. New `AggregateKind::Count` (proto `AGG_COUNT = 5`); PlanBuilder dispatches to `CountColumn`. Spark translator recognises `Count(Seq(ar: AttributeReference))` → `AGG_COUNT` (in addition to the existing `Count(Seq(Literal))` → `AGG_COUNT_STAR`). Real fix that surfaced during the JVM test: `InMemorySource` marshaling was dropping NULL information from `LongColumn` and `IntegerType` columns (always passed `validity=null` to the C ABI). The Scala-side `LongColumn` now carries an optional `Array[Byte]` validity, materialized only when at least one row in the LocalRelation has a NULL for that column.
 
-**Tests & benchmarks** — 180 C++ tests + 24 JVM tests. New since previous slice: C++ `UnaryExpr.NotFlipsBoolValues` + `UnaryExpr.NotPreservesNullValidity`; JVM `whereNotPushesNatively` runs `WHERE NOT (k > 2)` and verifies a single FilterNode wraps the Not expression.
+**Tests & benchmarks** — 182 C++ tests + 25 JVM tests. New since previous slice: C++ `CountColumn.CountsNonNullRowsOnly` + `CountColumn.AllNullsCountsZero`; JVM `countColumnSkipsNullsPerGroup` runs `SELECT k, COUNT(v), COUNT(*) FROM kv GROUP BY k` against an `Option[Long]`-typed `v` column and verifies the per-group counts agree with the null pattern.
 
 ## Build & Test
 
@@ -155,7 +156,7 @@ Key invariants the codebase enforces:
 | **5** | Partition filter pushdown (Spark's `FileIndex` prunes before peel — verified by JVM test) | done |
 | **5** | End-to-end FileScan→HashAgg benchmark (Parquet read + plan build + native execute) | done |
 | **5** | Unary `NOT` expression — first unary op in the engine + plan IR + proto + Spark translator | done |
-| 5 | `COUNT(col)` non-star aggregate (counts non-null rows) | planned |
+| **5** | `COUNT(col)` non-star aggregate — counts non-null rows + InMemorySource validity plumbing | done |
 | 5 | Spark: WHERE on String / Int / Double; GTE / LTE / OR / NOT (needs new BinaryOp / UnaryOp kinds) | planned |
 | 5 | Spark: `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |

@@ -182,6 +182,7 @@ proto::AggregateKind encodeAggKind(AggregateKind k) {
         case AggregateKind::Min:       return proto::AGG_MIN;
         case AggregateKind::Max:       return proto::AGG_MAX;
         case AggregateKind::Avg:       return proto::AGG_AVG;
+        case AggregateKind::Count:     return proto::AGG_COUNT;
     }
     raise(ErrorCode::Internal, "PlanProto: unknown AggregateKind");
 }
@@ -193,6 +194,7 @@ AggregateKind decodeAggKind(proto::AggregateKind k) {
         case proto::AGG_MIN:        return AggregateKind::Min;
         case proto::AGG_MAX:        return AggregateKind::Max;
         case proto::AGG_AVG:        return AggregateKind::Avg;
+        case proto::AGG_COUNT:      return AggregateKind::Count;
         default: raise(ErrorCode::InvalidArgument, "PlanProto: unknown proto AggregateKind");
     }
 }

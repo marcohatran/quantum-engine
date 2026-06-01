@@ -14,8 +14,13 @@ import quantum.QuantumEngine
  * Scala side and dispatch to the right `q_column_*` builder.
  */
 sealed trait InputColumn
-final case class LongColumn(values: Array[Long])     extends InputColumn
-final case class StringColumn(values: Array[String]) extends InputColumn
+/**
+ * @param values   row values (slot value is irrelevant when validity bit is 0)
+ * @param validity null = all-valid; otherwise per-row 0/1 bytes — must match
+ *                 `values.length`
+ */
+final case class LongColumn(values: Array[Long], validity: Array[Byte] = null) extends InputColumn
+final case class StringColumn(values: Array[String])                           extends InputColumn
 
 /**
  * Custom SparkPlan: hands an already-translated PlanNode IR over to the
@@ -55,8 +60,8 @@ case class QuantumExec(
       // pack the data into a single Batch and register it under sourceId.
       if (inputColumns.nonEmpty) {
         val cols: Array[QuantumEngine.Column] = inputColumns.map {
-          case LongColumn(v)   => QuantumEngine.columnInt64(eng, v, null)
-          case StringColumn(v) => QuantumEngine.columnString(eng, v)
+          case LongColumn(v, va) => QuantumEngine.columnInt64(eng, v, va)
+          case StringColumn(v)   => QuantumEngine.columnString(eng, v)
         }
         val batch = QuantumEngine.batchNew(eng, cols)
         QuantumEngine.registerSource(eng, sourceId, Array(batch))

@@ -343,10 +343,13 @@ object QuantumStrategy {
         case _: Literal => true
         case _          => false
       } =>
-        // COUNT(*) is parsed as Count(Seq(Literal(1, IntegerType))). We only
-        // support COUNT(*) for now; COUNT(<column>) would need a separate
-        // AGG_COUNT_COLUMN kind in the native engine.
+        // COUNT(*) is parsed as Count(Seq(Literal(1, IntegerType))).
         Some(AggOut(specOf(QuantumPlan.AggregateKind.AGG_COUNT_STAR, None), "count_star"))
+      case Count(Seq(ar: AttributeReference)) =>
+        // COUNT(col) — counts non-null rows for the specified column. Maps
+        // to the native CountColumn aggregate.
+        exprIdToCol.get(ar.exprId).map(idx =>
+          AggOut(specOf(QuantumPlan.AggregateKind.AGG_COUNT, Some(idx)), "count"))
       case _ => None
     }
 
@@ -516,13 +519,24 @@ object QuantumStrategy {
         val data   = lr.data.toArray
         val nCols  = lr.output.size
         Array.tabulate(nCols) { c =>
+          // Build a per-row validity array only when at least one row has
+          // a NULL — passing null to the C ABI skips the allocation and
+          // means "all valid".
+          def validityOrNull: Array[Byte] = {
+            if (!data.exists(_.isNullAt(c))) null
+            else data.map(r => if (r.isNullAt(c)) 0.toByte else 1.toByte)
+          }
           lr.output(c).dataType match {
             case LongType =>
-              LongColumn(data.map(_.getLong(c)))
+              LongColumn(
+                data.map(r => if (r.isNullAt(c)) 0L else r.getLong(c)),
+                validityOrNull)
             case IntegerType =>
               // Widen Int -> Long for the native LongColumn. Output is
               // narrowed back to Int in QuantumExec.
-              LongColumn(data.map(_.getInt(c).toLong))
+              LongColumn(
+                data.map(r => if (r.isNullAt(c)) 0L else r.getInt(c).toLong),
+                validityOrNull)
             case StringType =>
               StringColumn(data.map { row =>
                 if (row.isNullAt(c)) null else row.getString(c)

@@ -98,6 +98,7 @@ enum AggregateKind {
   AGG_MIN        = 2;
   AGG_MAX        = 3;
   AGG_AVG        = 4;
+  AGG_COUNT      = 5;  // COUNT(col) — non-null rows
 }
 
 message AggregateSpec {

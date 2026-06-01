@@ -74,6 +74,38 @@ TEST(CountStar, CountsActiveRowsIncludingNulls) {
     EXPECT_EQ(cnt, 4);
 }
 
+TEST(CountColumn, CountsNonNullRowsOnly) {
+    MemoryManager mm(64 * 1024);
+    CountColumn agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {1, 2, 3, 4, 5}, {true, false, true, false, true});
+
+    uint8_t state[8];
+    agg.init(state);
+    auto input = agg.inputExpr()->eval(batch, &mm);
+    std::vector<uint8_t*> slots(5, state);
+    agg.update(slots.data(), &input, batch.positions());
+
+    int64_t cnt;
+    std::memcpy(&cnt, state, sizeof(cnt));
+    EXPECT_EQ(cnt, 3);  // rows 0, 2, 4 are valid; 1 and 3 are NULL.
+}
+
+TEST(CountColumn, AllNullsCountsZero) {
+    MemoryManager mm(64 * 1024);
+    CountColumn agg(std::make_unique<ColumnRef>(0));
+    auto batch = oneIntCol(mm, {1, 2, 3}, {false, false, false});
+
+    uint8_t state[8];
+    agg.init(state);
+    auto input = agg.inputExpr()->eval(batch, &mm);
+    std::vector<uint8_t*> slots(3, state);
+    agg.update(slots.data(), &input, batch.positions());
+
+    int64_t cnt;
+    std::memcpy(&cnt, state, sizeof(cnt));
+    EXPECT_EQ(cnt, 0);
+}
+
 namespace {
 // Drive an aggregate against a single all-into-one-group batch and return
 // the finalized output as a one-row ColumnVector. Convenience for tests.

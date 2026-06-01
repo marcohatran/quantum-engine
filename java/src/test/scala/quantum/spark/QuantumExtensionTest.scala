@@ -397,6 +397,46 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.20: COUNT(col) counts non-null rows per group. Spark renders
+   * `COUNT(v)` as `Count(Seq(AttributeReference(v)))`, distinct from
+   * `COUNT(*)` which is `Count(Seq(Literal(1)))`.
+   */
+  @Test
+  def countColumnSkipsNullsPerGroup(): Unit = {
+    val s = spark
+    import s.implicits._
+    // Use Option[Long] so some rows have null values for `v`.
+    val df = Seq(
+      (1L, Some(10L)),
+      (1L, None),
+      (1L, Some(30L)),
+      (2L, Some(20L)),
+      (2L, None),
+      (3L, None)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_cnt")
+
+    val rows = spark.sql(
+      "SELECT k, COUNT(v) AS n, COUNT(*) AS total FROM kv_cnt GROUP BY k")
+      .collect()
+      .map(r => (r.getLong(0), r.getLong(1), r.getLong(2)))
+      .sortBy(_._1)
+      .toSeq
+
+    //  k=1: COUNT(v) = 2 (10 + 30), COUNT(*) = 3
+    //  k=2: COUNT(v) = 1 (20),       COUNT(*) = 2
+    //  k=3: COUNT(v) = 0,            COUNT(*) = 1
+    assertEquals(Seq(
+      (1L, 2L, 3L),
+      (2L, 1L, 2L),
+      (3L, 0L, 1L)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "COUNT(col) + COUNT(*) should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.19: WHERE NOT (predicate) translates as UnaryOp::Not wrapping
    * the child. Spark's optimizer may rewrite NOT(=) to !=, so we use a
    * predicate (NOT (k > 2)) that Catalyst can't trivially simplify away.
