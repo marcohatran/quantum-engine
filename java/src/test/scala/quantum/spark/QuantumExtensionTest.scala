@@ -20,6 +20,12 @@ class QuantumExtensionTest {
       // from our planner strategy. Disable for this slice; AQE-friendly
       // pattern matching is a follow-up.
       .config("spark.sql.adaptive.enabled", "false")
+      // ConvertToLocalRelation evaluates Filter(LocalRelation) at optimize
+      // time when the data is small enough, which would hide the Filter from
+      // our planner strategy. Disable it so the filter-pushdown tests can
+      // observe the Filter node in the plan tree.
+      .config("spark.sql.optimizer.excludedRules",
+              "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation")
       .withExtensions(new QuantumExtension())
       .getOrCreate()
   }
@@ -149,5 +155,93 @@ class QuantumExtensionTest {
     ), rows)
     assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
       "Combined aggs should route through native; flag = " + QuantumStrategy.lastTranslation)
+  }
+
+  /**
+   * Phase 5.6: GROUP BY (k1, k2). Exercises the native composite-key path
+   * (BytesHashTable + KeyCodec), which handles fixed-width multi-column keys.
+   */
+  @Test
+  def twoColumnGroupByExecutesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 100L, 10L),
+      (1L, 100L, 30L),
+      (1L, 200L, 50L),
+      (2L, 100L, 70L),
+      (2L, 100L, 80L),
+      (2L, 200L, 90L)
+    ).toDF("k1", "k2", "v")
+    df.createOrReplaceTempView("kv2")
+
+    val rows = spark.sql(
+      "SELECT k1, k2, SUM(v) AS s, COUNT(*) AS n FROM kv2 GROUP BY k1, k2")
+      .collect()
+      .map(r => (r.getLong(0), r.getLong(1), r.getLong(2), r.getLong(3)))
+      .sortBy(t => (t._1, t._2))
+      .toSeq
+
+    assertEquals(Seq(
+      (1L, 100L,  40L, 2L),
+      (1L, 200L,  50L, 1L),
+      (2L, 100L, 150L, 2L),
+      (2L, 200L,  90L, 1L)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Multi-column GROUP BY should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
+   * Phase 5.6: single WHERE clause pushed through to the engine. The strategy
+   * wraps the Scan in a FilterNode whose predicate is the translated Catalyst
+   * comparison.
+   */
+  @Test
+  def singleClauseWhereIsPushedDown(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (1L, 20L), (2L, 30L), (2L, 40L), (3L, 50L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_filt")
+
+    val rows = spark.sql("SELECT k, SUM(v) AS s FROM kv_filt WHERE v > 25 GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((2L, 70L), (3L, 50L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 pushed filters")),
+      "single WHERE should produce 1 pushed filter; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
+   * Phase 5.6: AND-conjuncted WHERE flattens into a chain of single-clause
+   * FilterNodes. The native engine has no BinaryOp::And; chained FilterOps
+   * is semantically equivalent.
+   */
+  @Test
+  def conjunctedWhereFlattensIntoTwoFilters(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L),
+      (1L, 20L),
+      (2L, 30L),
+      (2L, 40L),
+      (3L, 50L),
+      (4L, 99L)).toDF("k", "v")
+    df.createOrReplaceTempView("kv_and")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_and WHERE v > 15 AND k < 4 GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 20L), (2L, 70L), (3L, 50L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("2 pushed filters")),
+      "WHERE v>15 AND k<4 should flatten to 2 pushed filters; flag = " +
+        QuantumStrategy.lastTranslation)
   }
 }

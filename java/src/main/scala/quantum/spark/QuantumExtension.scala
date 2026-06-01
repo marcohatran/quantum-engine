@@ -1,11 +1,11 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExprId, Expression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, Project, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{IntegerType, LongType}
 import quantum.plan.proto.QuantumPlan
 
 import java.util.concurrent.atomic.AtomicReference
@@ -87,41 +87,94 @@ object QuantumStrategy {
       aggregateExprs: Seq[NamedExpression],
       child: LogicalPlan): Option[SparkPlan] = {
 
-    // --- Peel to LocalRelation, tracking each peeled-output exprId's column
-    //     index in the underlying LocalRelation. Aliases create new exprIds,
-    //     so we have to walk the chain and propagate mappings.
-    def peel(p: LogicalPlan): Option[(LocalRelation, Map[ExprId, Int])] = p match {
-      case lr: LocalRelation =>
-        val m = lr.output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
-        Some((lr, m))
-      case sa: SubqueryAlias =>
-        peel(sa.child)
-      case pr: Project =>
-        peel(pr.child).flatMap { case (lr, childMap) =>
-          // Each projectList item must be either a bare AttributeReference or
-          // an Alias-of-AttributeReference — otherwise we can't trace its
-          // underlying LocalRelation column.
-          val pairs: Seq[Option[(ExprId, Int)]] = pr.projectList.zip(pr.output).map {
-            case (ar: AttributeReference, outAttr) =>
-              childMap.get(ar.exprId).map(outAttr.exprId -> _)
-            case (Alias(ar: AttributeReference, _), outAttr) =>
-              childMap.get(ar.exprId).map(outAttr.exprId -> _)
-            case _ => None
-          }
-          if (pairs.exists(_.isEmpty)) None
-          else Some((lr, pairs.flatten.toMap))
-        }
-      case _ => None
+    // --- Predicate translator parameterised on the exprId-to-LR-column map
+    //     valid at the level it's called. Filters peeled at different depths
+    //     of the chain use different maps; we translate each one against the
+    //     map that was valid at the Filter's depth so the resulting ScalarExpr
+    //     is keyed on LR column indices (depth-independent).
+    def flattenAnd(e: Expression): Seq[Expression] = e match {
+      case And(l, r) => flattenAnd(l) ++ flattenAnd(r)
+      case other     => Seq(other)
     }
 
-    val (localRel, exprIdToCol) = peel(child) match {
-      case Some(pair) if pair._1.output.forall(_.dataType == LongType) => pair
-      case Some((lr, _)) =>
+    def translateScalarWith(idMap: Map[ExprId, Int])(e: Expression): Option[QuantumPlan.ScalarExpr] = {
+      def binOp(op: QuantumPlan.BinaryOpType, l: Expression, r: Expression) =
+        for {
+          ls <- translateScalarWith(idMap)(l)
+          rs <- translateScalarWith(idMap)(r)
+        } yield QuantumPlan.ScalarExpr.newBuilder()
+          .setBinary(QuantumPlan.BinaryOp.newBuilder()
+            .setOp(op).setLhs(ls).setRhs(rs))
+          .build()
+
+      e match {
+        case ar: AttributeReference =>
+          idMap.get(ar.exprId).map { idx =>
+            QuantumPlan.ScalarExpr.newBuilder()
+              .setColumnRef(QuantumPlan.ColumnRef.newBuilder().setIndex(idx))
+              .build()
+          }
+        case Literal(v: java.lang.Long, LongType) =>
+          Some(QuantumPlan.ScalarExpr.newBuilder()
+            .setLiteral(QuantumPlan.Literal.newBuilder().setInt64Value(v))
+            .build())
+        case Literal(v: java.lang.Integer, IntegerType) =>
+          Some(QuantumPlan.ScalarExpr.newBuilder()
+            .setLiteral(QuantumPlan.Literal.newBuilder().setInt64Value(v.longValue))
+            .build())
+        case GreaterThan(l, r) => binOp(QuantumPlan.BinaryOpType.BINOP_GT, l, r)
+        case LessThan(l, r)    => binOp(QuantumPlan.BinaryOpType.BINOP_LT, l, r)
+        case EqualTo(l, r)     => binOp(QuantumPlan.BinaryOpType.BINOP_EQ, l, r)
+        case _: GreaterThanOrEqual | _: LessThanOrEqual => None
+        case _ => None
+      }
+    }
+
+    // Peel collects already-translated FilterNode predicates so each one is
+    // bound to the column map that was valid at the Filter's depth.
+    def peel(p: LogicalPlan): Option[(LocalRelation, Map[ExprId, Int], Seq[QuantumPlan.ScalarExpr])] =
+      p match {
+        case lr: LocalRelation =>
+          val m = lr.output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
+          Some((lr, m, Seq.empty))
+        case sa: SubqueryAlias =>
+          peel(sa.child)
+        case f: Filter =>
+          peel(f.child).flatMap { case (lr, m, accum) =>
+            val conjs      = flattenAnd(f.condition)
+            val translated = conjs.map(translateScalarWith(m))
+            if (translated.exists(_.isEmpty)) {
+              lastTranslated.set(s"reject: predicate '${f.condition}' untranslatable " +
+                "(only Long >, <, = literal/col supported)")
+              None
+            } else {
+              Some((lr, m, accum ++ translated.flatten))
+            }
+          }
+        case pr: Project =>
+          peel(pr.child).flatMap { case (lr, childMap, accum) =>
+            val pairs: Seq[Option[(ExprId, Int)]] = pr.projectList.zip(pr.output).map {
+              case (ar: AttributeReference, outAttr) =>
+                childMap.get(ar.exprId).map(outAttr.exprId -> _)
+              case (Alias(ar: AttributeReference, _), outAttr) =>
+                childMap.get(ar.exprId).map(outAttr.exprId -> _)
+              case _ => None
+            }
+            if (pairs.exists(_.isEmpty)) None
+            else Some((lr, pairs.flatten.toMap, accum))
+          }
+        case _ => None
+      }
+
+    val (localRel, exprIdToCol, pushedFilters) = peel(child) match {
+      case Some(triple) if triple._1.output.forall(_.dataType == LongType) => triple
+      case Some((lr, _, _)) =>
         lastTranslated.set(s"reject: LocalRelation has non-Long columns (" +
           lr.output.map(a => s"${a.name}:${a.dataType}").mkString(", ") + ")")
         return None
       case None =>
-        lastTranslated.set("reject: child didn't peel to LocalRelation\n" + child.treeString)
+        if (lastTranslated.get == null || !lastTranslated.get.startsWith("reject:"))
+          lastTranslated.set("reject: child didn't peel to LocalRelation\n" + child.treeString)
         return None
     }
 
@@ -209,7 +262,18 @@ object QuantumStrategy {
       .setScan(QuantumPlan.ScanNode.newBuilder().setSourceId(sourceId).setSchema(schema))
       .build()
 
-    val hashAggB = QuantumPlan.HashAggregateNode.newBuilder().setChild(scan)
+    // --- Wrap the Scan in one FilterNode per pre-translated pushed-down
+    //     predicate. The native BinaryOp has no AND, so flattenAnd already
+    //     decomposed conjunctions when each Filter was peeled.
+    val scanWithFilters: QuantumPlan.PlanNode = pushedFilters.foldLeft(scan) { (acc, pred) =>
+      QuantumPlan.PlanNode.newBuilder()
+        .setFilter(QuantumPlan.FilterNode.newBuilder()
+          .setChild(acc)
+          .setPredicate(pred))
+        .build()
+    }
+
+    val hashAggB = QuantumPlan.HashAggregateNode.newBuilder().setChild(scanWithFilters)
     groupColIndices.foreach(idx => hashAggB.addGroupKeys(aggCol(idx)))
 
     // Project output expressions onto either group-key positions (output names
@@ -270,7 +334,8 @@ object QuantumStrategy {
       localRel.data.iterator.map(_.getLong(c)).toArray
     }
 
-    lastTranslated.set("HashAggregate(" + aggregateExprs.size + " outputs over " + groupColIndices.size + " group keys)")
+    lastTranslated.set("HashAggregate(" + aggregateExprs.size + " outputs over " +
+      groupColIndices.size + " group keys, " + pushedFilters.size + " pushed filters)")
     Some(QuantumExec(
       output         = agg.output,
       inputColumns   = inputCols,
