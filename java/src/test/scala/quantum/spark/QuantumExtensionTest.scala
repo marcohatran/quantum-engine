@@ -353,4 +353,46 @@ class QuantumExtensionTest {
     }
     rmRf(tmpDir)
   }
+
+  /**
+   * Phase 5.10: end-to-end Spark → multi-file Parquet directory. Writes
+   * with 3 partitions so Spark produces 3 part-*.parquet files; the
+   * strategy hands all of them to a native ConcatFileReader through a
+   * single FileScanNode.
+   */
+  @Test
+  def multiFileParquetDirectoryExecutesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = (1 to 100).map(i => ((i % 5).toLong, i.toLong)).toDF("k", "v")
+
+    val tmpDir = java.nio.file.Files.createTempDirectory("quantum_parquet_multi_").toFile
+    val parquetDir = new java.io.File(tmpDir, "data").getAbsolutePath
+    df.repartition(3).write.mode("overwrite").parquet(parquetDir)
+
+    // Sanity: confirm Spark wrote multiple part files.
+    val parts = new java.io.File(parquetDir).listFiles().count(_.getName.endsWith(".parquet"))
+    assertTrue(parts >= 2, s"expected multi-file write, got $parts part files")
+
+    val rows = spark.read.parquet(parquetDir)
+      .groupBy("k").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+      .collect()
+      .map(r => (r.getLong(0), r.getLong(1)))
+      .sortBy(_._1)
+      .toSeq
+
+    // Expected: SUM of i in [1..100] with i % 5 == r, for r in 0..4.
+    val expected = (0 until 5).map { r =>
+      (r.toLong, (1 to 100).filter(_ % 5 == r).map(_.toLong).sum)
+    }
+    assertEquals(expected, rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Multi-file Parquet should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+
+    def rmRf(f: java.io.File): Unit = {
+      if (f.isDirectory) f.listFiles().foreach(rmRf); f.delete()
+    }
+    rmRf(tmpDir)
+  }
 }

@@ -161,10 +161,11 @@ object QuantumStrategy {
         case LogicalRelation(hr: HadoopFsRelation, output, _, _) =>
           hr.fileFormat match {
             case _: ParquetFileFormat =>
-              val paths = hr.location.inputFiles.toSeq
-              if (paths.size != 1) {
-                lastTranslated.set(s"reject: Parquet LogicalRelation has ${paths.size} files; " +
-                  "only single-file Parquet supported in Phase 5.9")
+              // The native ConcatFileReader handles N>=1 part files; the
+              // strategy just needs to hand them all over in stable order.
+              val paths = hr.location.inputFiles.toSeq.sorted
+              if (paths.isEmpty) {
+                lastTranslated.set("reject: Parquet LogicalRelation has no files")
                 None
               } else {
                 val m = output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap

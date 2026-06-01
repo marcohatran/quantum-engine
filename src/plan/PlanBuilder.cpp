@@ -10,6 +10,7 @@
 #include "expression/ColumnRef.hpp"
 #include "expression/LikeExpr.hpp"
 #include "expression/Literal.hpp"
+#include "io/ConcatFileReader.hpp"
 #include "io/DeltaTableReader.hpp"
 #include "io/ParquetReader.hpp"
 #include "operator/AggregateFunction.hpp"
@@ -138,16 +139,19 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
                       "PlanBuilder: FileScanNode has no paths");
             }
             if (n.format == "parquet") {
-                // For multi-file Parquet we chain a sequence of ParquetReaders
-                // through a small concatenating shim. With a single path the
-                // chain collapses to one reader.
+                // Single-path: skip the ConcatFileReader wrapper to keep the
+                // common case allocation-free.
                 if (n.paths.size() == 1) {
                     auto reader = std::make_unique<ParquetReader>(n.paths.front(), mm_);
                     return std::make_unique<FileScanOperator>(mm_, std::move(reader));
                 }
-                raise(ErrorCode::NotImplemented,
-                      "PlanBuilder: multi-file parquet FileScanNode not yet supported "
-                      "(got {} paths)", n.paths.size());
+                std::vector<FileFormatReaderPtr> readers;
+                readers.reserve(n.paths.size());
+                for (const auto& p : n.paths) {
+                    readers.push_back(std::make_unique<ParquetReader>(p, mm_));
+                }
+                auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
+                return std::make_unique<FileScanOperator>(mm_, std::move(concat));
             }
             if (n.format == "delta") {
                 if (n.paths.size() != 1) {
