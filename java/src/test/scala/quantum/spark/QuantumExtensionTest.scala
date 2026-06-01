@@ -395,4 +395,45 @@ class QuantumExtensionTest {
     }
     rmRf(tmpDir)
   }
+
+  /**
+   * Phase 5.11: WHERE pushdown composes with FileScanNode. The predicate
+   * stack should wrap a single FilterNode around the FileScan, identical
+   * to how it wraps a ScanNode for in-memory sources.
+   */
+  @Test
+  def wherePushdownOverParquetFileSource(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (1L, 20L), (2L, 30L), (2L, 40L), (3L, 50L))
+      .toDF("k", "v")
+
+    val tmpDir = java.nio.file.Files.createTempDirectory("quantum_parquet_filt_").toFile
+    val parquetDir = new java.io.File(tmpDir, "data").getAbsolutePath
+    df.coalesce(1).write.mode("overwrite").parquet(parquetDir)
+    val singleFile = new java.io.File(parquetDir).listFiles()
+      .find(_.getName.endsWith(".parquet"))
+      .map(_.getAbsolutePath)
+      .getOrElse(throw new IllegalStateException("no parquet file produced"))
+
+    // WHERE v > 25 -> keeps (2,30), (2,40), (3,50). SUM by k -> (2,70), (3,50).
+    val rows = spark.read.parquet(singleFile)
+      .filter("v > 25")
+      .groupBy("k").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+      .collect()
+      .map(r => (r.getLong(0), r.getLong(1)))
+      .sortBy(_._1)
+      .toSeq
+
+    assertEquals(Seq((2L, 70L), (3L, 50L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 pushed filters")),
+      "Expected 1 pushed filter over FileScan; flag = " +
+        QuantumStrategy.lastTranslation)
+
+    def rmRf(f: java.io.File): Unit = {
+      if (f.isDirectory) f.listFiles().foreach(rmRf); f.delete()
+    }
+    rmRf(tmpDir)
+  }
 }

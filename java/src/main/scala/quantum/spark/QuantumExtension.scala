@@ -1,7 +1,7 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, LessThan, LessThanOrEqual, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
@@ -116,6 +116,27 @@ object QuantumStrategy {
       case other     => Seq(other)
     }
 
+    // When Spark reads from a file source, it wraps user predicates like
+    // `v > 25` in `isnotnull(v) AND v > 25` — the IsNotNull clause helps
+    // parquet skip NULL pages. The native engine's comparison ops already
+    // null-propagate (NULL inputs -> NULL output -> excluded by Filter),
+    // so an IsNotNull(col) conjunct is redundant whenever the same column
+    // appears in any comparison conjunct. Drop those.
+    def stripRedundantIsNotNull(conjuncts: Seq[Expression]): Seq[Expression] = {
+      def comparedCols(e: Expression): Seq[ExprId] = e match {
+        case GreaterThan(l, r) => comparedCols(l) ++ comparedCols(r)
+        case LessThan(l, r)    => comparedCols(l) ++ comparedCols(r)
+        case EqualTo(l, r)     => comparedCols(l) ++ comparedCols(r)
+        case ar: AttributeReference => Seq(ar.exprId)
+        case _ => Seq.empty
+      }
+      val compared: Set[ExprId] = conjuncts.flatMap(comparedCols).toSet
+      conjuncts.filter {
+        case IsNotNull(ar: AttributeReference) => !compared.contains(ar.exprId)
+        case _ => true
+      }
+    }
+
     def translateScalarWith(idMap: Map[ExprId, Int])(e: Expression): Option[QuantumPlan.ScalarExpr] = {
       def binOp(op: QuantumPlan.BinaryOpType, l: Expression, r: Expression) =
         for {
@@ -179,7 +200,7 @@ object QuantumStrategy {
           peel(sa.child)
         case f: Filter =>
           peel(f.child).flatMap { case (src, m, accum) =>
-            val conjs      = flattenAnd(f.condition)
+            val conjs      = stripRedundantIsNotNull(flattenAnd(f.condition))
             val translated = conjs.map(translateScalarWith(m))
             if (translated.exists(_.isEmpty)) {
               lastTranslated.set(s"reject: predicate '${f.condition}' untranslatable " +
