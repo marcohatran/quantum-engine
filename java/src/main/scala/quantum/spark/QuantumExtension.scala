@@ -7,7 +7,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRela
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, IntegerType, LongType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import quantum.plan.proto.QuantumPlan
 
 import java.util.concurrent.atomic.AtomicReference
@@ -161,6 +162,18 @@ object QuantumStrategy {
         case Literal(v: java.lang.Integer, IntegerType) =>
           Some(QuantumPlan.ScalarExpr.newBuilder()
             .setLiteral(QuantumPlan.Literal.newBuilder().setInt64Value(v.longValue))
+            .build())
+        case Literal(v: UTF8String, StringType) =>
+          Some(QuantumPlan.ScalarExpr.newBuilder()
+            .setLiteral(QuantumPlan.Literal.newBuilder().setStringValue(v.toString))
+            .build())
+        case Literal(v: java.lang.Double, DoubleType) =>
+          Some(QuantumPlan.ScalarExpr.newBuilder()
+            .setLiteral(QuantumPlan.Literal.newBuilder().setDoubleValue(v))
+            .build())
+        case Literal(v: java.lang.Boolean, BooleanType) =>
+          Some(QuantumPlan.ScalarExpr.newBuilder()
+            .setLiteral(QuantumPlan.Literal.newBuilder().setBoolValue(v))
             .build())
         case GreaterThan(l, r)        => binOp(QuantumPlan.BinaryOpType.BINOP_GT,  l, r)
         case LessThan(l, r)           => binOp(QuantumPlan.BinaryOpType.BINOP_LT,  l, r)

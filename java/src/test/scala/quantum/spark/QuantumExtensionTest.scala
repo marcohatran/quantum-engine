@@ -397,6 +397,54 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.15: WHERE on a String column with a String literal.
+   * The Catalyst Literal is a UTF8String, not a Java String -- the
+   * translator pattern-matches the underlying value's class.
+   */
+  @Test
+  def whereOnStringLiteralPushesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("apple", 10L), ("banana", 20L), ("apple", 30L),
+      ("cherry", 40L), ("banana", 50L))
+      .toDF("name", "v")
+    df.createOrReplaceTempView("kv_strlit")
+
+    val rows = spark.sql(
+      "SELECT name, SUM(v) AS s FROM kv_strlit WHERE name = 'apple' GROUP BY name")
+      .collect().map(r => (r.getString(0), r.getLong(1))).toSeq
+
+    assertEquals(Seq(("apple", 40L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 pushed filters")),
+      "String literal predicate should push as 1 filter; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /** Phase 5.15: WHERE on String with OR over multiple literals. */
+  @Test
+  def whereOnStringOrPushesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("apple", 10L), ("banana", 20L), ("apple", 30L),
+      ("cherry", 40L), ("banana", 50L))
+      .toDF("name", "v")
+    df.createOrReplaceTempView("kv_str_or")
+
+    val rows = spark.sql(
+      "SELECT name, SUM(v) AS s FROM kv_str_or " +
+      "WHERE name = 'apple' OR name = 'banana' GROUP BY name")
+      .collect().map(r => (r.getString(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq(("apple", 40L), ("banana", 70L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "String OR predicate should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.14: WHERE with OR translates to a single FilterNode whose
    * predicate is a BinaryOp(Or, ...) — chained Filters can't express OR.
    */
