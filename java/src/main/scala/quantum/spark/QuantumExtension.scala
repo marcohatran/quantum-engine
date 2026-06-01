@@ -5,7 +5,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeReference
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
 import quantum.plan.proto.QuantumPlan
 
 import java.util.concurrent.atomic.AtomicReference
@@ -166,10 +166,15 @@ object QuantumStrategy {
         case _ => None
       }
 
+    def isSupportedColType(t: DataType): Boolean = t match {
+      case LongType | StringType => true
+      case _                     => false
+    }
+
     val (localRel, exprIdToCol, pushedFilters) = peel(child) match {
-      case Some(triple) if triple._1.output.forall(_.dataType == LongType) => triple
+      case Some(triple) if triple._1.output.forall(a => isSupportedColType(a.dataType)) => triple
       case Some((lr, _, _)) =>
-        lastTranslated.set(s"reject: LocalRelation has non-Long columns (" +
+        lastTranslated.set(s"reject: LocalRelation has unsupported column types (" +
           lr.output.map(a => s"${a.name}:${a.dataType}").mkString(", ") + ")")
         return None
       case None =>
@@ -178,8 +183,9 @@ object QuantumStrategy {
         return None
     }
 
-    // --- Grouping: each grouping expr must be an AttributeReference (Long)
-    //     resolvable to a LocalRelation column index.
+    // --- Grouping: each grouping expr must be an AttributeReference resolvable
+    //     to a LocalRelation column index. (Type is whatever the LocalRelation
+    //     column declared; the native HashAggregate decides which path to use.)
     val groupColIndices: Seq[Int] = groupingExprs.flatMap {
       case ar: AttributeReference => exprIdToCol.get(ar.exprId)
       case _                      => None
@@ -249,12 +255,18 @@ object QuantumStrategy {
       return None
     }
 
-    // --- Build the proto plan.
+    // --- Build the proto plan. Schema reflects each LocalRelation column's
+    //     actual declared type (Long → TYPE_INT64, String → TYPE_STRING).
+    def protoTypeFor(t: DataType): QuantumPlan.TypeId = t match {
+      case LongType   => QuantumPlan.TypeId.TYPE_INT64
+      case StringType => QuantumPlan.TypeId.TYPE_STRING
+      case other      => throw new IllegalStateException(s"unsupported LR type $other")
+    }
     val schemaB = QuantumPlan.Schema.newBuilder()
     localRel.output.zipWithIndex.foreach { case (a, i) =>
       schemaB.addFields(QuantumPlan.Field.newBuilder()
         .setName(if (a.name.nonEmpty) a.name else s"c$i")
-        .setType(QuantumPlan.TypeId.TYPE_INT64))
+        .setType(protoTypeFor(a.dataType)))
     }
     val schema   = schemaB.build()
     val sourceId = s"quantum_src_${System.nanoTime()}"
@@ -328,10 +340,24 @@ object QuantumStrategy {
     val physicalIndex: Array[Int] = physicalIndexBuilder.toArray
     val _ = (outputNames, groupSlot, groupExprIdToPhysicalIdx) // silence unused
 
-    // --- Marshal all LocalRelation columns to long[]'s in column-major form.
-    val nCols    = localRel.output.size
-    val inputCols: Array[Array[Long]] = Array.tabulate(nCols) { c =>
-      localRel.data.iterator.map(_.getLong(c)).toArray
+    // --- Marshal all LocalRelation columns in column-major form, dispatching
+    //     on each column's declared type.
+    val nCols  = localRel.output.size
+    val data   = localRel.data.toArray
+    val inputCols: Array[InputColumn] = Array.tabulate(nCols) { c =>
+      localRel.output(c).dataType match {
+        case LongType =>
+          LongColumn(data.map(_.getLong(c)))
+        case StringType =>
+          // LocalRelation stores Strings as UTF8String inside InternalRow.
+          // Materialise to Java String for the JNA boundary (the native side
+          // copies into engine-owned storage anyway).
+          StringColumn(data.map { row =>
+            if (row.isNullAt(c)) null else row.getString(c)
+          })
+        case other =>
+          throw new IllegalStateException(s"unsupported LR col type $other")
+      }
     }
 
     lastTranslated.set("HashAggregate(" + aggregateExprs.size + " outputs over " +

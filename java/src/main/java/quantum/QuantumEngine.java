@@ -108,6 +108,57 @@ public final class QuantumEngine {
         return col;
     }
 
+    /**
+     * Build a STRING column from Java String[] (null entries become NULL via
+     * the validity bitmap). Each value's UTF-8 bytes are pinned in a Memory
+     * block whose lifetime extends past q_column_string (the native side
+     * copies into engine-owned storage before returning).
+     */
+    public static Column columnString(Engine e, String[] values) {
+        int n = values.length;
+        // Each row's bytes live in its own Memory so JNA tracks lifetimes
+        // independently; we then pack the pointers into a single Memory.
+        Memory[] perRow = new Memory[n];
+        Memory   ptrs   = new Memory((long) n * Native.POINTER_SIZE);
+        Memory   lens   = new Memory((long) n * Integer.BYTES);
+        byte[]   validity = new byte[n];
+        boolean  anyNull  = false;
+
+        for (int i = 0; i < n; ++i) {
+            String v = values[i];
+            if (v == null) {
+                validity[i] = 0;
+                anyNull = true;
+                perRow[i] = new Memory(1);
+                ptrs.setPointer((long) i * Native.POINTER_SIZE, perRow[i]);
+                lens.setInt((long) i * Integer.BYTES, 0);
+            } else {
+                validity[i] = 1;
+                byte[] utf8 = v.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                Memory m = new Memory(Math.max(1, utf8.length));
+                if (utf8.length > 0) m.write(0, utf8, 0, utf8.length);
+                perRow[i] = m;
+                ptrs.setPointer((long) i * Native.POINTER_SIZE, m);
+                lens.setInt((long) i * Integer.BYTES, utf8.length);
+            }
+        }
+
+        Pointer validityPtr = Pointer.NULL;
+        if (anyNull) {
+            Memory vm = new Memory(n);
+            vm.write(0, validity, 0, n);
+            validityPtr = vm;
+        }
+        Column col = NATIVE.q_column_string(e, ptrs, lens, validityPtr, n);
+        if (col == null) {
+            throw new RuntimeException("q_column_string failed: " + lastError());
+        }
+        // perRow's Memory objects only need to live until q_column_string
+        // returns (it copies into engine-owned StringBuilder storage), so we
+        // can let them be GC'd here.
+        return col;
+    }
+
     /** Build a batch from an array of engine-owned columns (consumed). */
     public static Batch batchNew(Engine e, Column[] cols) {
         Memory mem = new Memory((long) cols.length * Native.POINTER_SIZE);

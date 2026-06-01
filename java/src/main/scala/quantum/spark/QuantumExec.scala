@@ -4,39 +4,37 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.types.{DoubleType, LongType}
+import org.apache.spark.sql.types.{DoubleType, LongType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import quantum.QuantumEngine
+
+/**
+ * One column of input data being handed to the native engine. The native
+ * side has a typed column builder per dataType, so we discriminate on the
+ * Scala side and dispatch to the right `q_column_*` builder.
+ */
+sealed trait InputColumn
+final case class LongColumn(values: Array[Long])     extends InputColumn
+final case class StringColumn(values: Array[String]) extends InputColumn
 
 /**
  * Custom SparkPlan: hands an already-translated PlanNode IR over to the
  * native Quantum Engine via the JNA bridge, returns the results as an RDD
  * of InternalRow back to Spark.
  *
- * Phase 5.5 scope: the input is a pre-extracted column-major dataset of
- * Long values. The plan is a HashAggregate with INT64 group keys and any
- * combination of SUM(int64), MIN(int64), MAX(int64), AVG(int64), and
- * COUNT(*) aggregates. AVG produces a Double output column; everything
- * else is Long.
+ * Phase 5.7 scope: input columns may be Long or String (UTF-8). Output
+ * columns may be Long, Double, or String — dispatch in both directions
+ * is by declared dataType (input via `inputColumns: InputColumn`, output
+ * via `output: Seq[Attribute]`).
  *
  * The native engine emits result columns in the order
  * `[group keys in plan order, aggregates in plan order]`, which doesn't
- * have to match Spark's expected output ordering. The strategy passes a
- * `physicalIndex` array that tells us, for each Spark output column,
- * which native column to pull from.
- *
- * @param output         the projected output attributes (Spark's expected
- *                       ordering — drives type dispatch when reading
- *                       columns out of the result batches)
- * @param inputColumns   column-major Long data — first dim is column
- *                       index in the LocalRelation source, second is row
- * @param sourceId       protobuf scan source_id under which the input
- *                       columns are registered
- * @param planBytes      serialized PlanNode for the native engine
- * @param physicalIndex  output(c) is read from native column physicalIndex(c)
+ * have to match Spark's expected output ordering — `physicalIndex(c)`
+ * tells us which native column to pull for Spark output column `c`.
  */
 case class QuantumExec(
     override val output: Seq[Attribute],
-    inputColumns: Array[Array[Long]],
+    inputColumns: Array[InputColumn],
     sourceId: String,
     planBytes: Array[Byte],
     physicalIndex: Array[Int])
@@ -44,9 +42,6 @@ case class QuantumExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val rows = runNative()
-    // Spark's downstream paths (collect / shuffle / codegen) expect UnsafeRow.
-    // Project our GenericInternalRow rows through UnsafeProjection now so the
-    // RDD carries UnsafeRow elements.
     val proj = UnsafeProjection.create(output, output)
     val unsafe = rows.map(r => proj(r).copy())
     sparkContext.parallelize(unsafe, 1)
@@ -55,8 +50,10 @@ case class QuantumExec(
   private def runNative(): Seq[InternalRow] = {
     val eng = QuantumEngine.createEngine(64L * 1024 * 1024)
     try {
-      val cols = inputColumns.map(c =>
-        QuantumEngine.columnInt64(eng, c, null))
+      val cols: Array[QuantumEngine.Column] = inputColumns.map {
+        case LongColumn(v)   => QuantumEngine.columnInt64(eng, v, null)
+        case StringColumn(v) => QuantumEngine.columnString(eng, v)
+      }
       val batch = QuantumEngine.batchNew(eng, cols)
       QuantumEngine.registerSource(eng, sourceId, Array(batch))
 
@@ -68,8 +65,9 @@ case class QuantumExec(
         while ({ out = QuantumEngine.resultNext(result); out != null }) {
           val nRows = QuantumEngine.batchNumRows(out)
 
-          // Pre-fetch each Spark-output column from its native source column,
-          // dispatching on declared dataType.
+          // Pre-fetch column data once per batch where it's a contiguous
+          // primitive array. For STRING we read row-by-row inside the loop
+          // (no contiguous representation across the JNA boundary).
           val colData = new Array[AnyRef](nOut)
           var c = 0
           while (c < nOut) {
@@ -77,6 +75,7 @@ case class QuantumExec(
             colData(c) = output(c).dataType match {
               case LongType   => QuantumEngine.batchColInt64(out, physCol, nRows)
               case DoubleType => QuantumEngine.batchColFloat64(out, physCol, nRows)
+              case StringType => null  // sentinel: read per-row via batchColStringAt
               case other      =>
                 throw new RuntimeException(
                   s"QuantumExec: unsupported output type $other for column ${output(c).name}")
@@ -94,11 +93,16 @@ case class QuantumExec(
               if (output(ci).nullable && !isValid) {
                 values(ci) = null
               } else {
-                values(ci) = colData(ci) match {
-                  case arr: Array[Long]   => (arr(r.toInt): java.lang.Long)
-                  case arr: Array[Double] => (arr(r.toInt): java.lang.Double)
+                values(ci) = output(ci).dataType match {
+                  case LongType =>
+                    (colData(ci).asInstanceOf[Array[Long]](r.toInt): java.lang.Long)
+                  case DoubleType =>
+                    (colData(ci).asInstanceOf[Array[Double]](r.toInt): java.lang.Double)
+                  case StringType =>
+                    val s = QuantumEngine.batchColStringAt(out, physCol, r.toLong)
+                    if (s == null) null else UTF8String.fromString(s)
                   case other =>
-                    throw new RuntimeException(s"QuantumExec: bad colData $other")
+                    throw new RuntimeException(s"QuantumExec: bad output type $other")
                 }
               }
               ci += 1

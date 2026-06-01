@@ -244,4 +244,68 @@ class QuantumExtensionTest {
       "WHERE v>15 AND k<4 should flatten to 2 pushed filters; flag = " +
         QuantumStrategy.lastTranslation)
   }
+
+  /**
+   * Phase 5.7: GROUP BY String. Exercises the native StringFastPath /
+   * VarBytesHashTable depending on the engine's String agg path selection.
+   */
+  @Test
+  def stringGroupByExecutesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("apple",  10L),
+      ("banana", 20L),
+      ("apple",  30L),
+      ("cherry", 40L),
+      ("banana", 50L),
+      ("apple",  60L)
+    ).toDF("name", "v")
+    df.createOrReplaceTempView("kv_str")
+
+    val rows = spark.sql(
+      "SELECT name, SUM(v) AS s, COUNT(*) AS n FROM kv_str GROUP BY name")
+      .collect()
+      .map(r => (r.getString(0), r.getLong(1), r.getLong(2)))
+      .sortBy(_._1)
+      .toSeq
+
+    assertEquals(Seq(
+      ("apple",  100L, 3L),
+      ("banana",  70L, 2L),
+      ("cherry",  40L, 1L)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "String GROUP BY should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /** Phase 5.7: GROUP BY (String, Long) — composite key with mixed types. */
+  @Test
+  def mixedStringAndLongGroupBy(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("a", 1L, 10L), ("a", 1L, 20L),
+      ("a", 2L, 30L),
+      ("b", 1L, 40L), ("b", 1L, 50L)
+    ).toDF("name", "k2", "v")
+    df.createOrReplaceTempView("kv_mix")
+
+    val rows = spark.sql(
+      "SELECT name, k2, SUM(v) FROM kv_mix GROUP BY name, k2")
+      .collect()
+      .map(r => (r.getString(0), r.getLong(1), r.getLong(2)))
+      .sortBy(t => (t._1, t._2))
+      .toSeq
+
+    assertEquals(Seq(
+      ("a", 1L, 30L),
+      ("a", 2L, 30L),
+      ("b", 1L, 90L)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Mixed-type GROUP BY should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
 }
