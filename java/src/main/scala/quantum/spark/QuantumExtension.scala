@@ -162,10 +162,11 @@ object QuantumStrategy {
           Some(QuantumPlan.ScalarExpr.newBuilder()
             .setLiteral(QuantumPlan.Literal.newBuilder().setInt64Value(v.longValue))
             .build())
-        case GreaterThan(l, r) => binOp(QuantumPlan.BinaryOpType.BINOP_GT, l, r)
-        case LessThan(l, r)    => binOp(QuantumPlan.BinaryOpType.BINOP_LT, l, r)
-        case EqualTo(l, r)     => binOp(QuantumPlan.BinaryOpType.BINOP_EQ, l, r)
-        case _: GreaterThanOrEqual | _: LessThanOrEqual => None
+        case GreaterThan(l, r)        => binOp(QuantumPlan.BinaryOpType.BINOP_GT,  l, r)
+        case LessThan(l, r)           => binOp(QuantumPlan.BinaryOpType.BINOP_LT,  l, r)
+        case EqualTo(l, r)            => binOp(QuantumPlan.BinaryOpType.BINOP_EQ,  l, r)
+        case GreaterThanOrEqual(l, r) => binOp(QuantumPlan.BinaryOpType.BINOP_GTE, l, r)
+        case LessThanOrEqual(l, r)    => binOp(QuantumPlan.BinaryOpType.BINOP_LTE, l, r)
         case _ => None
       }
     }

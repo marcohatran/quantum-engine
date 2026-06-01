@@ -5,7 +5,7 @@
 
 namespace quantum::kernels {
 
-enum class CmpOp { Eq, Lt, Gt };
+enum class CmpOp { Eq, Lt, Gt, Lte, Gte };
 
 // Element-wise comparison. Output is a BOOL ColumnVector storing one
 // uint8_t per row (1/0). Inactive slots are left undefined and invalid.

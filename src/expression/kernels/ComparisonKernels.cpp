@@ -12,9 +12,11 @@ namespace {
 
 template <typename T, CmpOp Op>
 inline uint8_t cmp(T a, T b) {
-    if constexpr (Op == CmpOp::Eq) return a == b ? 1U : 0U;
-    else if constexpr (Op == CmpOp::Lt) return a <  b ? 1U : 0U;
-    else /* Gt */                       return a >  b ? 1U : 0U;
+    if constexpr (Op == CmpOp::Eq)       return a == b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Lt)  return a <  b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Gt)  return a >  b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Lte) return a <= b ? 1U : 0U;
+    else /* Gte */                       return a >= b ? 1U : 0U;
 }
 
 template <typename T, CmpOp Op>
@@ -42,9 +44,11 @@ void run(const ColumnVector& lhs, const ColumnVector& rhs,
 
 template <CmpOp Op>
 inline uint8_t cmpString(std::string_view a, std::string_view b) {
-    if constexpr (Op == CmpOp::Eq) return a == b ? 1U : 0U;
-    else if constexpr (Op == CmpOp::Lt) return a <  b ? 1U : 0U;
-    else /* Gt */                       return a >  b ? 1U : 0U;
+    if constexpr (Op == CmpOp::Eq)       return a == b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Lt)  return a <  b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Gt)  return a >  b ? 1U : 0U;
+    else if constexpr (Op == CmpOp::Lte) return a <= b ? 1U : 0U;
+    else /* Gte */                       return a >= b ? 1U : 0U;
 }
 
 // Fast path for STRING equality when both sides are dict-encoded. Precompute
@@ -152,9 +156,11 @@ ColumnVector applyComparison(CmpOp op, DataType operandType,
                              const ColumnVector& lhs, const ColumnVector& rhs,
                              const PositionList& pos, MemoryManager* mm) {
     switch (op) {
-        case CmpOp::Eq: return dispatch<CmpOp::Eq>(operandType, lhs, rhs, pos, mm);
-        case CmpOp::Lt: return dispatch<CmpOp::Lt>(operandType, lhs, rhs, pos, mm);
-        case CmpOp::Gt: return dispatch<CmpOp::Gt>(operandType, lhs, rhs, pos, mm);
+        case CmpOp::Eq:  return dispatch<CmpOp::Eq> (operandType, lhs, rhs, pos, mm);
+        case CmpOp::Lt:  return dispatch<CmpOp::Lt> (operandType, lhs, rhs, pos, mm);
+        case CmpOp::Gt:  return dispatch<CmpOp::Gt> (operandType, lhs, rhs, pos, mm);
+        case CmpOp::Lte: return dispatch<CmpOp::Lte>(operandType, lhs, rhs, pos, mm);
+        case CmpOp::Gte: return dispatch<CmpOp::Gte>(operandType, lhs, rhs, pos, mm);
     }
     raise(ErrorCode::Internal, "ComparisonKernel: unknown op");
 }

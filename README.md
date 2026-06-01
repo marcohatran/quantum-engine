@@ -59,8 +59,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Spark → file-source end-to-end (`quantum.spark.QuantumStrategy`)** — strategy now peels through `LogicalRelation(HadoopFsRelation(ParquetFileFormat, …))` in addition to `LocalRelation`. For Parquet relations, the strategy extracts the file paths from `HadoopFsRelation.location.inputFiles` and emits a `FileScanNode` in the plan instead of marshalling row data. `QuantumExec` skips source registration when the input column list is empty — the engine reads the file on its own. The introduced `DataSource` sealed trait (`InMemorySource` | `FileSource`) keeps the two cases distinguishable in one place. A `spark.read.parquet("/path").groupBy("k").agg(sum("v"))` now runs natively without ever marshalling row data through JNA.
 - **Multi-file Parquet (`src/io/ConcatFileReader.hpp`)** — generic `FileFormatReader` shim that chains a sequence of underlying readers, opening each lazily and closing it before advancing. `PlanBuilder` uses it for `FileScanNode { paths: [N >= 2], format: "parquet" }` — each path becomes its own `ParquetReader` and `ConcatFileReader` yields batches across them in order. Single-path FileScans still go through a bare `ParquetReader` to keep the common case allocation-free. The Spark strategy now passes all of `HadoopFsRelation.location.inputFiles` (in sorted order) instead of declining on the multi-file case, so `spark.read.parquet("dir")` over an N-partition write routes natively.
 - **WHERE pushdown over FileScan (`quantum.spark.QuantumStrategy`)** — the predicate stack already composes with `FileScanNode`s (FilterNode wraps any child including FileScans), so `spark.read.parquet(path).filter("v > 25").groupBy("k").sum("v")` translates as `HashAgg(Filter(v > 25, FileScan))`. Spark's optimizer wraps user predicates over file sources in an extra `isnotnull(col)` clause (helps parquet skip NULL pages); the strategy now strips a redundant `IsNotNull(col)` conjunct whenever the same column appears in a comparison conjunct, because the native engine's comparison ops already null-propagate (NULL → NULL → excluded by Filter).
+- **GTE / LTE comparison ops (`BinaryOp::Gte`, `BinaryOp::Lte`)** — `BinaryOp` and `kernels::CmpOp` enums extended; comparison kernels handle the two new ops for INT32 / INT64 / FLOAT64 / BOOL / STRING; plan IR variant + proto enum (`BINOP_GTE` / `BINOP_LTE`); PlanBuilder + PlanProto encode / decode round-trips. Spark strategy now translates `GreaterThanOrEqual` / `LessThanOrEqual` directly (previously made the strategy decline).
 
-**Tests & benchmarks** — 171 C++ tests + 16 JVM tests. New since previous slice: JVM `wherePushdownOverParquetFileSource` verifies `spark.read.parquet(...).filter("v > 25").groupBy("k").sum("v")` routes as one pushed FilterNode + FileScan + HashAgg, all native.
+**Tests & benchmarks** — 173 C++ tests + 17 JVM tests. New since previous slice: C++ `BinaryExpr.GteAgainstLiteralInt64` / `LteAgainstLiteralInt64`; JVM `gteAndLtePredicatesPushDownNatively` runs `WHERE k >= 2 AND v <= 40 GROUP BY k` and verifies both predicates push.
 
 ## Build & Test
 
@@ -139,7 +140,9 @@ Key invariants the codebase enforces:
 | **5** | Spark: `LogicalRelation(HadoopFsRelation)` for Parquet → `FileScanNode` end-to-end | done |
 | **5** | Multi-file Parquet directory → `ConcatFileReader` chains `ParquetReader`s end-to-end | done |
 | **5** | Spark: WHERE pushdown composes with FileScan (and redundant `IsNotNull` stripping) | done |
+| **5** | Native + Spark: `Gte` / `Lte` comparison ops (kernels, plan IR, proto, translator) | done |
 | 5 | Spark: DeltaTable → `FileScanNode(format="delta")` end-to-end | planned |
+| 5 | Native + Spark: `Or` / `Not` (needs OR-aware Filter rep — chained Filters only express AND) | planned |
 | 5 | Spark: WHERE on String / Int / Double; GTE / LTE / OR / NOT (needs new BinaryOp / UnaryOp kinds) | planned |
 | 5 | Spark: `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |

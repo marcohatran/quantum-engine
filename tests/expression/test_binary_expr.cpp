@@ -94,3 +94,31 @@ TEST(BinaryExpr, StringEqAndLtAndGt) {
     checkOp(BinaryOp::Lt, "banana", {1, 0, 0});  // "apple" < "banana" only
     checkOp(BinaryOp::Gt, "banana", {0, 0, 1});  // "cherry" > "banana" only
 }
+
+TEST(BinaryExpr, GteAgainstLiteralInt64) {
+    MemoryManager mm(16 * 1024);
+    auto batch = twoIntColumns(mm, 8);
+    BinaryExpr gte(BinaryOp::Gte,
+                   std::make_unique<ColumnRef>(0),
+                   std::make_unique<Literal>(int64_t{3}));
+    auto result = gte.eval(batch, &mm);
+    ASSERT_EQ(result.type(), Bool);
+    auto* p = result.typed<uint8_t>();
+    for (size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(p[i] != 0, i >= 3) << "i=" << i;
+    }
+}
+
+TEST(BinaryExpr, LteAgainstLiteralInt64) {
+    MemoryManager mm(16 * 1024);
+    auto batch = twoIntColumns(mm, 8);
+    BinaryExpr lte(BinaryOp::Lte,
+                   std::make_unique<ColumnRef>(0),
+                   std::make_unique<Literal>(int64_t{3}));
+    auto result = lte.eval(batch, &mm);
+    ASSERT_EQ(result.type(), Bool);
+    auto* p = result.typed<uint8_t>();
+    for (size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(p[i] != 0, i <= 3) << "i=" << i;
+    }
+}

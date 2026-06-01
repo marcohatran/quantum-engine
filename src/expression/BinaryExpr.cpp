@@ -18,6 +18,8 @@ const char* opName(BinaryOp op) noexcept {
         case BinaryOp::Eq:  return "=";
         case BinaryOp::Lt:  return "<";
         case BinaryOp::Gt:  return ">";
+        case BinaryOp::Lte: return "<=";
+        case BinaryOp::Gte: return ">=";
     }
     return "?";
 }
@@ -33,9 +35,11 @@ kernels::ArithOp toArith(BinaryOp op) {
 
 kernels::CmpOp toCmp(BinaryOp op) {
     switch (op) {
-        case BinaryOp::Eq: return kernels::CmpOp::Eq;
-        case BinaryOp::Lt: return kernels::CmpOp::Lt;
-        case BinaryOp::Gt: return kernels::CmpOp::Gt;
+        case BinaryOp::Eq:  return kernels::CmpOp::Eq;
+        case BinaryOp::Lt:  return kernels::CmpOp::Lt;
+        case BinaryOp::Gt:  return kernels::CmpOp::Gt;
+        case BinaryOp::Lte: return kernels::CmpOp::Lte;
+        case BinaryOp::Gte: return kernels::CmpOp::Gte;
         default: raise(ErrorCode::Internal, "BinaryExpr: not a comparison op");
     }
 }

@@ -70,6 +70,8 @@ proto::BinaryOpType encodeBinOp(BinaryOpType op) {
         case BinaryOpType::Eq:  return proto::BINOP_EQ;
         case BinaryOpType::Lt:  return proto::BINOP_LT;
         case BinaryOpType::Gt:  return proto::BINOP_GT;
+        case BinaryOpType::Lte: return proto::BINOP_LTE;
+        case BinaryOpType::Gte: return proto::BINOP_GTE;
     }
     raise(ErrorCode::Internal, "PlanProto: unknown BinaryOpType");
 }
@@ -82,6 +84,8 @@ BinaryOpType decodeBinOp(proto::BinaryOpType op) {
         case proto::BINOP_EQ:  return BinaryOpType::Eq;
         case proto::BINOP_LT:  return BinaryOpType::Lt;
         case proto::BINOP_GT:  return BinaryOpType::Gt;
+        case proto::BINOP_LTE: return BinaryOpType::Lte;
+        case proto::BINOP_GTE: return BinaryOpType::Gte;
         default: raise(ErrorCode::InvalidArgument, "PlanProto: unknown proto BinaryOpType");
     }
 }

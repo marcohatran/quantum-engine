@@ -397,6 +397,32 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.12: GTE / LTE predicates translate natively. Native engine
+   * gained BinaryOp::Gte/Lte (proto BINOP_GTE/BINOP_LTE), so Catalyst's
+   * GreaterThanOrEqual / LessThanOrEqual no longer make the strategy
+   * decline.
+   */
+  @Test
+  def gteAndLtePredicatesPushDownNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_gte")
+
+    // WHERE k >= 2 AND v <= 40  ->  keeps k in {2, 3, 4}.
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_gte WHERE k >= 2 AND v <= 40 GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((2L, 20L), (3L, 30L), (4L, 40L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("2 pushed filters")),
+      "Expected k>=2 AND v<=40 to push 2 filters; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.11: WHERE pushdown composes with FileScanNode. The predicate
    * stack should wrap a single FilterNode around the FileScan, identical
    * to how it wraps a ScanNode for in-memory sources.
