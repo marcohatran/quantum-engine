@@ -396,6 +396,38 @@ class QuantumExtensionTest {
     rmRf(tmpDir)
   }
 
+  /**
+   * Phase 5.22: Inner equi-join between two LocalRelations, then GROUP BY
+   * on a join-key column. The strategy emits `HashAggregate(HashJoin(scan_A,
+   * scan_B, build_keys=[A.k], probe_keys=[B.k]))`. Each LocalRelation gets
+   * its own sourceId and is registered separately with the engine.
+   */
+  @Test
+  def innerJoinThenGroupBy(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, "apple"), (2L, "banana"), (3L, "cherry")).toDF("k", "name")
+    val b = Seq((1L, 10L), (1L, 20L), (2L, 30L), (3L, 40L), (3L, 50L)).toDF("k", "v")
+    a.createOrReplaceTempView("a")
+    b.createOrReplaceTempView("b")
+
+    val rows = spark.sql(
+      """SELECT a.k, SUM(b.v) AS s, COUNT(*) AS n
+        |  FROM a JOIN b ON a.k = b.k
+        | GROUP BY a.k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1), r.getLong(2))).sortBy(_._1).toSeq
+
+    assertEquals(Seq(
+      (1L, 30L,  2L),
+      (2L, 30L,  1L),
+      (3L, 90L,  2L)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("2 sources")),
+      "Inner join should produce 2 sources; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
   /** Phase 5.21: WHERE col IS NULL pushes natively. */
   @Test
   def whereIsNullPushesNatively(): Unit = {

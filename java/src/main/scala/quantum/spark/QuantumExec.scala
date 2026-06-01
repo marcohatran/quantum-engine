@@ -37,10 +37,15 @@ final case class StringColumn(values: Array[String])                           e
  * have to match Spark's expected output ordering — `physicalIndex(c)`
  * tells us which native column to pull for Spark output column `c`.
  */
+/**
+ * @param sources       in-memory sources to register before executing the
+ *                      plan. Each entry is `(sourceId, columns)`. The
+ *                      planBytes' ScanNodes look up these sourceIds. For
+ *                      a pure FileScan plan the seq may be empty.
+ */
 case class QuantumExec(
     override val output: Seq[Attribute],
-    inputColumns: Array[InputColumn],
-    sourceId: String,
+    sources: Seq[(String, Array[InputColumn])],
     planBytes: Array[Byte],
     physicalIndex: Array[Int])
   extends LeafExecNode {
@@ -55,15 +60,16 @@ case class QuantumExec(
   private def runNative(): Seq[InternalRow] = {
     val eng = QuantumEngine.createEngine(64L * 1024 * 1024)
     try {
-      // File-source plans need no source registration — the FileScanNode in
-      // the plan tells the engine to open the file itself. In-memory plans
-      // pack the data into a single Batch and register it under sourceId.
-      if (inputColumns.nonEmpty) {
-        val cols: Array[QuantumEngine.Column] = inputColumns.map {
+      // Each registered source (one per LocalRelation in the plan) becomes
+      // a single Batch of column-major data. File-source plans (Parquet /
+      // Delta / partitioned) have an empty `sources` list — the
+      // FileScanNode in the plan handles its own I/O.
+      sources.foreach { case (sourceId, cols) =>
+        val builtCols: Array[QuantumEngine.Column] = cols.map {
           case LongColumn(v, va) => QuantumEngine.columnInt64(eng, v, va)
           case StringColumn(v)   => QuantumEngine.columnString(eng, v)
         }
-        val batch = QuantumEngine.batchNew(eng, cols)
+        val batch = QuantumEngine.batchNew(eng, builtCols)
         QuantumEngine.registerSource(eng, sourceId, Array(batch))
       }
 
