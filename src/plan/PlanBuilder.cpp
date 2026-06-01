@@ -10,6 +10,7 @@
 #include "expression/ColumnRef.hpp"
 #include "expression/LikeExpr.hpp"
 #include "expression/Literal.hpp"
+#include "expression/UnaryExpr.hpp"
 #include "io/ConcatFileReader.hpp"
 #include "io/DeltaTableReader.hpp"
 #include "io/ParquetReader.hpp"
@@ -123,6 +124,9 @@ ExpressionPtr PlanBuilder::buildExpr(const ScalarExpr& expr) {
         } else if constexpr (std::is_same_v<T, std::unique_ptr<LikeOpExpr>>) {
             return std::make_unique<LikeExpr>(
                 buildExpr(e->input), e->pattern);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<UnaryOpExpr>>) {
+            // Only Not is defined today.
+            return std::make_unique<UnaryExpr>(UnaryOp::Not, buildExpr(e->input));
         }
     }, expr);
 }

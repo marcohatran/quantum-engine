@@ -1,7 +1,7 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
@@ -197,6 +197,14 @@ object QuantumStrategy {
         // an OR — `(a > 1 AND b > 2) OR c > 3` — we keep it as one ScalarExpr.
         case And(l, r)                => binOp(QuantumPlan.BinaryOpType.BINOP_AND, l, r)
         case Or(l, r)                 => binOp(QuantumPlan.BinaryOpType.BINOP_OR,  l, r)
+        case Not(child) =>
+          translateScalarWith(idMap)(child).map { c =>
+            QuantumPlan.ScalarExpr.newBuilder()
+              .setUnary(QuantumPlan.UnaryOp.newBuilder()
+                .setOp(QuantumPlan.UnaryOpType.UNOP_NOT)
+                .setInput(c))
+              .build()
+          }
         case _ => None
       }
     }

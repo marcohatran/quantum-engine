@@ -397,6 +397,31 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.19: WHERE NOT (predicate) translates as UnaryOp::Not wrapping
+   * the child. Spark's optimizer may rewrite NOT(=) to !=, so we use a
+   * predicate (NOT (k > 2)) that Catalyst can't trivially simplify away.
+   */
+  @Test
+  def whereNotPushesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L))
+      .toDF("k", "v")
+    df.createOrReplaceTempView("kv_not")
+
+    // WHERE NOT (k > 2)  ->  keeps k in {1, 2}.
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_not WHERE NOT (k > 2) GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 10L), (2L, 20L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 pushed filters")),
+      "NOT predicate should push as 1 filter; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.15: WHERE on a String column with a String literal.
    * The Catalyst Literal is a UTF8String, not a Java String -- the
    * translator pattern-matches the underlying value's class.

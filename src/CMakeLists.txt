@@ -18,6 +18,7 @@ add_library(quantum_core SHARED
     expression/ColumnRef.cpp
     expression/BinaryExpr.cpp
     expression/LikeExpr.cpp
+    expression/UnaryExpr.cpp
     expression/kernels/ArithmeticKernels.cpp
     expression/kernels/ComparisonKernels.cpp
     expression/kernels/LogicalKernels.cpp

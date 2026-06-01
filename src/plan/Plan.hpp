@@ -30,15 +30,18 @@ struct ColumnRefExpr {
 
 struct BinaryOpExpr;
 struct LikeOpExpr;
+struct UnaryOpExpr;
 
 using ScalarExpr = std::variant<
     LiteralExpr,
     ColumnRefExpr,
     std::unique_ptr<BinaryOpExpr>,
-    std::unique_ptr<LikeOpExpr>
+    std::unique_ptr<LikeOpExpr>,
+    std::unique_ptr<UnaryOpExpr>
 >;
 
 enum class BinaryOpType { Add, Sub, Mul, Eq, Lt, Gt, Lte, Gte, And, Or };
+enum class UnaryOpType  { Not };
 
 struct BinaryOpExpr {
     BinaryOpType op;
@@ -49,6 +52,11 @@ struct BinaryOpExpr {
 struct LikeOpExpr {
     ScalarExpr  input;
     std::string pattern;
+};
+
+struct UnaryOpExpr {
+    UnaryOpType op;
+    ScalarExpr  input;
 };
 
 // ============================================================================

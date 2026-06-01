@@ -69,12 +69,22 @@ message LikeOp {
   string     pattern = 2;
 }
 
+enum UnaryOpType {
+  UNOP_NOT = 0;
+}
+
+message UnaryOp {
+  UnaryOpType op    = 1;
+  ScalarExpr  input = 2;
+}
+
 message ScalarExpr {
   oneof expr {
     Literal   literal    = 1;
     ColumnRef column_ref = 2;
     BinaryOp  binary     = 3;
     LikeOp    like       = 4;
+    UnaryOp   unary      = 5;
   }
 }
 

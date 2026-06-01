@@ -360,6 +360,114 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
   }
 
   /**
+   * Protobuf enum {@code quantum.plan.proto.UnaryOpType}
+   */
+  public enum UnaryOpType
+      implements com.google.protobuf.ProtocolMessageEnum {
+    /**
+     * <code>UNOP_NOT = 0;</code>
+     */
+    UNOP_NOT(0),
+    UNRECOGNIZED(-1),
+    ;
+
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "UnaryOpType");
+    }
+    /**
+     * <code>UNOP_NOT = 0;</code>
+     */
+    public static final int UNOP_NOT_VALUE = 0;
+
+
+    public final int getNumber() {
+      if (this == UNRECOGNIZED) {
+        throw new java.lang.IllegalArgumentException(
+            "Can't get the number of an unknown enum value.");
+      }
+      return value;
+    }
+
+    /**
+     * @param value The numeric wire value of the corresponding enum entry.
+     * @return The enum associated with the given numeric wire value.
+     * @deprecated Use {@link #forNumber(int)} instead.
+     */
+    @java.lang.Deprecated
+    public static UnaryOpType valueOf(int value) {
+      return forNumber(value);
+    }
+
+    /**
+     * @param value The numeric wire value of the corresponding enum entry.
+     * @return The enum associated with the given numeric wire value.
+     */
+    public static UnaryOpType forNumber(int value) {
+      switch (value) {
+        case 0: return UNOP_NOT;
+        default: return null;
+      }
+    }
+
+    public static com.google.protobuf.Internal.EnumLiteMap<UnaryOpType>
+        internalGetValueMap() {
+      return internalValueMap;
+    }
+    private static final com.google.protobuf.Internal.EnumLiteMap<
+        UnaryOpType> internalValueMap =
+          new com.google.protobuf.Internal.EnumLiteMap<UnaryOpType>() {
+            public UnaryOpType findValueByNumber(int number) {
+              return UnaryOpType.forNumber(number);
+            }
+          };
+
+    public final com.google.protobuf.Descriptors.EnumValueDescriptor
+        getValueDescriptor() {
+      if (this == UNRECOGNIZED) {
+        throw new java.lang.IllegalStateException(
+            "Can't get the descriptor of an unrecognized enum value.");
+      }
+      return getDescriptor().getValues().get(ordinal());
+    }
+    public final com.google.protobuf.Descriptors.EnumDescriptor
+        getDescriptorForType() {
+      return getDescriptor();
+    }
+    public static com.google.protobuf.Descriptors.EnumDescriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.getDescriptor().getEnumTypes().get(2);
+    }
+
+    private static final UnaryOpType[] VALUES = values();
+
+    public static UnaryOpType valueOf(
+        com.google.protobuf.Descriptors.EnumValueDescriptor desc) {
+      if (desc.getType() != getDescriptor()) {
+        throw new java.lang.IllegalArgumentException(
+          "EnumValueDescriptor is not for this type.");
+      }
+      if (desc.getIndex() == -1) {
+        return UNRECOGNIZED;
+      }
+      return VALUES[desc.getIndex()];
+    }
+
+    private final int value;
+
+    private UnaryOpType(int value) {
+      this.value = value;
+    }
+
+    // @@protoc_insertion_point(enum_scope:quantum.plan.proto.UnaryOpType)
+  }
+
+  /**
    * Protobuf enum {@code quantum.plan.proto.AggregateKind}
    */
   public enum AggregateKind
@@ -477,7 +585,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     }
     public static com.google.protobuf.Descriptors.EnumDescriptor
         getDescriptor() {
-      return quantum.plan.proto.QuantumPlan.getDescriptor().getEnumTypes().get(2);
+      return quantum.plan.proto.QuantumPlan.getDescriptor().getEnumTypes().get(3);
     }
 
     private static final AggregateKind[] VALUES = values();
@@ -612,7 +720,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     }
     public static com.google.protobuf.Descriptors.EnumDescriptor
         getDescriptor() {
-      return quantum.plan.proto.QuantumPlan.getDescriptor().getEnumTypes().get(3);
+      return quantum.plan.proto.QuantumPlan.getDescriptor().getEnumTypes().get(4);
     }
 
     private static final JoinType[] VALUES = values();
@@ -4955,6 +5063,679 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
 
   }
 
+  public interface UnaryOpOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:quantum.plan.proto.UnaryOp)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+     * @return The enum numeric value on the wire for op.
+     */
+    int getOpValue();
+    /**
+     * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+     * @return The op.
+     */
+    quantum.plan.proto.QuantumPlan.UnaryOpType getOp();
+
+    /**
+     * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+     * @return Whether the input field is set.
+     */
+    boolean hasInput();
+    /**
+     * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+     * @return The input.
+     */
+    quantum.plan.proto.QuantumPlan.ScalarExpr getInput();
+    /**
+     * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+     */
+    quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder getInputOrBuilder();
+  }
+  /**
+   * Protobuf type {@code quantum.plan.proto.UnaryOp}
+   */
+  public static final class UnaryOp extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:quantum.plan.proto.UnaryOp)
+      UnaryOpOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "UnaryOp");
+    }
+    // Use UnaryOp.newBuilder() to construct.
+    private UnaryOp(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private UnaryOp() {
+      op_ = 0;
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_UnaryOp_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_UnaryOp_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              quantum.plan.proto.QuantumPlan.UnaryOp.class, quantum.plan.proto.QuantumPlan.UnaryOp.Builder.class);
+    }
+
+    private int bitField0_;
+    public static final int OP_FIELD_NUMBER = 1;
+    private int op_ = 0;
+    /**
+     * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+     * @return The enum numeric value on the wire for op.
+     */
+    @java.lang.Override public int getOpValue() {
+      return op_;
+    }
+    /**
+     * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+     * @return The op.
+     */
+    @java.lang.Override public quantum.plan.proto.QuantumPlan.UnaryOpType getOp() {
+      quantum.plan.proto.QuantumPlan.UnaryOpType result = quantum.plan.proto.QuantumPlan.UnaryOpType.forNumber(op_);
+      return result == null ? quantum.plan.proto.QuantumPlan.UnaryOpType.UNRECOGNIZED : result;
+    }
+
+    public static final int INPUT_FIELD_NUMBER = 2;
+    private quantum.plan.proto.QuantumPlan.ScalarExpr input_;
+    /**
+     * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+     * @return Whether the input field is set.
+     */
+    @java.lang.Override
+    public boolean hasInput() {
+      return ((bitField0_ & 0x00000001) != 0);
+    }
+    /**
+     * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+     * @return The input.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ScalarExpr getInput() {
+      return input_ == null ? quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance() : input_;
+    }
+    /**
+     * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder getInputOrBuilder() {
+      return input_ == null ? quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance() : input_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (op_ != quantum.plan.proto.QuantumPlan.UnaryOpType.UNOP_NOT.getNumber()) {
+        output.writeEnum(1, op_);
+      }
+      if (((bitField0_ & 0x00000001) != 0)) {
+        output.writeMessage(2, getInput());
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (op_ != quantum.plan.proto.QuantumPlan.UnaryOpType.UNOP_NOT.getNumber()) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeEnumSize(1, op_);
+      }
+      if (((bitField0_ & 0x00000001) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, getInput());
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof quantum.plan.proto.QuantumPlan.UnaryOp)) {
+        return super.equals(obj);
+      }
+      quantum.plan.proto.QuantumPlan.UnaryOp other = (quantum.plan.proto.QuantumPlan.UnaryOp) obj;
+
+      if (op_ != other.op_) return false;
+      if (hasInput() != other.hasInput()) return false;
+      if (hasInput()) {
+        if (!getInput()
+            .equals(other.getInput())) return false;
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + OP_FIELD_NUMBER;
+      hash = (53 * hash) + op_;
+      if (hasInput()) {
+        hash = (37 * hash) + INPUT_FIELD_NUMBER;
+        hash = (53 * hash) + getInput().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.UnaryOp parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(quantum.plan.proto.QuantumPlan.UnaryOp prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code quantum.plan.proto.UnaryOp}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:quantum.plan.proto.UnaryOp)
+        quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_UnaryOp_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_UnaryOp_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                quantum.plan.proto.QuantumPlan.UnaryOp.class, quantum.plan.proto.QuantumPlan.UnaryOp.Builder.class);
+      }
+
+      // Construct using quantum.plan.proto.QuantumPlan.UnaryOp.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage
+                .alwaysUseFieldBuilders) {
+          internalGetInputFieldBuilder();
+        }
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        op_ = 0;
+        input_ = null;
+        if (inputBuilder_ != null) {
+          inputBuilder_.dispose();
+          inputBuilder_ = null;
+        }
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_UnaryOp_descriptor;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.UnaryOp getDefaultInstanceForType() {
+        return quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.UnaryOp build() {
+        quantum.plan.proto.QuantumPlan.UnaryOp result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.UnaryOp buildPartial() {
+        quantum.plan.proto.QuantumPlan.UnaryOp result = new quantum.plan.proto.QuantumPlan.UnaryOp(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(quantum.plan.proto.QuantumPlan.UnaryOp result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.op_ = op_;
+        }
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.input_ = inputBuilder_ == null
+              ? input_
+              : inputBuilder_.build();
+          to_bitField0_ |= 0x00000001;
+        }
+        result.bitField0_ |= to_bitField0_;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof quantum.plan.proto.QuantumPlan.UnaryOp) {
+          return mergeFrom((quantum.plan.proto.QuantumPlan.UnaryOp)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(quantum.plan.proto.QuantumPlan.UnaryOp other) {
+        if (other == quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance()) return this;
+        if (other.op_ != 0) {
+          setOpValue(other.getOpValue());
+        }
+        if (other.hasInput()) {
+          mergeInput(other.getInput());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+                op_ = input.readEnum();
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 8
+              case 18: {
+                input.readMessage(
+                    internalGetInputFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00000002;
+                break;
+              } // case 18
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private int op_ = 0;
+      /**
+       * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+       * @return The enum numeric value on the wire for op.
+       */
+      @java.lang.Override public int getOpValue() {
+        return op_;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+       * @param value The enum numeric value on the wire for op to set.
+       * @return This builder for chaining.
+       */
+      public Builder setOpValue(int value) {
+        op_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+       * @return The op.
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.UnaryOpType getOp() {
+        quantum.plan.proto.QuantumPlan.UnaryOpType result = quantum.plan.proto.QuantumPlan.UnaryOpType.forNumber(op_);
+        return result == null ? quantum.plan.proto.QuantumPlan.UnaryOpType.UNRECOGNIZED : result;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+       * @param value The op to set.
+       * @return This builder for chaining.
+       */
+      public Builder setOp(quantum.plan.proto.QuantumPlan.UnaryOpType value) {
+        if (value == null) { throw new NullPointerException(); }
+        bitField0_ |= 0x00000001;
+        op_ = value.getNumber();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOpType op = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearOp() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        op_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private quantum.plan.proto.QuantumPlan.ScalarExpr input_;
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ScalarExpr, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder, quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> inputBuilder_;
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       * @return Whether the input field is set.
+       */
+      public boolean hasInput() {
+        return ((bitField0_ & 0x00000002) != 0);
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       * @return The input.
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExpr getInput() {
+        if (inputBuilder_ == null) {
+          return input_ == null ? quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance() : input_;
+        } else {
+          return inputBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      public Builder setInput(quantum.plan.proto.QuantumPlan.ScalarExpr value) {
+        if (inputBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          input_ = value;
+        } else {
+          inputBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      public Builder setInput(
+          quantum.plan.proto.QuantumPlan.ScalarExpr.Builder builderForValue) {
+        if (inputBuilder_ == null) {
+          input_ = builderForValue.build();
+        } else {
+          inputBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      public Builder mergeInput(quantum.plan.proto.QuantumPlan.ScalarExpr value) {
+        if (inputBuilder_ == null) {
+          if (((bitField0_ & 0x00000002) != 0) &&
+            input_ != null &&
+            input_ != quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance()) {
+            getInputBuilder().mergeFrom(value);
+          } else {
+            input_ = value;
+          }
+        } else {
+          inputBuilder_.mergeFrom(value);
+        }
+        if (input_ != null) {
+          bitField0_ |= 0x00000002;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      public Builder clearInput() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        input_ = null;
+        if (inputBuilder_ != null) {
+          inputBuilder_.dispose();
+          inputBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExpr.Builder getInputBuilder() {
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return internalGetInputFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder getInputOrBuilder() {
+        if (inputBuilder_ != null) {
+          return inputBuilder_.getMessageOrBuilder();
+        } else {
+          return input_ == null ?
+              quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance() : input_;
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.ScalarExpr input = 2;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ScalarExpr, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder, quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> 
+          internalGetInputFieldBuilder() {
+        if (inputBuilder_ == null) {
+          inputBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.ScalarExpr, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder, quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder>(
+                  getInput(),
+                  getParentForChildren(),
+                  isClean());
+          input_ = null;
+        }
+        return inputBuilder_;
+      }
+
+      // @@protoc_insertion_point(builder_scope:quantum.plan.proto.UnaryOp)
+    }
+
+    // @@protoc_insertion_point(class_scope:quantum.plan.proto.UnaryOp)
+    private static final quantum.plan.proto.QuantumPlan.UnaryOp DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new quantum.plan.proto.QuantumPlan.UnaryOp();
+    }
+
+    public static quantum.plan.proto.QuantumPlan.UnaryOp getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<UnaryOp>
+        PARSER = new com.google.protobuf.AbstractParser<UnaryOp>() {
+      @java.lang.Override
+      public UnaryOp parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<UnaryOp> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<UnaryOp> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.UnaryOp getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface ScalarExprOrBuilder extends
       // @@protoc_insertion_point(interface_extends:quantum.plan.proto.ScalarExpr)
       com.google.protobuf.MessageOrBuilder {
@@ -5019,6 +5800,21 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      */
     quantum.plan.proto.QuantumPlan.LikeOpOrBuilder getLikeOrBuilder();
 
+    /**
+     * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+     * @return Whether the unary field is set.
+     */
+    boolean hasUnary();
+    /**
+     * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+     * @return The unary.
+     */
+    quantum.plan.proto.QuantumPlan.UnaryOp getUnary();
+    /**
+     * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+     */
+    quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder getUnaryOrBuilder();
+
     quantum.plan.proto.QuantumPlan.ScalarExpr.ExprCase getExprCase();
   }
   /**
@@ -5068,6 +5864,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       COLUMN_REF(2),
       BINARY(3),
       LIKE(4),
+      UNARY(5),
       EXPR_NOT_SET(0);
       private final int value;
       private ExprCase(int value) {
@@ -5089,6 +5886,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           case 2: return COLUMN_REF;
           case 3: return BINARY;
           case 4: return LIKE;
+          case 5: return UNARY;
           case 0: return EXPR_NOT_SET;
           default: return null;
         }
@@ -5228,6 +6026,37 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       return quantum.plan.proto.QuantumPlan.LikeOp.getDefaultInstance();
     }
 
+    public static final int UNARY_FIELD_NUMBER = 5;
+    /**
+     * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+     * @return Whether the unary field is set.
+     */
+    @java.lang.Override
+    public boolean hasUnary() {
+      return exprCase_ == 5;
+    }
+    /**
+     * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+     * @return The unary.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.UnaryOp getUnary() {
+      if (exprCase_ == 5) {
+         return (quantum.plan.proto.QuantumPlan.UnaryOp) expr_;
+      }
+      return quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+    }
+    /**
+     * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder getUnaryOrBuilder() {
+      if (exprCase_ == 5) {
+         return (quantum.plan.proto.QuantumPlan.UnaryOp) expr_;
+      }
+      return quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -5254,6 +6083,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (exprCase_ == 4) {
         output.writeMessage(4, (quantum.plan.proto.QuantumPlan.LikeOp) expr_);
       }
+      if (exprCase_ == 5) {
+        output.writeMessage(5, (quantum.plan.proto.QuantumPlan.UnaryOp) expr_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -5278,6 +6110,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (exprCase_ == 4) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(4, (quantum.plan.proto.QuantumPlan.LikeOp) expr_);
+      }
+      if (exprCase_ == 5) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(5, (quantum.plan.proto.QuantumPlan.UnaryOp) expr_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -5312,6 +6148,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           if (!getLike()
               .equals(other.getLike())) return false;
           break;
+        case 5:
+          if (!getUnary()
+              .equals(other.getUnary())) return false;
+          break;
         case 0:
         default:
       }
@@ -5342,6 +6182,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         case 4:
           hash = (37 * hash) + LIKE_FIELD_NUMBER;
           hash = (53 * hash) + getLike().hashCode();
+          break;
+        case 5:
+          hash = (37 * hash) + UNARY_FIELD_NUMBER;
+          hash = (53 * hash) + getUnary().hashCode();
           break;
         case 0:
         default:
@@ -5489,6 +6333,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (likeBuilder_ != null) {
           likeBuilder_.clear();
         }
+        if (unaryBuilder_ != null) {
+          unaryBuilder_.clear();
+        }
         exprCase_ = 0;
         expr_ = null;
         return this;
@@ -5546,6 +6393,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
             likeBuilder_ != null) {
           result.expr_ = likeBuilder_.build();
         }
+        if (exprCase_ == 5 &&
+            unaryBuilder_ != null) {
+          result.expr_ = unaryBuilder_.build();
+        }
       }
 
       @java.lang.Override
@@ -5575,6 +6426,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           }
           case LIKE: {
             mergeLike(other.getLike());
+            break;
+          }
+          case UNARY: {
+            mergeUnary(other.getUnary());
             break;
           }
           case EXPR_NOT_SET: {
@@ -5635,6 +6490,13 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
                 exprCase_ = 4;
                 break;
               } // case 34
+              case 42: {
+                input.readMessage(
+                    internalGetUnaryFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                exprCase_ = 5;
+                break;
+              } // case 42
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -6233,6 +7095,148 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         exprCase_ = 4;
         onChanged();
         return likeBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.UnaryOp, quantum.plan.proto.QuantumPlan.UnaryOp.Builder, quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder> unaryBuilder_;
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       * @return Whether the unary field is set.
+       */
+      @java.lang.Override
+      public boolean hasUnary() {
+        return exprCase_ == 5;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       * @return The unary.
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.UnaryOp getUnary() {
+        if (unaryBuilder_ == null) {
+          if (exprCase_ == 5) {
+            return (quantum.plan.proto.QuantumPlan.UnaryOp) expr_;
+          }
+          return quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+        } else {
+          if (exprCase_ == 5) {
+            return unaryBuilder_.getMessage();
+          }
+          return quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      public Builder setUnary(quantum.plan.proto.QuantumPlan.UnaryOp value) {
+        if (unaryBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          expr_ = value;
+          onChanged();
+        } else {
+          unaryBuilder_.setMessage(value);
+        }
+        exprCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      public Builder setUnary(
+          quantum.plan.proto.QuantumPlan.UnaryOp.Builder builderForValue) {
+        if (unaryBuilder_ == null) {
+          expr_ = builderForValue.build();
+          onChanged();
+        } else {
+          unaryBuilder_.setMessage(builderForValue.build());
+        }
+        exprCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      public Builder mergeUnary(quantum.plan.proto.QuantumPlan.UnaryOp value) {
+        if (unaryBuilder_ == null) {
+          if (exprCase_ == 5 &&
+              expr_ != quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance()) {
+            expr_ = quantum.plan.proto.QuantumPlan.UnaryOp.newBuilder((quantum.plan.proto.QuantumPlan.UnaryOp) expr_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            expr_ = value;
+          }
+          onChanged();
+        } else {
+          if (exprCase_ == 5) {
+            unaryBuilder_.mergeFrom(value);
+          } else {
+            unaryBuilder_.setMessage(value);
+          }
+        }
+        exprCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      public Builder clearUnary() {
+        if (unaryBuilder_ == null) {
+          if (exprCase_ == 5) {
+            exprCase_ = 0;
+            expr_ = null;
+            onChanged();
+          }
+        } else {
+          if (exprCase_ == 5) {
+            exprCase_ = 0;
+            expr_ = null;
+          }
+          unaryBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.UnaryOp.Builder getUnaryBuilder() {
+        return internalGetUnaryFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder getUnaryOrBuilder() {
+        if ((exprCase_ == 5) && (unaryBuilder_ != null)) {
+          return unaryBuilder_.getMessageOrBuilder();
+        } else {
+          if (exprCase_ == 5) {
+            return (quantum.plan.proto.QuantumPlan.UnaryOp) expr_;
+          }
+          return quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.UnaryOp unary = 5;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.UnaryOp, quantum.plan.proto.QuantumPlan.UnaryOp.Builder, quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder> 
+          internalGetUnaryFieldBuilder() {
+        if (unaryBuilder_ == null) {
+          if (!(exprCase_ == 5)) {
+            expr_ = quantum.plan.proto.QuantumPlan.UnaryOp.getDefaultInstance();
+          }
+          unaryBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.UnaryOp, quantum.plan.proto.QuantumPlan.UnaryOp.Builder, quantum.plan.proto.QuantumPlan.UnaryOpOrBuilder>(
+                  (quantum.plan.proto.QuantumPlan.UnaryOp) expr_,
+                  getParentForChildren(),
+                  isClean());
+          expr_ = null;
+        }
+        exprCase_ = 5;
+        onChanged();
+        return unaryBuilder_;
       }
 
       // @@protoc_insertion_point(builder_scope:quantum.plan.proto.ScalarExpr)
@@ -17479,6 +18483,11 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_quantum_plan_proto_LikeOp_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_quantum_plan_proto_UnaryOp_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_quantum_plan_proto_UnaryOp_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_quantum_plan_proto_ScalarExpr_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -17550,62 +18559,67 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       "xpr\022+\n\003rhs\030\003 \001(\0132\036.quantum.plan.proto.Sc" +
       "alarExpr\"H\n\006LikeOp\022-\n\005input\030\001 \001(\0132\036.quan" +
       "tum.plan.proto.ScalarExpr\022\017\n\007pattern\030\002 \001" +
-      "(\t\"\325\001\n\nScalarExpr\022.\n\007literal\030\001 \001(\0132\033.qua" +
-      "ntum.plan.proto.LiteralH\000\0223\n\ncolumn_ref\030" +
-      "\002 \001(\0132\035.quantum.plan.proto.ColumnRefH\000\022." +
-      "\n\006binary\030\003 \001(\0132\034.quantum.plan.proto.Bina" +
-      "ryOpH\000\022*\n\004like\030\004 \001(\0132\032.quantum.plan.prot" +
-      "o.LikeOpH\000B\006\n\004expr\"\237\001\n\rAggregateSpec\022/\n\004" +
-      "kind\030\001 \001(\0162!.quantum.plan.proto.Aggregat" +
-      "eKind\022.\n\ninput_type\030\002 \001(\0162\032.quantum.plan" +
-      ".proto.TypeId\022-\n\005input\030\003 \001(\0132\036.quantum.p" +
-      "lan.proto.ScalarExpr\"I\n\010ScanNode\022\021\n\tsour" +
-      "ce_id\030\001 \001(\t\022*\n\006schema\030\002 \001(\0132\032.quantum.pl" +
-      "an.proto.Schema\"\321\001\n\014FileScanNode\022\r\n\005path" +
-      "s\030\001 \003(\t\022\016\n\006format\030\002 \001(\t\022*\n\006schema\030\003 \001(\0132" +
-      "\032.quantum.plan.proto.Schema\0225\n\021partition" +
-      "_columns\030\004 \001(\0132\032.quantum.plan.proto.Sche" +
-      "ma\022?\n\020partition_values\030\005 \003(\0132%.quantum.p" +
-      "lan.proto.PartitionValueRow\"@\n\021Partition" +
-      "ValueRow\022+\n\006values\030\001 \003(\0132\033.quantum.plan." +
-      "proto.Literal\"l\n\nFilterNode\022+\n\005child\030\001 \001" +
-      "(\0132\034.quantum.plan.proto.PlanNode\0221\n\tpred" +
-      "icate\030\002 \001(\0132\036.quantum.plan.proto.ScalarE" +
-      "xpr\"\177\n\013ProjectNode\022+\n\005child\030\001 \001(\0132\034.quan" +
-      "tum.plan.proto.PlanNode\022-\n\005exprs\030\002 \003(\0132\036" +
-      ".quantum.plan.proto.ScalarExpr\022\024\n\014output" +
-      "_names\030\003 \003(\t\"\301\001\n\021HashAggregateNode\022+\n\005ch" +
-      "ild\030\001 \001(\0132\034.quantum.plan.proto.PlanNode\022" +
-      "2\n\ngroup_keys\030\002 \003(\0132\036.quantum.plan.proto" +
-      ".ScalarExpr\0225\n\naggregates\030\003 \003(\0132!.quantu" +
-      "m.plan.proto.AggregateSpec\022\024\n\014output_nam" +
-      "es\030\004 \003(\t\"\227\002\n\014HashJoinNode\022+\n\005build\030\001 \001(\013" +
-      "2\034.quantum.plan.proto.PlanNode\022+\n\005probe\030" +
-      "\002 \001(\0132\034.quantum.plan.proto.PlanNode\0222\n\nb" +
-      "uild_keys\030\003 \003(\0132\036.quantum.plan.proto.Sca" +
-      "larExpr\0222\n\nprobe_keys\030\004 \003(\0132\036.quantum.pl" +
-      "an.proto.ScalarExpr\022/\n\tjoin_type\030\005 \001(\0162\034" +
-      ".quantum.plan.proto.JoinType\022\024\n\014output_n" +
-      "ames\030\006 \003(\t\"\317\002\n\010PlanNode\022,\n\004scan\030\001 \001(\0132\034." +
-      "quantum.plan.proto.ScanNodeH\000\0220\n\006filter\030" +
-      "\002 \001(\0132\036.quantum.plan.proto.FilterNodeH\000\022" +
-      "2\n\007project\030\003 \001(\0132\037.quantum.plan.proto.Pr" +
-      "ojectNodeH\000\0229\n\010hash_agg\030\004 \001(\0132%.quantum." +
-      "plan.proto.HashAggregateNodeH\000\0225\n\thash_j" +
-      "oin\030\005 \001(\0132 .quantum.plan.proto.HashJoinN" +
-      "odeH\000\0225\n\tfile_scan\030\006 \001(\0132 .quantum.plan." +
-      "proto.FileScanNodeH\000B\006\n\004node*Z\n\006TypeId\022\r" +
-      "\n\tTYPE_BOOL\020\000\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_IN" +
-      "T64\020\002\022\020\n\014TYPE_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004" +
-      "*\240\001\n\014BinaryOpType\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINO" +
-      "P_SUB\020\001\022\r\n\tBINOP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010" +
-      "BINOP_LT\020\004\022\014\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022" +
-      "\r\n\tBINOP_GTE\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_O" +
-      "R\020\t*W\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG" +
-      "_COUNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022" +
-      "\013\n\007AGG_AVG\020\004*Z\n\010JoinType\022\016\n\nJOIN_INNER\020\000" +
-      "\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JOIN_RIGHT_OUTE" +
-      "R\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006proto3"
+      "(\t\"e\n\007UnaryOp\022+\n\002op\030\001 \001(\0162\037.quantum.plan" +
+      ".proto.UnaryOpType\022-\n\005input\030\002 \001(\0132\036.quan" +
+      "tum.plan.proto.ScalarExpr\"\203\002\n\nScalarExpr" +
+      "\022.\n\007literal\030\001 \001(\0132\033.quantum.plan.proto.L" +
+      "iteralH\000\0223\n\ncolumn_ref\030\002 \001(\0132\035.quantum.p" +
+      "lan.proto.ColumnRefH\000\022.\n\006binary\030\003 \001(\0132\034." +
+      "quantum.plan.proto.BinaryOpH\000\022*\n\004like\030\004 " +
+      "\001(\0132\032.quantum.plan.proto.LikeOpH\000\022,\n\005una" +
+      "ry\030\005 \001(\0132\033.quantum.plan.proto.UnaryOpH\000B" +
+      "\006\n\004expr\"\237\001\n\rAggregateSpec\022/\n\004kind\030\001 \001(\0162" +
+      "!.quantum.plan.proto.AggregateKind\022.\n\nin" +
+      "put_type\030\002 \001(\0162\032.quantum.plan.proto.Type" +
+      "Id\022-\n\005input\030\003 \001(\0132\036.quantum.plan.proto.S" +
+      "calarExpr\"I\n\010ScanNode\022\021\n\tsource_id\030\001 \001(\t" +
+      "\022*\n\006schema\030\002 \001(\0132\032.quantum.plan.proto.Sc" +
+      "hema\"\321\001\n\014FileScanNode\022\r\n\005paths\030\001 \003(\t\022\016\n\006" +
+      "format\030\002 \001(\t\022*\n\006schema\030\003 \001(\0132\032.quantum.p" +
+      "lan.proto.Schema\0225\n\021partition_columns\030\004 " +
+      "\001(\0132\032.quantum.plan.proto.Schema\022?\n\020parti" +
+      "tion_values\030\005 \003(\0132%.quantum.plan.proto.P" +
+      "artitionValueRow\"@\n\021PartitionValueRow\022+\n" +
+      "\006values\030\001 \003(\0132\033.quantum.plan.proto.Liter" +
+      "al\"l\n\nFilterNode\022+\n\005child\030\001 \001(\0132\034.quantu" +
+      "m.plan.proto.PlanNode\0221\n\tpredicate\030\002 \001(\013" +
+      "2\036.quantum.plan.proto.ScalarExpr\"\177\n\013Proj" +
+      "ectNode\022+\n\005child\030\001 \001(\0132\034.quantum.plan.pr" +
+      "oto.PlanNode\022-\n\005exprs\030\002 \003(\0132\036.quantum.pl" +
+      "an.proto.ScalarExpr\022\024\n\014output_names\030\003 \003(" +
+      "\t\"\301\001\n\021HashAggregateNode\022+\n\005child\030\001 \001(\0132\034" +
+      ".quantum.plan.proto.PlanNode\0222\n\ngroup_ke" +
+      "ys\030\002 \003(\0132\036.quantum.plan.proto.ScalarExpr" +
+      "\0225\n\naggregates\030\003 \003(\0132!.quantum.plan.prot" +
+      "o.AggregateSpec\022\024\n\014output_names\030\004 \003(\t\"\227\002" +
+      "\n\014HashJoinNode\022+\n\005build\030\001 \001(\0132\034.quantum." +
+      "plan.proto.PlanNode\022+\n\005probe\030\002 \001(\0132\034.qua" +
+      "ntum.plan.proto.PlanNode\0222\n\nbuild_keys\030\003" +
+      " \003(\0132\036.quantum.plan.proto.ScalarExpr\0222\n\n" +
+      "probe_keys\030\004 \003(\0132\036.quantum.plan.proto.Sc" +
+      "alarExpr\022/\n\tjoin_type\030\005 \001(\0162\034.quantum.pl" +
+      "an.proto.JoinType\022\024\n\014output_names\030\006 \003(\t\"" +
+      "\317\002\n\010PlanNode\022,\n\004scan\030\001 \001(\0132\034.quantum.pla" +
+      "n.proto.ScanNodeH\000\0220\n\006filter\030\002 \001(\0132\036.qua" +
+      "ntum.plan.proto.FilterNodeH\000\0222\n\007project\030" +
+      "\003 \001(\0132\037.quantum.plan.proto.ProjectNodeH\000" +
+      "\0229\n\010hash_agg\030\004 \001(\0132%.quantum.plan.proto." +
+      "HashAggregateNodeH\000\0225\n\thash_join\030\005 \001(\0132 " +
+      ".quantum.plan.proto.HashJoinNodeH\000\0225\n\tfi" +
+      "le_scan\030\006 \001(\0132 .quantum.plan.proto.FileS" +
+      "canNodeH\000B\006\n\004node*Z\n\006TypeId\022\r\n\tTYPE_BOOL" +
+      "\020\000\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TY" +
+      "PE_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004*\240\001\n\014Binary" +
+      "OpType\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\t" +
+      "BINOP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022" +
+      "\014\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022\r\n\tBINOP_GT" +
+      "E\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_OR\020\t*\033\n\013Unar" +
+      "yOpType\022\014\n\010UNOP_NOT\020\000*W\n\rAggregateKind\022\013" +
+      "\n\007AGG_SUM\020\000\022\022\n\016AGG_COUNT_STAR\020\001\022\013\n\007AGG_M" +
+      "IN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007AGG_AVG\020\004*Z\n\010JoinTy" +
+      "pe\022\016\n\nJOIN_INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022" +
+      "\024\n\020JOIN_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER" +
+      "\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -17647,62 +18661,68 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_LikeOp_descriptor,
         new java.lang.String[] { "Input", "Pattern", });
-    internal_static_quantum_plan_proto_ScalarExpr_descriptor =
+    internal_static_quantum_plan_proto_UnaryOp_descriptor =
       getDescriptor().getMessageType(6);
+    internal_static_quantum_plan_proto_UnaryOp_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_quantum_plan_proto_UnaryOp_descriptor,
+        new java.lang.String[] { "Op", "Input", });
+    internal_static_quantum_plan_proto_ScalarExpr_descriptor =
+      getDescriptor().getMessageType(7);
     internal_static_quantum_plan_proto_ScalarExpr_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_ScalarExpr_descriptor,
-        new java.lang.String[] { "Literal", "ColumnRef", "Binary", "Like", "Expr", });
+        new java.lang.String[] { "Literal", "ColumnRef", "Binary", "Like", "Unary", "Expr", });
     internal_static_quantum_plan_proto_AggregateSpec_descriptor =
-      getDescriptor().getMessageType(7);
+      getDescriptor().getMessageType(8);
     internal_static_quantum_plan_proto_AggregateSpec_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_AggregateSpec_descriptor,
         new java.lang.String[] { "Kind", "InputType", "Input", });
     internal_static_quantum_plan_proto_ScanNode_descriptor =
-      getDescriptor().getMessageType(8);
+      getDescriptor().getMessageType(9);
     internal_static_quantum_plan_proto_ScanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_ScanNode_descriptor,
         new java.lang.String[] { "SourceId", "Schema", });
     internal_static_quantum_plan_proto_FileScanNode_descriptor =
-      getDescriptor().getMessageType(9);
+      getDescriptor().getMessageType(10);
     internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_FileScanNode_descriptor,
         new java.lang.String[] { "Paths", "Format", "Schema", "PartitionColumns", "PartitionValues", });
     internal_static_quantum_plan_proto_PartitionValueRow_descriptor =
-      getDescriptor().getMessageType(10);
+      getDescriptor().getMessageType(11);
     internal_static_quantum_plan_proto_PartitionValueRow_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_PartitionValueRow_descriptor,
         new java.lang.String[] { "Values", });
     internal_static_quantum_plan_proto_FilterNode_descriptor =
-      getDescriptor().getMessageType(11);
+      getDescriptor().getMessageType(12);
     internal_static_quantum_plan_proto_FilterNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_FilterNode_descriptor,
         new java.lang.String[] { "Child", "Predicate", });
     internal_static_quantum_plan_proto_ProjectNode_descriptor =
-      getDescriptor().getMessageType(12);
+      getDescriptor().getMessageType(13);
     internal_static_quantum_plan_proto_ProjectNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_ProjectNode_descriptor,
         new java.lang.String[] { "Child", "Exprs", "OutputNames", });
     internal_static_quantum_plan_proto_HashAggregateNode_descriptor =
-      getDescriptor().getMessageType(13);
+      getDescriptor().getMessageType(14);
     internal_static_quantum_plan_proto_HashAggregateNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashAggregateNode_descriptor,
         new java.lang.String[] { "Child", "GroupKeys", "Aggregates", "OutputNames", });
     internal_static_quantum_plan_proto_HashJoinNode_descriptor =
-      getDescriptor().getMessageType(14);
+      getDescriptor().getMessageType(15);
     internal_static_quantum_plan_proto_HashJoinNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashJoinNode_descriptor,
         new java.lang.String[] { "Build", "Probe", "BuildKeys", "ProbeKeys", "JoinType", "OutputNames", });
     internal_static_quantum_plan_proto_PlanNode_descriptor =
-      getDescriptor().getMessageType(15);
+      getDescriptor().getMessageType(16);
     internal_static_quantum_plan_proto_PlanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_PlanNode_descriptor,
