@@ -542,6 +542,47 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.17: WHERE on a partition column. Spark's FileIndex prunes the
+   * scanned file set BEFORE our strategy sees the relation, so we should
+   * still see a HadoopFsRelation but with `inputFiles` reduced to only the
+   * matching partitions. The query result must be correct and we should
+   * route through native (the partition column is then synthesized as a
+   * constant by PartitionedFileReader).
+   */
+  @Test
+  def partitionFilterPrunesAndRoutesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (2024L, 1L, 10L), (2024L, 2L, 20L),
+      (2025L, 3L, 30L), (2025L, 4L, 40L),
+      (2026L, 5L, 50L), (2026L, 6L, 60L))
+      .toDF("year", "k", "v")
+
+    val tmpDir = java.nio.file.Files.createTempDirectory("quantum_partfilt_").toFile
+    val tablePath = new java.io.File(tmpDir, "data").getAbsolutePath
+    df.write.mode("overwrite").partitionBy("year").parquet(tablePath)
+
+    val rows = spark.read.parquet(tablePath)
+      .filter("year = 2025")
+      .groupBy("year").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+      .collect()
+      .map(r => (r.getInt(0), r.getLong(1)))
+      .toSeq
+
+    // Only year=2025 partition survives -> SUM(30 + 40) = 70.
+    assertEquals(Seq((2025, 70L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Partition-filtered Parquet should still route natively; flag = " +
+        QuantumStrategy.lastTranslation)
+
+    def rmRf(f: java.io.File): Unit = {
+      if (f.isDirectory) f.listFiles().foreach(rmRf); f.delete()
+    }
+    rmRf(tmpDir)
+  }
+
+  /**
    * Phase 5.11: WHERE pushdown composes with FileScanNode. The predicate
    * stack should wrap a single FilterNode around the FileScan, identical
    * to how it wraps a ScanNode for in-memory sources.
