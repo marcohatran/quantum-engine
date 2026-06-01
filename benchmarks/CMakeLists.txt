@@ -8,6 +8,7 @@ add_executable(quantum_benchmarks
     bench_dict_compare.cpp
     bench_dict_like.cpp
     bench_string_group_by.cpp
+    bench_file_scan_hash_aggregate.cpp
 )
 
 target_link_libraries(quantum_benchmarks
