@@ -76,6 +76,14 @@ struct ScanNode {
     Schema      schema;
 };
 
+// FileScan: native engine reads the file(s) directly via io::FileSystem.
+// `format` selects the reader ("parquet" or "delta").
+struct FileScanNode {
+    std::vector<std::string>   paths;
+    std::string                format;
+    std::optional<Schema>      schema;  // unset => derive from file metadata
+};
+
 struct FilterNode;
 struct ProjectNode;
 struct HashAggregateNode;
@@ -83,6 +91,7 @@ struct HashJoinNode;
 
 using PlanNode = std::variant<
     ScanNode,
+    FileScanNode,
     std::unique_ptr<FilterNode>,
     std::unique_ptr<ProjectNode>,
     std::unique_ptr<HashAggregateNode>,

@@ -309,4 +309,48 @@ class QuantumExtensionTest {
       "Mixed-type GROUP BY should route through native; flag = " +
         QuantumStrategy.lastTranslation)
   }
+
+  /**
+   * Phase 5.9: end-to-end Spark → file-source. Writes a single Parquet file
+   * via Spark, queries it via `spark.read.parquet(...)`, and verifies the
+   * strategy emits a FileScanNode-bearing plan that the native engine reads
+   * itself (no JNA marshalling of row data).
+   */
+  @Test
+  def parquetFileSourceExecutesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (1L, 20L), (2L, 30L), (2L, 40L), (3L, 50L))
+      .toDF("k", "v")
+
+    // Write to a unique tmp file so each test run is independent.
+    val tmpDir = java.nio.file.Files.createTempDirectory("quantum_parquet_").toFile
+    val parquetPath = new java.io.File(tmpDir, "data.parquet").getAbsolutePath
+    df.coalesce(1).write.mode("overwrite").parquet(parquetPath)
+    // Spark writes a directory by default; pick the single .parquet file
+    // inside it to exercise the single-file path.
+    val singleFile = new java.io.File(parquetPath).listFiles()
+      .find(_.getName.endsWith(".parquet"))
+      .map(_.getAbsolutePath)
+      .getOrElse(throw new IllegalStateException("no parquet file produced"))
+
+    val rows = spark.read.parquet(singleFile)
+      .groupBy("k").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+      .collect()
+      .map(r => (r.getLong(0), r.getLong(1)))
+      .sortBy(_._1)
+      .toSeq
+
+    assertEquals(Seq((1L, 30L), (2L, 70L), (3L, 50L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Parquet file source should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+
+    // Cleanup
+    def rmRf(f: java.io.File): Unit = {
+      if (f.isDirectory) f.listFiles().foreach(rmRf)
+      f.delete()
+    }
+    rmRf(tmpDir)
+  }
 }

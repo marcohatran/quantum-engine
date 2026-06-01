@@ -10,7 +10,10 @@
 #include "expression/ColumnRef.hpp"
 #include "expression/LikeExpr.hpp"
 #include "expression/Literal.hpp"
+#include "io/DeltaTableReader.hpp"
+#include "io/ParquetReader.hpp"
 #include "operator/AggregateFunction.hpp"
+#include "operator/FileScanOperator.hpp"
 #include "operator/FilterOperator.hpp"
 #include "operator/HashAggregateOperator.hpp"
 #include "operator/HashJoinOperator.hpp"
@@ -129,6 +132,34 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
             }
             return std::make_unique<ScanOperator>(
                 mm_, n.schema, std::move(it->second));
+        } else if constexpr (std::is_same_v<T, FileScanNode>) {
+            if (n.paths.empty()) {
+                raise(ErrorCode::InvalidArgument,
+                      "PlanBuilder: FileScanNode has no paths");
+            }
+            if (n.format == "parquet") {
+                // For multi-file Parquet we chain a sequence of ParquetReaders
+                // through a small concatenating shim. With a single path the
+                // chain collapses to one reader.
+                if (n.paths.size() == 1) {
+                    auto reader = std::make_unique<ParquetReader>(n.paths.front(), mm_);
+                    return std::make_unique<FileScanOperator>(mm_, std::move(reader));
+                }
+                raise(ErrorCode::NotImplemented,
+                      "PlanBuilder: multi-file parquet FileScanNode not yet supported "
+                      "(got {} paths)", n.paths.size());
+            }
+            if (n.format == "delta") {
+                if (n.paths.size() != 1) {
+                    raise(ErrorCode::InvalidArgument,
+                          "PlanBuilder: delta FileScanNode expects 1 table-root path "
+                          "(got {})", n.paths.size());
+                }
+                auto reader = std::make_unique<DeltaTableReader>(n.paths.front(), mm_);
+                return std::make_unique<FileScanOperator>(mm_, std::move(reader));
+            }
+            raise(ErrorCode::NotImplemented,
+                  "PlanBuilder: unknown FileScanNode format '{}'", n.format);
         } else if constexpr (std::is_same_v<T, std::unique_ptr<FilterNode>>) {
             return std::make_unique<FilterOperator>(
                 mm_, build(n->child, catalog), buildExpr(n->predicate));

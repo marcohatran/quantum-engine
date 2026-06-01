@@ -231,6 +231,11 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
             auto* m = out->mutable_scan();
             m->set_source_id(x.source_id);
             encodeSchema(x.schema, m->mutable_schema());
+        } else if constexpr (std::is_same_v<T, FileScanNode>) {
+            auto* m = out->mutable_file_scan();
+            for (const auto& p : x.paths) m->add_paths(p);
+            m->set_format(x.format);
+            if (x.schema.has_value()) encodeSchema(*x.schema, m->mutable_schema());
         } else if constexpr (std::is_same_v<T, std::unique_ptr<FilterNode>>) {
             auto* m = out->mutable_filter();
             encodePlan(x->child, m->mutable_child());
@@ -264,6 +269,13 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
             return ScanNode{
                 msg.scan().source_id(),
                 decodeSchema(msg.scan().schema())};
+        case proto::PlanNode::kFileScan: {
+            FileScanNode n;
+            for (const auto& p : msg.file_scan().paths()) n.paths.push_back(p);
+            n.format = msg.file_scan().format();
+            if (msg.file_scan().has_schema()) n.schema = decodeSchema(msg.file_scan().schema());
+            return PlanNode{std::move(n)};
+        }
         case proto::PlanNode::kFilter: {
             auto n = std::make_unique<FilterNode>();
             n->child     = decodePlan(msg.filter().child());

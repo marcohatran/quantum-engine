@@ -7840,6 +7840,1050 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
 
   }
 
+  public interface FileScanNodeOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:quantum.plan.proto.FileScanNode)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @return A list containing the paths.
+     */
+    java.util.List<java.lang.String>
+        getPathsList();
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @return The count of paths.
+     */
+    int getPathsCount();
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @param index The index of the element to return.
+     * @return The paths at the given index.
+     */
+    java.lang.String getPaths(int index);
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the paths at the given index.
+     */
+    com.google.protobuf.ByteString
+        getPathsBytes(int index);
+
+    /**
+     * <code>string format = 2;</code>
+     * @return The format.
+     */
+    java.lang.String getFormat();
+    /**
+     * <code>string format = 2;</code>
+     * @return The bytes for format.
+     */
+    com.google.protobuf.ByteString
+        getFormatBytes();
+
+    /**
+     * <pre>
+     * Optional declared schema. If unset, the reader derives it from the
+     * file's own metadata. Provided for plans that want positional
+     * column-index agreement across rewriters.
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema schema = 3;</code>
+     * @return Whether the schema field is set.
+     */
+    boolean hasSchema();
+    /**
+     * <pre>
+     * Optional declared schema. If unset, the reader derives it from the
+     * file's own metadata. Provided for plans that want positional
+     * column-index agreement across rewriters.
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema schema = 3;</code>
+     * @return The schema.
+     */
+    quantum.plan.proto.QuantumPlan.Schema getSchema();
+    /**
+     * <pre>
+     * Optional declared schema. If unset, the reader derives it from the
+     * file's own metadata. Provided for plans that want positional
+     * column-index agreement across rewriters.
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema schema = 3;</code>
+     */
+    quantum.plan.proto.QuantumPlan.SchemaOrBuilder getSchemaOrBuilder();
+  }
+  /**
+   * <pre>
+   * FileScan: the engine itself reads the file(s). Compared to ScanNode, no
+   * pre-registration of in-memory batches is required — the engine opens the
+   * file via the io::FileSystem helper (so paths may be file:// / s3:// / etc.).
+   *
+   * `format` selects the reader:
+   * "parquet"        -&gt; ParquetReader on each path (concatenated in order)
+   * "delta"          -&gt; DeltaTableReader; `paths` must have length 1 (the
+   * table root); commit-log replay decides the file set.
+   * </pre>
+   *
+   * Protobuf type {@code quantum.plan.proto.FileScanNode}
+   */
+  public static final class FileScanNode extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:quantum.plan.proto.FileScanNode)
+      FileScanNodeOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "FileScanNode");
+    }
+    // Use FileScanNode.newBuilder() to construct.
+    private FileScanNode(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private FileScanNode() {
+      paths_ =
+          com.google.protobuf.LazyStringArrayList.emptyList();
+      format_ = "";
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_FileScanNode_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              quantum.plan.proto.QuantumPlan.FileScanNode.class, quantum.plan.proto.QuantumPlan.FileScanNode.Builder.class);
+    }
+
+    private int bitField0_;
+    public static final int PATHS_FIELD_NUMBER = 1;
+    @SuppressWarnings("serial")
+    private com.google.protobuf.LazyStringArrayList paths_ =
+        com.google.protobuf.LazyStringArrayList.emptyList();
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @return A list containing the paths.
+     */
+    public com.google.protobuf.ProtocolStringList
+        getPathsList() {
+      return paths_;
+    }
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @return The count of paths.
+     */
+    public int getPathsCount() {
+      return paths_.size();
+    }
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @param index The index of the element to return.
+     * @return The paths at the given index.
+     */
+    public java.lang.String getPaths(int index) {
+      return paths_.get(index);
+    }
+    /**
+     * <code>repeated string paths = 1;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the paths at the given index.
+     */
+    public com.google.protobuf.ByteString
+        getPathsBytes(int index) {
+      return paths_.getByteString(index);
+    }
+
+    public static final int FORMAT_FIELD_NUMBER = 2;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object format_ = "";
+    /**
+     * <code>string format = 2;</code>
+     * @return The format.
+     */
+    @java.lang.Override
+    public java.lang.String getFormat() {
+      java.lang.Object ref = format_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        format_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string format = 2;</code>
+     * @return The bytes for format.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFormatBytes() {
+      java.lang.Object ref = format_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        format_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SCHEMA_FIELD_NUMBER = 3;
+    private quantum.plan.proto.QuantumPlan.Schema schema_;
+    /**
+     * <pre>
+     * Optional declared schema. If unset, the reader derives it from the
+     * file's own metadata. Provided for plans that want positional
+     * column-index agreement across rewriters.
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema schema = 3;</code>
+     * @return Whether the schema field is set.
+     */
+    @java.lang.Override
+    public boolean hasSchema() {
+      return ((bitField0_ & 0x00000001) != 0);
+    }
+    /**
+     * <pre>
+     * Optional declared schema. If unset, the reader derives it from the
+     * file's own metadata. Provided for plans that want positional
+     * column-index agreement across rewriters.
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema schema = 3;</code>
+     * @return The schema.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.Schema getSchema() {
+      return schema_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : schema_;
+    }
+    /**
+     * <pre>
+     * Optional declared schema. If unset, the reader derives it from the
+     * file's own metadata. Provided for plans that want positional
+     * column-index agreement across rewriters.
+     * </pre>
+     *
+     * <code>.quantum.plan.proto.Schema schema = 3;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.SchemaOrBuilder getSchemaOrBuilder() {
+      return schema_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : schema_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      for (int i = 0; i < paths_.size(); i++) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, paths_.getRaw(i));
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(format_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 2, format_);
+      }
+      if (((bitField0_ & 0x00000001) != 0)) {
+        output.writeMessage(3, getSchema());
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      {
+        int dataSize = 0;
+        for (int i = 0; i < paths_.size(); i++) {
+          dataSize += computeStringSizeNoTag(paths_.getRaw(i));
+        }
+        size += dataSize;
+        size += 1 * getPathsList().size();
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(format_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(2, format_);
+      }
+      if (((bitField0_ & 0x00000001) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(3, getSchema());
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof quantum.plan.proto.QuantumPlan.FileScanNode)) {
+        return super.equals(obj);
+      }
+      quantum.plan.proto.QuantumPlan.FileScanNode other = (quantum.plan.proto.QuantumPlan.FileScanNode) obj;
+
+      if (!getPathsList()
+          .equals(other.getPathsList())) return false;
+      if (!getFormat()
+          .equals(other.getFormat())) return false;
+      if (hasSchema() != other.hasSchema()) return false;
+      if (hasSchema()) {
+        if (!getSchema()
+            .equals(other.getSchema())) return false;
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      if (getPathsCount() > 0) {
+        hash = (37 * hash) + PATHS_FIELD_NUMBER;
+        hash = (53 * hash) + getPathsList().hashCode();
+      }
+      hash = (37 * hash) + FORMAT_FIELD_NUMBER;
+      hash = (53 * hash) + getFormat().hashCode();
+      if (hasSchema()) {
+        hash = (37 * hash) + SCHEMA_FIELD_NUMBER;
+        hash = (53 * hash) + getSchema().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.FileScanNode parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(quantum.plan.proto.QuantumPlan.FileScanNode prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * <pre>
+     * FileScan: the engine itself reads the file(s). Compared to ScanNode, no
+     * pre-registration of in-memory batches is required — the engine opens the
+     * file via the io::FileSystem helper (so paths may be file:// / s3:// / etc.).
+     *
+     * `format` selects the reader:
+     * "parquet"        -&gt; ParquetReader on each path (concatenated in order)
+     * "delta"          -&gt; DeltaTableReader; `paths` must have length 1 (the
+     * table root); commit-log replay decides the file set.
+     * </pre>
+     *
+     * Protobuf type {@code quantum.plan.proto.FileScanNode}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:quantum.plan.proto.FileScanNode)
+        quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_FileScanNode_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                quantum.plan.proto.QuantumPlan.FileScanNode.class, quantum.plan.proto.QuantumPlan.FileScanNode.Builder.class);
+      }
+
+      // Construct using quantum.plan.proto.QuantumPlan.FileScanNode.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage
+                .alwaysUseFieldBuilders) {
+          internalGetSchemaFieldBuilder();
+        }
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        paths_ =
+            com.google.protobuf.LazyStringArrayList.emptyList();
+        format_ = "";
+        schema_ = null;
+        if (schemaBuilder_ != null) {
+          schemaBuilder_.dispose();
+          schemaBuilder_ = null;
+        }
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_FileScanNode_descriptor;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.FileScanNode getDefaultInstanceForType() {
+        return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.FileScanNode build() {
+        quantum.plan.proto.QuantumPlan.FileScanNode result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.FileScanNode buildPartial() {
+        quantum.plan.proto.QuantumPlan.FileScanNode result = new quantum.plan.proto.QuantumPlan.FileScanNode(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(quantum.plan.proto.QuantumPlan.FileScanNode result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          paths_.makeImmutable();
+          result.paths_ = paths_;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.format_ = format_;
+        }
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000004) != 0)) {
+          result.schema_ = schemaBuilder_ == null
+              ? schema_
+              : schemaBuilder_.build();
+          to_bitField0_ |= 0x00000001;
+        }
+        result.bitField0_ |= to_bitField0_;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof quantum.plan.proto.QuantumPlan.FileScanNode) {
+          return mergeFrom((quantum.plan.proto.QuantumPlan.FileScanNode)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(quantum.plan.proto.QuantumPlan.FileScanNode other) {
+        if (other == quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance()) return this;
+        if (!other.paths_.isEmpty()) {
+          if (paths_.isEmpty()) {
+            paths_ = other.paths_;
+            bitField0_ |= 0x00000001;
+          } else {
+            ensurePathsIsMutable();
+            paths_.addAll(other.paths_);
+          }
+          onChanged();
+        }
+        if (!other.getFormat().isEmpty()) {
+          format_ = other.format_;
+          bitField0_ |= 0x00000002;
+          onChanged();
+        }
+        if (other.hasSchema()) {
+          mergeSchema(other.getSchema());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                java.lang.String s = input.readStringRequireUtf8();
+                ensurePathsIsMutable();
+                paths_.add(s);
+                break;
+              } // case 10
+              case 18: {
+                format_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000002;
+                break;
+              } // case 18
+              case 26: {
+                input.readMessage(
+                    internalGetSchemaFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00000004;
+                break;
+              } // case 26
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private com.google.protobuf.LazyStringArrayList paths_ =
+          com.google.protobuf.LazyStringArrayList.emptyList();
+      private void ensurePathsIsMutable() {
+        if (!paths_.isModifiable()) {
+          paths_ = new com.google.protobuf.LazyStringArrayList(paths_);
+        }
+        bitField0_ |= 0x00000001;
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @return A list containing the paths.
+       */
+      public com.google.protobuf.ProtocolStringList
+          getPathsList() {
+        paths_.makeImmutable();
+        return paths_;
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @return The count of paths.
+       */
+      public int getPathsCount() {
+        return paths_.size();
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @param index The index of the element to return.
+       * @return The paths at the given index.
+       */
+      public java.lang.String getPaths(int index) {
+        return paths_.get(index);
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the paths at the given index.
+       */
+      public com.google.protobuf.ByteString
+          getPathsBytes(int index) {
+        return paths_.getByteString(index);
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @param index The index to set the value at.
+       * @param value The paths to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPaths(
+          int index, java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        ensurePathsIsMutable();
+        paths_.set(index, value);
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @param value The paths to add.
+       * @return This builder for chaining.
+       */
+      public Builder addPaths(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        ensurePathsIsMutable();
+        paths_.add(value);
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @param values The paths to add.
+       * @return This builder for chaining.
+       */
+      public Builder addAllPaths(
+          java.lang.Iterable<java.lang.String> values) {
+        ensurePathsIsMutable();
+        com.google.protobuf.AbstractMessageLite.Builder.addAll(
+            values, paths_);
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearPaths() {
+        paths_ =
+          com.google.protobuf.LazyStringArrayList.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000001);;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated string paths = 1;</code>
+       * @param value The bytes of the paths to add.
+       * @return This builder for chaining.
+       */
+      public Builder addPathsBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        ensurePathsIsMutable();
+        paths_.add(value);
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object format_ = "";
+      /**
+       * <code>string format = 2;</code>
+       * @return The format.
+       */
+      public java.lang.String getFormat() {
+        java.lang.Object ref = format_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          format_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string format = 2;</code>
+       * @return The bytes for format.
+       */
+      public com.google.protobuf.ByteString
+          getFormatBytes() {
+        java.lang.Object ref = format_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          format_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string format = 2;</code>
+       * @param value The format to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFormat(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        format_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string format = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFormat() {
+        format_ = getDefaultInstance().getFormat();
+        bitField0_ = (bitField0_ & ~0x00000002);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string format = 2;</code>
+       * @param value The bytes for format to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFormatBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        format_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+
+      private quantum.plan.proto.QuantumPlan.Schema schema_;
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.Schema, quantum.plan.proto.QuantumPlan.Schema.Builder, quantum.plan.proto.QuantumPlan.SchemaOrBuilder> schemaBuilder_;
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       * @return Whether the schema field is set.
+       */
+      public boolean hasSchema() {
+        return ((bitField0_ & 0x00000004) != 0);
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       * @return The schema.
+       */
+      public quantum.plan.proto.QuantumPlan.Schema getSchema() {
+        if (schemaBuilder_ == null) {
+          return schema_ == null ? quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : schema_;
+        } else {
+          return schemaBuilder_.getMessage();
+        }
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      public Builder setSchema(quantum.plan.proto.QuantumPlan.Schema value) {
+        if (schemaBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          schema_ = value;
+        } else {
+          schemaBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      public Builder setSchema(
+          quantum.plan.proto.QuantumPlan.Schema.Builder builderForValue) {
+        if (schemaBuilder_ == null) {
+          schema_ = builderForValue.build();
+        } else {
+          schemaBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      public Builder mergeSchema(quantum.plan.proto.QuantumPlan.Schema value) {
+        if (schemaBuilder_ == null) {
+          if (((bitField0_ & 0x00000004) != 0) &&
+            schema_ != null &&
+            schema_ != quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance()) {
+            getSchemaBuilder().mergeFrom(value);
+          } else {
+            schema_ = value;
+          }
+        } else {
+          schemaBuilder_.mergeFrom(value);
+        }
+        if (schema_ != null) {
+          bitField0_ |= 0x00000004;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      public Builder clearSchema() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        schema_ = null;
+        if (schemaBuilder_ != null) {
+          schemaBuilder_.dispose();
+          schemaBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.Schema.Builder getSchemaBuilder() {
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return internalGetSchemaFieldBuilder().getBuilder();
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.SchemaOrBuilder getSchemaOrBuilder() {
+        if (schemaBuilder_ != null) {
+          return schemaBuilder_.getMessageOrBuilder();
+        } else {
+          return schema_ == null ?
+              quantum.plan.proto.QuantumPlan.Schema.getDefaultInstance() : schema_;
+        }
+      }
+      /**
+       * <pre>
+       * Optional declared schema. If unset, the reader derives it from the
+       * file's own metadata. Provided for plans that want positional
+       * column-index agreement across rewriters.
+       * </pre>
+       *
+       * <code>.quantum.plan.proto.Schema schema = 3;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.Schema, quantum.plan.proto.QuantumPlan.Schema.Builder, quantum.plan.proto.QuantumPlan.SchemaOrBuilder> 
+          internalGetSchemaFieldBuilder() {
+        if (schemaBuilder_ == null) {
+          schemaBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.Schema, quantum.plan.proto.QuantumPlan.Schema.Builder, quantum.plan.proto.QuantumPlan.SchemaOrBuilder>(
+                  getSchema(),
+                  getParentForChildren(),
+                  isClean());
+          schema_ = null;
+        }
+        return schemaBuilder_;
+      }
+
+      // @@protoc_insertion_point(builder_scope:quantum.plan.proto.FileScanNode)
+    }
+
+    // @@protoc_insertion_point(class_scope:quantum.plan.proto.FileScanNode)
+    private static final quantum.plan.proto.QuantumPlan.FileScanNode DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new quantum.plan.proto.QuantumPlan.FileScanNode();
+    }
+
+    public static quantum.plan.proto.QuantumPlan.FileScanNode getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<FileScanNode>
+        PARSER = new com.google.protobuf.AbstractParser<FileScanNode>() {
+      @java.lang.Override
+      public FileScanNode parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<FileScanNode> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<FileScanNode> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.FileScanNode getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface FilterNodeOrBuilder extends
       // @@protoc_insertion_point(interface_extends:quantum.plan.proto.FilterNode)
       com.google.protobuf.MessageOrBuilder {
@@ -13231,6 +14275,21 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      */
     quantum.plan.proto.QuantumPlan.HashJoinNodeOrBuilder getHashJoinOrBuilder();
 
+    /**
+     * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+     * @return Whether the fileScan field is set.
+     */
+    boolean hasFileScan();
+    /**
+     * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+     * @return The fileScan.
+     */
+    quantum.plan.proto.QuantumPlan.FileScanNode getFileScan();
+    /**
+     * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+     */
+    quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder getFileScanOrBuilder();
+
     quantum.plan.proto.QuantumPlan.PlanNode.NodeCase getNodeCase();
   }
   /**
@@ -13281,6 +14340,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       PROJECT(3),
       HASH_AGG(4),
       HASH_JOIN(5),
+      FILE_SCAN(6),
       NODE_NOT_SET(0);
       private final int value;
       private NodeCase(int value) {
@@ -13303,6 +14363,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           case 3: return PROJECT;
           case 4: return HASH_AGG;
           case 5: return HASH_JOIN;
+          case 6: return FILE_SCAN;
           case 0: return NODE_NOT_SET;
           default: return null;
         }
@@ -13473,6 +14534,37 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       return quantum.plan.proto.QuantumPlan.HashJoinNode.getDefaultInstance();
     }
 
+    public static final int FILE_SCAN_FIELD_NUMBER = 6;
+    /**
+     * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+     * @return Whether the fileScan field is set.
+     */
+    @java.lang.Override
+    public boolean hasFileScan() {
+      return nodeCase_ == 6;
+    }
+    /**
+     * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+     * @return The fileScan.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.FileScanNode getFileScan() {
+      if (nodeCase_ == 6) {
+         return (quantum.plan.proto.QuantumPlan.FileScanNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+    }
+    /**
+     * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder getFileScanOrBuilder() {
+      if (nodeCase_ == 6) {
+         return (quantum.plan.proto.QuantumPlan.FileScanNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -13502,6 +14594,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (nodeCase_ == 5) {
         output.writeMessage(5, (quantum.plan.proto.QuantumPlan.HashJoinNode) node_);
       }
+      if (nodeCase_ == 6) {
+        output.writeMessage(6, (quantum.plan.proto.QuantumPlan.FileScanNode) node_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -13530,6 +14625,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (nodeCase_ == 5) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(5, (quantum.plan.proto.QuantumPlan.HashJoinNode) node_);
+      }
+      if (nodeCase_ == 6) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(6, (quantum.plan.proto.QuantumPlan.FileScanNode) node_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -13568,6 +14667,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           if (!getHashJoin()
               .equals(other.getHashJoin())) return false;
           break;
+        case 6:
+          if (!getFileScan()
+              .equals(other.getFileScan())) return false;
+          break;
         case 0:
         default:
       }
@@ -13602,6 +14705,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         case 5:
           hash = (37 * hash) + HASH_JOIN_FIELD_NUMBER;
           hash = (53 * hash) + getHashJoin().hashCode();
+          break;
+        case 6:
+          hash = (37 * hash) + FILE_SCAN_FIELD_NUMBER;
+          hash = (53 * hash) + getFileScan().hashCode();
           break;
         case 0:
         default:
@@ -13752,6 +14859,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (hashJoinBuilder_ != null) {
           hashJoinBuilder_.clear();
         }
+        if (fileScanBuilder_ != null) {
+          fileScanBuilder_.clear();
+        }
         nodeCase_ = 0;
         node_ = null;
         return this;
@@ -13813,6 +14923,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
             hashJoinBuilder_ != null) {
           result.node_ = hashJoinBuilder_.build();
         }
+        if (nodeCase_ == 6 &&
+            fileScanBuilder_ != null) {
+          result.node_ = fileScanBuilder_.build();
+        }
       }
 
       @java.lang.Override
@@ -13846,6 +14960,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           }
           case HASH_JOIN: {
             mergeHashJoin(other.getHashJoin());
+            break;
+          }
+          case FILE_SCAN: {
+            mergeFileScan(other.getFileScan());
             break;
           }
           case NODE_NOT_SET: {
@@ -13913,6 +15031,13 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
                 nodeCase_ = 5;
                 break;
               } // case 42
+              case 50: {
+                input.readMessage(
+                    internalGetFileScanFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                nodeCase_ = 6;
+                break;
+              } // case 50
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -14655,6 +15780,148 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         return hashJoinBuilder_;
       }
 
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.FileScanNode, quantum.plan.proto.QuantumPlan.FileScanNode.Builder, quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder> fileScanBuilder_;
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       * @return Whether the fileScan field is set.
+       */
+      @java.lang.Override
+      public boolean hasFileScan() {
+        return nodeCase_ == 6;
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       * @return The fileScan.
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.FileScanNode getFileScan() {
+        if (fileScanBuilder_ == null) {
+          if (nodeCase_ == 6) {
+            return (quantum.plan.proto.QuantumPlan.FileScanNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+        } else {
+          if (nodeCase_ == 6) {
+            return fileScanBuilder_.getMessage();
+          }
+          return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      public Builder setFileScan(quantum.plan.proto.QuantumPlan.FileScanNode value) {
+        if (fileScanBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          node_ = value;
+          onChanged();
+        } else {
+          fileScanBuilder_.setMessage(value);
+        }
+        nodeCase_ = 6;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      public Builder setFileScan(
+          quantum.plan.proto.QuantumPlan.FileScanNode.Builder builderForValue) {
+        if (fileScanBuilder_ == null) {
+          node_ = builderForValue.build();
+          onChanged();
+        } else {
+          fileScanBuilder_.setMessage(builderForValue.build());
+        }
+        nodeCase_ = 6;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      public Builder mergeFileScan(quantum.plan.proto.QuantumPlan.FileScanNode value) {
+        if (fileScanBuilder_ == null) {
+          if (nodeCase_ == 6 &&
+              node_ != quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance()) {
+            node_ = quantum.plan.proto.QuantumPlan.FileScanNode.newBuilder((quantum.plan.proto.QuantumPlan.FileScanNode) node_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            node_ = value;
+          }
+          onChanged();
+        } else {
+          if (nodeCase_ == 6) {
+            fileScanBuilder_.mergeFrom(value);
+          } else {
+            fileScanBuilder_.setMessage(value);
+          }
+        }
+        nodeCase_ = 6;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      public Builder clearFileScan() {
+        if (fileScanBuilder_ == null) {
+          if (nodeCase_ == 6) {
+            nodeCase_ = 0;
+            node_ = null;
+            onChanged();
+          }
+        } else {
+          if (nodeCase_ == 6) {
+            nodeCase_ = 0;
+            node_ = null;
+          }
+          fileScanBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.FileScanNode.Builder getFileScanBuilder() {
+        return internalGetFileScanFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder getFileScanOrBuilder() {
+        if ((nodeCase_ == 6) && (fileScanBuilder_ != null)) {
+          return fileScanBuilder_.getMessageOrBuilder();
+        } else {
+          if (nodeCase_ == 6) {
+            return (quantum.plan.proto.QuantumPlan.FileScanNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.FileScanNode file_scan = 6;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.FileScanNode, quantum.plan.proto.QuantumPlan.FileScanNode.Builder, quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder> 
+          internalGetFileScanFieldBuilder() {
+        if (fileScanBuilder_ == null) {
+          if (!(nodeCase_ == 6)) {
+            node_ = quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
+          }
+          fileScanBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.FileScanNode, quantum.plan.proto.QuantumPlan.FileScanNode.Builder, quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder>(
+                  (quantum.plan.proto.QuantumPlan.FileScanNode) node_,
+                  getParentForChildren(),
+                  isClean());
+          node_ = null;
+        }
+        nodeCase_ = 6;
+        onChanged();
+        return fileScanBuilder_;
+      }
+
       // @@protoc_insertion_point(builder_scope:quantum.plan.proto.PlanNode)
     }
 
@@ -14752,6 +16019,11 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_quantum_plan_proto_ScanNode_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_quantum_plan_proto_FileScanNode_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_quantum_plan_proto_FilterNode_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -14809,41 +16081,45 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       ".proto.TypeId\022-\n\005input\030\003 \001(\0132\036.quantum.p" +
       "lan.proto.ScalarExpr\"I\n\010ScanNode\022\021\n\tsour" +
       "ce_id\030\001 \001(\t\022*\n\006schema\030\002 \001(\0132\032.quantum.pl" +
-      "an.proto.Schema\"l\n\nFilterNode\022+\n\005child\030\001" +
-      " \001(\0132\034.quantum.plan.proto.PlanNode\0221\n\tpr" +
-      "edicate\030\002 \001(\0132\036.quantum.plan.proto.Scala" +
-      "rExpr\"\177\n\013ProjectNode\022+\n\005child\030\001 \001(\0132\034.qu" +
-      "antum.plan.proto.PlanNode\022-\n\005exprs\030\002 \003(\013" +
-      "2\036.quantum.plan.proto.ScalarExpr\022\024\n\014outp" +
-      "ut_names\030\003 \003(\t\"\301\001\n\021HashAggregateNode\022+\n\005" +
-      "child\030\001 \001(\0132\034.quantum.plan.proto.PlanNod" +
-      "e\0222\n\ngroup_keys\030\002 \003(\0132\036.quantum.plan.pro" +
-      "to.ScalarExpr\0225\n\naggregates\030\003 \003(\0132!.quan" +
-      "tum.plan.proto.AggregateSpec\022\024\n\014output_n" +
-      "ames\030\004 \003(\t\"\227\002\n\014HashJoinNode\022+\n\005build\030\001 \001" +
-      "(\0132\034.quantum.plan.proto.PlanNode\022+\n\005prob" +
-      "e\030\002 \001(\0132\034.quantum.plan.proto.PlanNode\0222\n" +
-      "\nbuild_keys\030\003 \003(\0132\036.quantum.plan.proto.S" +
-      "calarExpr\0222\n\nprobe_keys\030\004 \003(\0132\036.quantum." +
-      "plan.proto.ScalarExpr\022/\n\tjoin_type\030\005 \001(\016" +
-      "2\034.quantum.plan.proto.JoinType\022\024\n\014output" +
-      "_names\030\006 \003(\t\"\230\002\n\010PlanNode\022,\n\004scan\030\001 \001(\0132" +
-      "\034.quantum.plan.proto.ScanNodeH\000\0220\n\006filte" +
-      "r\030\002 \001(\0132\036.quantum.plan.proto.FilterNodeH" +
-      "\000\0222\n\007project\030\003 \001(\0132\037.quantum.plan.proto." +
-      "ProjectNodeH\000\0229\n\010hash_agg\030\004 \001(\0132%.quantu" +
-      "m.plan.proto.HashAggregateNodeH\000\0225\n\thash" +
-      "_join\030\005 \001(\0132 .quantum.plan.proto.HashJoi" +
-      "nNodeH\000B\006\n\004node*Z\n\006TypeId\022\r\n\tTYPE_BOOL\020\000" +
-      "\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TYPE" +
-      "_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004*e\n\014BinaryOpT" +
-      "ype\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\tBIN" +
-      "OP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022\014\n\010" +
-      "BINOP_GT\020\005*W\n\rAggregateKind\022\013\n\007AGG_SUM\020\000" +
-      "\022\022\n\016AGG_COUNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG" +
-      "_MAX\020\003\022\013\n\007AGG_AVG\020\004*Z\n\010JoinType\022\016\n\nJOIN_" +
-      "INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JOIN_RIG" +
-      "HT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006proto3"
+      "an.proto.Schema\"Y\n\014FileScanNode\022\r\n\005paths" +
+      "\030\001 \003(\t\022\016\n\006format\030\002 \001(\t\022*\n\006schema\030\003 \001(\0132\032" +
+      ".quantum.plan.proto.Schema\"l\n\nFilterNode" +
+      "\022+\n\005child\030\001 \001(\0132\034.quantum.plan.proto.Pla" +
+      "nNode\0221\n\tpredicate\030\002 \001(\0132\036.quantum.plan." +
+      "proto.ScalarExpr\"\177\n\013ProjectNode\022+\n\005child" +
+      "\030\001 \001(\0132\034.quantum.plan.proto.PlanNode\022-\n\005" +
+      "exprs\030\002 \003(\0132\036.quantum.plan.proto.ScalarE" +
+      "xpr\022\024\n\014output_names\030\003 \003(\t\"\301\001\n\021HashAggreg" +
+      "ateNode\022+\n\005child\030\001 \001(\0132\034.quantum.plan.pr" +
+      "oto.PlanNode\0222\n\ngroup_keys\030\002 \003(\0132\036.quant" +
+      "um.plan.proto.ScalarExpr\0225\n\naggregates\030\003" +
+      " \003(\0132!.quantum.plan.proto.AggregateSpec\022" +
+      "\024\n\014output_names\030\004 \003(\t\"\227\002\n\014HashJoinNode\022+" +
+      "\n\005build\030\001 \001(\0132\034.quantum.plan.proto.PlanN" +
+      "ode\022+\n\005probe\030\002 \001(\0132\034.quantum.plan.proto." +
+      "PlanNode\0222\n\nbuild_keys\030\003 \003(\0132\036.quantum.p" +
+      "lan.proto.ScalarExpr\0222\n\nprobe_keys\030\004 \003(\013" +
+      "2\036.quantum.plan.proto.ScalarExpr\022/\n\tjoin" +
+      "_type\030\005 \001(\0162\034.quantum.plan.proto.JoinTyp" +
+      "e\022\024\n\014output_names\030\006 \003(\t\"\317\002\n\010PlanNode\022,\n\004" +
+      "scan\030\001 \001(\0132\034.quantum.plan.proto.ScanNode" +
+      "H\000\0220\n\006filter\030\002 \001(\0132\036.quantum.plan.proto." +
+      "FilterNodeH\000\0222\n\007project\030\003 \001(\0132\037.quantum." +
+      "plan.proto.ProjectNodeH\000\0229\n\010hash_agg\030\004 \001" +
+      "(\0132%.quantum.plan.proto.HashAggregateNod" +
+      "eH\000\0225\n\thash_join\030\005 \001(\0132 .quantum.plan.pr" +
+      "oto.HashJoinNodeH\000\0225\n\tfile_scan\030\006 \001(\0132 ." +
+      "quantum.plan.proto.FileScanNodeH\000B\006\n\004nod" +
+      "e*Z\n\006TypeId\022\r\n\tTYPE_BOOL\020\000\022\016\n\nTYPE_INT32" +
+      "\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TYPE_FLOAT64\020\003\022\017\n\013" +
+      "TYPE_STRING\020\004*e\n\014BinaryOpType\022\r\n\tBINOP_A" +
+      "DD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\tBINOP_MUL\020\002\022\014\n\010BI" +
+      "NOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022\014\n\010BINOP_GT\020\005*W\n\r" +
+      "AggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_COUNT_" +
+      "STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007AGG_" +
+      "AVG\020\004*Z\n\010JoinType\022\016\n\nJOIN_INNER\020\000\022\023\n\017JOI" +
+      "N_LEFT_OUTER\020\001\022\024\n\020JOIN_RIGHT_OUTER\020\002\022\023\n\017" +
+      "JOIN_FULL_OUTER\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -14903,36 +16179,42 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_ScanNode_descriptor,
         new java.lang.String[] { "SourceId", "Schema", });
-    internal_static_quantum_plan_proto_FilterNode_descriptor =
+    internal_static_quantum_plan_proto_FileScanNode_descriptor =
       getDescriptor().getMessageType(9);
+    internal_static_quantum_plan_proto_FileScanNode_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_quantum_plan_proto_FileScanNode_descriptor,
+        new java.lang.String[] { "Paths", "Format", "Schema", });
+    internal_static_quantum_plan_proto_FilterNode_descriptor =
+      getDescriptor().getMessageType(10);
     internal_static_quantum_plan_proto_FilterNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_FilterNode_descriptor,
         new java.lang.String[] { "Child", "Predicate", });
     internal_static_quantum_plan_proto_ProjectNode_descriptor =
-      getDescriptor().getMessageType(10);
+      getDescriptor().getMessageType(11);
     internal_static_quantum_plan_proto_ProjectNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_ProjectNode_descriptor,
         new java.lang.String[] { "Child", "Exprs", "OutputNames", });
     internal_static_quantum_plan_proto_HashAggregateNode_descriptor =
-      getDescriptor().getMessageType(11);
+      getDescriptor().getMessageType(12);
     internal_static_quantum_plan_proto_HashAggregateNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashAggregateNode_descriptor,
         new java.lang.String[] { "Child", "GroupKeys", "Aggregates", "OutputNames", });
     internal_static_quantum_plan_proto_HashJoinNode_descriptor =
-      getDescriptor().getMessageType(12);
+      getDescriptor().getMessageType(13);
     internal_static_quantum_plan_proto_HashJoinNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashJoinNode_descriptor,
         new java.lang.String[] { "Build", "Probe", "BuildKeys", "ProbeKeys", "JoinType", "OutputNames", });
     internal_static_quantum_plan_proto_PlanNode_descriptor =
-      getDescriptor().getMessageType(13);
+      getDescriptor().getMessageType(14);
     internal_static_quantum_plan_proto_PlanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_PlanNode_descriptor,
-        new java.lang.String[] { "Scan", "Filter", "Project", "HashAgg", "HashJoin", "Node", });
+        new java.lang.String[] { "Scan", "Filter", "Project", "HashAgg", "HashJoin", "FileScan", "Node", });
     descriptor.resolveAllFeaturesImmutable();
   }
 

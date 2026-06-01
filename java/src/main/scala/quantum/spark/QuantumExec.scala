@@ -50,12 +50,17 @@ case class QuantumExec(
   private def runNative(): Seq[InternalRow] = {
     val eng = QuantumEngine.createEngine(64L * 1024 * 1024)
     try {
-      val cols: Array[QuantumEngine.Column] = inputColumns.map {
-        case LongColumn(v)   => QuantumEngine.columnInt64(eng, v, null)
-        case StringColumn(v) => QuantumEngine.columnString(eng, v)
+      // File-source plans need no source registration — the FileScanNode in
+      // the plan tells the engine to open the file itself. In-memory plans
+      // pack the data into a single Batch and register it under sourceId.
+      if (inputColumns.nonEmpty) {
+        val cols: Array[QuantumEngine.Column] = inputColumns.map {
+          case LongColumn(v)   => QuantumEngine.columnInt64(eng, v, null)
+          case StringColumn(v) => QuantumEngine.columnString(eng, v)
+        }
+        val batch = QuantumEngine.batchNew(eng, cols)
+        QuantumEngine.registerSource(eng, sourceId, Array(batch))
       }
-      val batch = QuantumEngine.batchNew(eng, cols)
-      QuantumEngine.registerSource(eng, sourceId, Array(batch))
 
       val result = QuantumEngine.execute(eng, planBytes)
       try {

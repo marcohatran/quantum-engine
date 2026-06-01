@@ -101,6 +101,23 @@ message ScanNode {
   Schema schema    = 2;
 }
 
+// FileScan: the engine itself reads the file(s). Compared to ScanNode, no
+// pre-registration of in-memory batches is required — the engine opens the
+// file via the io::FileSystem helper (so paths may be file:// / s3:// / etc.).
+//
+// `format` selects the reader:
+//   "parquet"        -> ParquetReader on each path (concatenated in order)
+//   "delta"          -> DeltaTableReader; `paths` must have length 1 (the
+//                       table root); commit-log replay decides the file set.
+message FileScanNode {
+  repeated string paths  = 1;
+  string          format = 2;
+  // Optional declared schema. If unset, the reader derives it from the
+  // file's own metadata. Provided for plans that want positional
+  // column-index agreement across rewriters.
+  Schema          schema = 3;
+}
+
 message FilterNode {
   PlanNode   child     = 1;
   ScalarExpr predicate = 2;
@@ -142,5 +159,6 @@ message PlanNode {
     ProjectNode       project   = 3;
     HashAggregateNode hash_agg  = 4;
     HashJoinNode      hash_join = 5;
+    FileScanNode      file_scan = 6;
   }
 }

@@ -1,10 +1,12 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
 import quantum.plan.proto.QuantumPlan
 
@@ -46,6 +48,23 @@ class QuantumStrategy extends SparkStrategy {
     }
   }
 }
+
+/**
+ * Where the rows for the engine's scan come from. Either Spark already
+ * materialized them as a LocalRelation (we marshal column-major into the
+ * engine via JNA) or they live on disk and the engine reads them itself via
+ * a `FileScanNode` (Phase 5.9+).
+ */
+sealed trait DataSource {
+  def output: Seq[Attribute]
+}
+final case class InMemorySource(lr: LocalRelation) extends DataSource {
+  override def output: Seq[Attribute] = lr.output
+}
+final case class FileSource(
+    paths: Seq[String],
+    format: String,
+    override val output: Seq[Attribute]) extends DataSource
 
 object QuantumStrategy {
   // Thread-local sinks for tests: the most-recent LogicalPlan considered, and
@@ -131,16 +150,34 @@ object QuantumStrategy {
     }
 
     // Peel collects already-translated FilterNode predicates so each one is
-    // bound to the column map that was valid at the Filter's depth.
-    def peel(p: LogicalPlan): Option[(LocalRelation, Map[ExprId, Int], Seq[QuantumPlan.ScalarExpr])] =
+    // bound to the column map that was valid at the Filter's depth. The leaf
+    // is either a LocalRelation (in-memory inputs) or a Parquet-backed
+    // LogicalRelation (file scan — engine reads the file itself).
+    def peel(p: LogicalPlan): Option[(DataSource, Map[ExprId, Int], Seq[QuantumPlan.ScalarExpr])] =
       p match {
         case lr: LocalRelation =>
           val m = lr.output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
-          Some((lr, m, Seq.empty))
+          Some((InMemorySource(lr), m, Seq.empty))
+        case LogicalRelation(hr: HadoopFsRelation, output, _, _) =>
+          hr.fileFormat match {
+            case _: ParquetFileFormat =>
+              val paths = hr.location.inputFiles.toSeq
+              if (paths.size != 1) {
+                lastTranslated.set(s"reject: Parquet LogicalRelation has ${paths.size} files; " +
+                  "only single-file Parquet supported in Phase 5.9")
+                None
+              } else {
+                val m = output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
+                Some((FileSource(paths, "parquet", output), m, Seq.empty))
+              }
+            case other =>
+              lastTranslated.set(s"reject: unsupported HadoopFsRelation format $other")
+              None
+          }
         case sa: SubqueryAlias =>
           peel(sa.child)
         case f: Filter =>
-          peel(f.child).flatMap { case (lr, m, accum) =>
+          peel(f.child).flatMap { case (src, m, accum) =>
             val conjs      = flattenAnd(f.condition)
             val translated = conjs.map(translateScalarWith(m))
             if (translated.exists(_.isEmpty)) {
@@ -148,11 +185,11 @@ object QuantumStrategy {
                 "(only Long >, <, = literal/col supported)")
               None
             } else {
-              Some((lr, m, accum ++ translated.flatten))
+              Some((src, m, accum ++ translated.flatten))
             }
           }
         case pr: Project =>
-          peel(pr.child).flatMap { case (lr, childMap, accum) =>
+          peel(pr.child).flatMap { case (src, childMap, accum) =>
             val pairs: Seq[Option[(ExprId, Int)]] = pr.projectList.zip(pr.output).map {
               case (ar: AttributeReference, outAttr) =>
                 childMap.get(ar.exprId).map(outAttr.exprId -> _)
@@ -161,7 +198,7 @@ object QuantumStrategy {
               case _ => None
             }
             if (pairs.exists(_.isEmpty)) None
-            else Some((lr, pairs.flatten.toMap, accum))
+            else Some((src, pairs.flatten.toMap, accum))
           }
         case _ => None
       }
@@ -171,15 +208,15 @@ object QuantumStrategy {
       case _                     => false
     }
 
-    val (localRel, exprIdToCol, pushedFilters) = peel(child) match {
+    val (dataSource, exprIdToCol, pushedFilters) = peel(child) match {
       case Some(triple) if triple._1.output.forall(a => isSupportedColType(a.dataType)) => triple
-      case Some((lr, _, _)) =>
-        lastTranslated.set(s"reject: LocalRelation has unsupported column types (" +
-          lr.output.map(a => s"${a.name}:${a.dataType}").mkString(", ") + ")")
+      case Some((src, _, _)) =>
+        lastTranslated.set(s"reject: data source has unsupported column types (" +
+          src.output.map(a => s"${a.name}:${a.dataType}").mkString(", ") + ")")
         return None
       case None =>
         if (lastTranslated.get == null || !lastTranslated.get.startsWith("reject:"))
-          lastTranslated.set("reject: child didn't peel to LocalRelation\n" + child.treeString)
+          lastTranslated.set("reject: child didn't peel to a known source\n" + child.treeString)
         return None
     }
 
@@ -255,24 +292,36 @@ object QuantumStrategy {
       return None
     }
 
-    // --- Build the proto plan. Schema reflects each LocalRelation column's
-    //     actual declared type (Long → TYPE_INT64, String → TYPE_STRING).
+    // --- Build the proto plan. For an in-memory source the scan is a
+    //     ScanNode that references an engine-side registered source. For a
+    //     file source the scan is a FileScanNode and no data marshalling
+    //     happens — the engine opens the file itself via io::FileSystem.
     def protoTypeFor(t: DataType): QuantumPlan.TypeId = t match {
       case LongType   => QuantumPlan.TypeId.TYPE_INT64
       case StringType => QuantumPlan.TypeId.TYPE_STRING
-      case other      => throw new IllegalStateException(s"unsupported LR type $other")
+      case other      => throw new IllegalStateException(s"unsupported source col type $other")
     }
-    val schemaB = QuantumPlan.Schema.newBuilder()
-    localRel.output.zipWithIndex.foreach { case (a, i) =>
-      schemaB.addFields(QuantumPlan.Field.newBuilder()
-        .setName(if (a.name.nonEmpty) a.name else s"c$i")
-        .setType(protoTypeFor(a.dataType)))
+    val (sourceId, scan) = dataSource match {
+      case InMemorySource(_) =>
+        val schemaB = QuantumPlan.Schema.newBuilder()
+        dataSource.output.zipWithIndex.foreach { case (a, i) =>
+          schemaB.addFields(QuantumPlan.Field.newBuilder()
+            .setName(if (a.name.nonEmpty) a.name else s"c$i")
+            .setType(protoTypeFor(a.dataType)))
+        }
+        val sid = s"quantum_src_${System.nanoTime()}"
+        val s = QuantumPlan.PlanNode.newBuilder()
+          .setScan(QuantumPlan.ScanNode.newBuilder().setSourceId(sid).setSchema(schemaB))
+          .build()
+        (sid, s)
+      case FileSource(paths, format, _) =>
+        val fs = QuantumPlan.FileScanNode.newBuilder().setFormat(format)
+        paths.foreach(fs.addPaths)
+        // FileScanNode.schema is left unset — the reader derives it from
+        // the file's own metadata.
+        val s = QuantumPlan.PlanNode.newBuilder().setFileScan(fs).build()
+        ("", s)
     }
-    val schema   = schemaB.build()
-    val sourceId = s"quantum_src_${System.nanoTime()}"
-    val scan = QuantumPlan.PlanNode.newBuilder()
-      .setScan(QuantumPlan.ScanNode.newBuilder().setSourceId(sourceId).setSchema(schema))
-      .build()
 
     // --- Wrap the Scan in one FilterNode per pre-translated pushed-down
     //     predicate. The native BinaryOp has no AND, so flattenAnd already
@@ -340,24 +389,28 @@ object QuantumStrategy {
     val physicalIndex: Array[Int] = physicalIndexBuilder.toArray
     val _ = (outputNames, groupSlot, groupExprIdToPhysicalIdx) // silence unused
 
-    // --- Marshal all LocalRelation columns in column-major form, dispatching
-    //     on each column's declared type.
-    val nCols  = localRel.output.size
-    val data   = localRel.data.toArray
-    val inputCols: Array[InputColumn] = Array.tabulate(nCols) { c =>
-      localRel.output(c).dataType match {
-        case LongType =>
-          LongColumn(data.map(_.getLong(c)))
-        case StringType =>
-          // LocalRelation stores Strings as UTF8String inside InternalRow.
-          // Materialise to Java String for the JNA boundary (the native side
-          // copies into engine-owned storage anyway).
-          StringColumn(data.map { row =>
-            if (row.isNullAt(c)) null else row.getString(c)
-          })
-        case other =>
-          throw new IllegalStateException(s"unsupported LR col type $other")
-      }
+    // --- Marshal source rows. For an InMemorySource we copy the
+    //     LocalRelation's row data into column-major typed arrays. For a
+    //     FileSource we hand off an empty array; the FileScanNode tells the
+    //     native engine to open the file itself.
+    val inputCols: Array[InputColumn] = dataSource match {
+      case InMemorySource(lr) =>
+        val data   = lr.data.toArray
+        val nCols  = lr.output.size
+        Array.tabulate(nCols) { c =>
+          lr.output(c).dataType match {
+            case LongType =>
+              LongColumn(data.map(_.getLong(c)))
+            case StringType =>
+              StringColumn(data.map { row =>
+                if (row.isNullAt(c)) null else row.getString(c)
+              })
+            case other =>
+              throw new IllegalStateException(s"unsupported LR col type $other")
+          }
+        }
+      case _: FileSource =>
+        Array.empty[InputColumn]
     }
 
     lastTranslated.set("HashAggregate(" + aggregateExprs.size + " outputs over " +
