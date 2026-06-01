@@ -114,8 +114,10 @@ void encodeScalarExpr(const ScalarExpr& expr, proto::ScalarExpr* out) {
             lm->set_pattern(x->pattern);
         } else if constexpr (std::is_same_v<T, std::unique_ptr<UnaryOpExpr>>) {
             auto* um = out->mutable_unary();
-            // Only Not for now.
-            um->set_op(proto::UNOP_NOT);
+            switch (x->op) {
+                case UnaryOpType::Not:    um->set_op(proto::UNOP_NOT);     break;
+                case UnaryOpType::IsNull: um->set_op(proto::UNOP_IS_NULL); break;
+            }
             encodeScalarExpr(x->input, um->mutable_input());
         }
     }, expr);
@@ -142,7 +144,12 @@ ScalarExpr decodeScalarExpr(const proto::ScalarExpr& msg) {
         }
         case proto::ScalarExpr::kUnary: {
             auto e = std::make_unique<UnaryOpExpr>();
-            e->op    = UnaryOpType::Not;  // only Not defined
+            switch (msg.unary().op()) {
+                case proto::UNOP_NOT:     e->op = UnaryOpType::Not;    break;
+                case proto::UNOP_IS_NULL: e->op = UnaryOpType::IsNull; break;
+                default: raise(ErrorCode::InvalidArgument,
+                               "PlanProto: unknown proto UnaryOpType");
+            }
             e->input = decodeScalarExpr(msg.unary().input());
             return ScalarExpr{std::move(e)};
         }

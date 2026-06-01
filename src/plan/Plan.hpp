@@ -41,7 +41,7 @@ using ScalarExpr = std::variant<
 >;
 
 enum class BinaryOpType { Add, Sub, Mul, Eq, Lt, Gt, Lte, Gte, And, Or };
-enum class UnaryOpType  { Not };
+enum class UnaryOpType  { Not, IsNull };
 
 struct BinaryOpExpr {
     BinaryOpType op;

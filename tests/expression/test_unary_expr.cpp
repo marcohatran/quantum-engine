@@ -42,6 +42,32 @@ TEST(UnaryExpr, NotFlipsBoolValues) {
     }
 }
 
+TEST(UnaryExpr, IsNullOnInt64AlwaysValid) {
+    MemoryManager mm(16 * 1024);
+    auto col = ColumnVector::make(Int64, 5, &mm);
+    col.validity().setAllValid();
+    auto* a = col.typed<int64_t>();
+    a[0] = 10; a[1] = 20; a[2] = 30; a[3] = 40; a[4] = 50;
+    col.validity().setValid(1, false);  // row 1 is NULL
+    col.validity().setValid(3, false);  // row 3 is NULL
+
+    std::vector<ColumnVector> cols;
+    cols.push_back(std::move(col));
+    ColumnBatch batch(std::move(cols), PositionList::identity(5));
+
+    UnaryExpr expr(UnaryOp::IsNull, std::make_unique<ColumnRef>(0));
+    auto result = expr.eval(batch, &mm);
+    ASSERT_EQ(result.type(), Bool);
+
+    // IS NULL is always valid (SQL: IS NULL never returns NULL).
+    for (size_t i = 0; i < 5; ++i) EXPECT_TRUE(result.validity().isValid(i));
+    EXPECT_EQ(result.typed<uint8_t>()[0], 0U);  // 10  IS NULL = false
+    EXPECT_EQ(result.typed<uint8_t>()[1], 1U);  // NULL IS NULL = true
+    EXPECT_EQ(result.typed<uint8_t>()[2], 0U);
+    EXPECT_EQ(result.typed<uint8_t>()[3], 1U);
+    EXPECT_EQ(result.typed<uint8_t>()[4], 0U);
+}
+
 TEST(UnaryExpr, NotPreservesNullValidity) {
     // NULL value: NOT NULL must remain NULL (the validity bit stays cleared).
     MemoryManager mm(16 * 1024);

@@ -1,7 +1,7 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
@@ -203,6 +203,29 @@ object QuantumStrategy {
               .setUnary(QuantumPlan.UnaryOp.newBuilder()
                 .setOp(QuantumPlan.UnaryOpType.UNOP_NOT)
                 .setInput(c))
+              .build()
+          }
+        case IsNull(child) =>
+          translateScalarWith(idMap)(child).map { c =>
+            QuantumPlan.ScalarExpr.newBuilder()
+              .setUnary(QuantumPlan.UnaryOp.newBuilder()
+                .setOp(QuantumPlan.UnaryOpType.UNOP_IS_NULL)
+                .setInput(c))
+              .build()
+          }
+        case IsNotNull(child) =>
+          // Standalone IS NOT NULL — not redundant w.r.t. a comparison —
+          // expressed as NOT(IsNull(child)).
+          translateScalarWith(idMap)(child).map { c =>
+            val isNull = QuantumPlan.ScalarExpr.newBuilder()
+              .setUnary(QuantumPlan.UnaryOp.newBuilder()
+                .setOp(QuantumPlan.UnaryOpType.UNOP_IS_NULL)
+                .setInput(c))
+              .build()
+            QuantumPlan.ScalarExpr.newBuilder()
+              .setUnary(QuantumPlan.UnaryOp.newBuilder()
+                .setOp(QuantumPlan.UnaryOpType.UNOP_NOT)
+                .setInput(isNull))
               .build()
           }
         case _ => None

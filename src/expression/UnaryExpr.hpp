@@ -6,10 +6,12 @@
 
 namespace quantum {
 
-enum class UnaryOp { Not };
+enum class UnaryOp {
+    Not,    // boolean negation; input must be BOOL; preserves validity
+    IsNull, // returns BOOL — true iff input row is NULL. Output is always
+            // valid (SQL `IS NULL` never returns NULL). Input may be any type.
+};
 
-// UnaryOp::Not: boolean negation. Input must be BOOL. Validity is preserved
-// row-by-row (NULL -> NULL); valid rows have their value bit flipped.
 class UnaryExpr final : public Expression {
 public:
     UnaryExpr(UnaryOp op, ExpressionPtr input)

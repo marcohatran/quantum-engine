@@ -70,7 +70,8 @@ message LikeOp {
 }
 
 enum UnaryOpType {
-  UNOP_NOT = 0;
+  UNOP_NOT     = 0;
+  UNOP_IS_NULL = 1;
 }
 
 message UnaryOp {

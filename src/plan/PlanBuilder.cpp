@@ -128,8 +128,12 @@ ExpressionPtr PlanBuilder::buildExpr(const ScalarExpr& expr) {
             return std::make_unique<LikeExpr>(
                 buildExpr(e->input), e->pattern);
         } else if constexpr (std::is_same_v<T, std::unique_ptr<UnaryOpExpr>>) {
-            // Only Not is defined today.
-            return std::make_unique<UnaryExpr>(UnaryOp::Not, buildExpr(e->input));
+            UnaryOp nativeOp;
+            switch (e->op) {
+                case UnaryOpType::Not:    nativeOp = UnaryOp::Not;    break;
+                case UnaryOpType::IsNull: nativeOp = UnaryOp::IsNull; break;
+            }
+            return std::make_unique<UnaryExpr>(nativeOp, buildExpr(e->input));
         }
     }, expr);
 }
