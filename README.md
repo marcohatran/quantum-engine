@@ -73,8 +73,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **Multi-source and N-way joins (verified)** — the recursive `Join` peel composes with: (a) Parquet file sources on either or both sides (`spark.read.parquet(A) JOIN spark.read.parquet(B)` registers zero in-memory sources — both leaves are `FileScanNode`s); (b) 3-way joins (`ta JOIN tb JOIN tc` plans as `Join(Join(A,B), C)`, recursive peel shifts the right side's idMap positions at each level). No code changes — both shapes drop out of 5.22's design.
 - **LEFT OUTER / RIGHT OUTER / FULL OUTER JOIN** — verified end-to-end. Surfaced a naming-convention mismatch: the native engine's `LEFT_OUTER` preserves the *probe* side and `RIGHT_OUTER` preserves the *build* side, but our Spark strategy puts Spark's LEFT input into `build`. So Spark's `LeftOuter` (preserve LEFT) maps to engine's `RIGHT_OUTER` (preserve build), and Spark's `RightOuter` (preserve RIGHT) maps to engine's `LEFT_OUTER` (preserve probe). `FullOuter` and `Inner` pass straight through.
 - **Composite-key JOIN** — `JOIN ON a.k1 = b.k1 AND a.k2 = b.k2` over mixed Long+String keys. The strategy's `extractEquiKeys` already decomposes the `AND`-chained `EqualTo`s into a sequence of `(build_col, probe_col)` pairs; the native `HashJoin` uses `KeyCodec` for composite keys (Phase 2/3). Verified end-to-end including duplicate matches on one side and unmatched composites.
+- **`IN` predicate + JOIN-with-WHERE** — `In(value, list)` is translated by rewriting to an OR-chain (`value = a OR value = b OR …`) before recursing through the existing translator. Catalyst sometimes performs this rewrite itself but not always; handling it in the strategy makes us robust to either shape. JOIN-with-WHERE (`SELECT … FROM A JOIN B WHERE jwb.v >= 25 GROUP BY …`) drops out of the existing Filter peel — the Filter above the Join becomes a `FilterNode` wrapping the `HashJoinNode`.
 
-**Tests & benchmarks** — 183 C++ tests + 34 JVM tests. New since previous slice: JVM `multiKeyInnerJoin`.
+**Tests & benchmarks** — 183 C++ tests + 36 JVM tests. New since previous slice: JVM `whereInPredicateRoutesAsOrChain`, `joinThenWhereOverJoinedOutput`.
 
 ## Build & Test
 
@@ -167,6 +168,7 @@ Key invariants the codebase enforces:
 | **5** | JOIN over Parquet file sources + N-way join (recursive Join peel) — verified by JVM test | done |
 | **5** | LEFT / RIGHT / FULL OUTER JOIN — fixed Spark↔engine naming-convention swap; JVM-tested | done |
 | **5** | Composite-key JOIN — `ON a.k1 = b.k1 AND a.k2 = b.k2` over mixed Long+String keys (`KeyCodec`) | done |
+| **5** | `IN (list)` predicate — Catalyst-shape-robust OR-chain rewrite; JOIN-with-WHERE over joined output | done |
 | 5 | Spark: WHERE on String / Int / Double; GTE / LTE / OR / NOT (needs new BinaryOp / UnaryOp kinds) | planned |
 | 5 | Spark: `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |

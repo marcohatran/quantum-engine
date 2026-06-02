@@ -1,7 +1,7 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan, Project, SubqueryAlias}
@@ -184,6 +184,17 @@ object QuantumStrategy {
               .setUnary(QuantumPlan.UnaryOp.newBuilder()
                 .setOp(QuantumPlan.UnaryOpType.UNOP_NOT).setInput(isNull)).build()
           }
+        case In(value, list) if list.nonEmpty =>
+          // Rewrite `value IN (a, b, c)` as
+          // `(value = a) OR (value = b) OR (value = c)`.
+          // Catalyst would normally do this when the list is small enough,
+          // but it doesn't always — e.g. for SQL `IN (literal_list)` over
+          // an in-memory relation. Handling it here makes the strategy
+          // robust to either shape.
+          val rewritten: Expression = list.tail.foldLeft[Expression](EqualTo(value, list.head)) {
+            (acc, x) => Or(acc, EqualTo(value, x))
+          }
+          translateScalarWith(idMap)(rewritten)
         case _ => None
       }
     }

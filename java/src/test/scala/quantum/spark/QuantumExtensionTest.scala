@@ -397,6 +397,61 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.26: WHERE col IN (a, b, c). Catalyst rewrites small `IN`
+   * lists (under the default `spark.sql.optimizer.inSetConversionThreshold`)
+   * to OR-chains, which we already translate as a single FilterNode
+   * with a BinaryOp(Or, ...) predicate.
+   */
+  @Test
+  def whereInPredicateRoutesAsOrChain(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L), (6L, 60L)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_in")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_in WHERE k IN (2, 4, 6) GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((2L, 20L), (4L, 40L), (6L, 60L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "WHERE IN should route through native (via OR rewrite); flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
+   * Phase 5.26: JOIN followed by WHERE on the joined output. The Filter
+   * sits above the Join in the peel chain; existing Filter logic
+   * collapses it into a FilterNode above the HashJoinNode.
+   */
+  @Test
+  def joinThenWhereOverJoinedOutput(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, "alpha"), (2L, "beta"), (3L, "gamma"), (4L, "delta"))
+      .toDF("k", "name")
+    val b = Seq((1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L))
+      .toDF("k", "v")
+    a.createOrReplaceTempView("jwa")
+    b.createOrReplaceTempView("jwb")
+
+    val rows = spark.sql(
+      """SELECT jwa.k, SUM(jwb.v) AS s
+        |  FROM jwa JOIN jwb ON jwa.k = jwb.k
+        | WHERE jwb.v >= 25
+        | GROUP BY jwa.k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // WHERE v >= 25 keeps k in {3, 4}.
+    assertEquals(Seq((3L, 30L), (4L, 40L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "JOIN + WHERE should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.25: JOIN on a composite (k1, k2) key. The strategy's
    * `extractEquiKeys` decomposes `AND`-chained `EqualTo` conjuncts in
    * the join condition into a sequence of (build_col, probe_col) pairs.
