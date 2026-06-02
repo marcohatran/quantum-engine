@@ -32,6 +32,15 @@ class QuantumStrategy extends SparkStrategy {
     QuantumStrategy.lastSeen.set(plan)
     QuantumStrategy.seenClasses.add(plan.getClass.getSimpleName)
     plan match {
+      // HAVING: Catalyst plans `... GROUP BY k HAVING <cond>` as a Filter
+      // wrapping the Aggregate. Translate the HAVING into a FilterNode
+      // pushed above the HashAggregateNode. If untranslatable, decline so
+      // Spark falls back to its own Filter on top of QuantumExec.
+      case Filter(having, agg @ Aggregate(groupingExprs, aggregateExprs, child)) =>
+        QuantumStrategy.tryTranslateLongAggregate(
+            agg, groupingExprs, aggregateExprs, child, Some(having))
+          .map(qe => Seq(qe))
+          .getOrElse(Nil)
       case agg @ Aggregate(groupingExprs, aggregateExprs, child) =>
         QuantumStrategy.tryTranslateLongAggregate(agg, groupingExprs, aggregateExprs, child)
           .map(quantumExec => Seq(quantumExec))
@@ -83,7 +92,8 @@ object QuantumStrategy {
       agg: Aggregate,
       groupingExprs: Seq[Expression],
       aggregateExprs: Seq[NamedExpression],
-      child: LogicalPlan): Option[SparkPlan] = {
+      child: LogicalPlan,
+      havingCondition: Option[Expression] = None): Option[SparkPlan] = {
 
     // ------------------------------------------------------------------
     // Helpers
@@ -545,7 +555,7 @@ object QuantumStrategy {
     val aggNames   = outputItems.collect { case AggOut(_, label) => label }
     (groupNames ++ aggNames).foreach(hashAggB.addOutputNames)
 
-    val root = QuantumPlan.PlanNode.newBuilder().setHashAgg(hashAggB).build()
+    val aggPlan = QuantumPlan.PlanNode.newBuilder().setHashAgg(hashAggB).build()
 
     // Physical-to-Spark output reordering.
     val physicalIndexBuilder = scala.collection.mutable.ArrayBuffer.empty[Int]
@@ -565,9 +575,39 @@ object QuantumStrategy {
     }
     val physicalIndex: Array[Int] = physicalIndexBuilder.toArray
 
+    // HAVING pushdown. The Filter's condition references the Aggregate's
+    // output Attributes by exprId; map each agg.output(i).exprId to its
+    // engine column position via physicalIndex(i).
+    val (root, havingPushed, havingDeclined) = havingCondition match {
+      case None => (aggPlan, 0, false)
+      case Some(cond) =>
+        val havingIdMap: Map[ExprId, Int] =
+          agg.output.zip(physicalIndex).map { case (attr, idx) => attr.exprId -> idx }.toMap
+        val conjs      = stripRedundantIsNotNull(flattenAnd(cond))
+        val translated = conjs.map(translateScalarWith(havingIdMap))
+        if (translated.exists(_.isEmpty)) {
+          // Decline the whole plan so Spark handles Filter(Aggregate)
+          // itself via FilterExec(QuantumExec) — otherwise the HAVING
+          // would be silently dropped.
+          (aggPlan, 0, true)
+        } else {
+          val wrapped = translated.flatten.foldLeft(aggPlan) { (acc, pred) =>
+            QuantumPlan.PlanNode.newBuilder()
+              .setFilter(QuantumPlan.FilterNode.newBuilder().setChild(acc).setPredicate(pred))
+              .build()
+          }
+          (wrapped, translated.size, false)
+        }
+    }
+
+    if (havingDeclined) {
+      lastTranslated.set("reject: HAVING untranslatable; Spark will handle filter natively")
+      return None
+    }
+
     lastTranslated.set("HashAggregate(" + aggregateExprs.size + " outputs over " +
       groupColIndices.size + " group keys, " + peeled.filterCount + " pushed filters, " +
-      peeled.sources.size + " sources)")
+      havingPushed + " HAVING filters, " + peeled.sources.size + " sources)")
     Some(QuantumExec(
       output        = agg.output,
       sources       = peeled.sources,

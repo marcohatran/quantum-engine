@@ -397,6 +397,38 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.27: HAVING clause. Catalyst plans `HAVING SUM(v) > N` as a
+   * Filter above the Aggregate. The strategy currently doesn't match the
+   * outer Filter, so Spark's own FilterExec sits above our QuantumExec —
+   * still correct, just not natively-pushed.
+   */
+  @Test
+  def havingClauseAfterGroupBy(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (1L, 20L), (1L, 30L),     // k=1 -> SUM=60
+      (2L, 100L),                          // k=2 -> SUM=100
+      (3L, 500L), (3L, 600L)               // k=3 -> SUM=1100
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_having")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_having GROUP BY k HAVING SUM(v) > 100")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // k=1 -> 60   (filtered out)
+    // k=2 -> 100  (filtered out — strict >)
+    // k=3 -> 1100 (kept)
+    assertEquals(Seq((3L, 1100L)), rows)
+    // The strategy should have pushed the HAVING filter into the engine.
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 HAVING filters")),
+      "HAVING should push as 1 filter; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.26: WHERE col IN (a, b, c). Catalyst rewrites small `IN`
    * lists (under the default `spark.sql.optimizer.inSetConversionThreshold`)
    * to OR-chains, which we already translate as a single FilterNode

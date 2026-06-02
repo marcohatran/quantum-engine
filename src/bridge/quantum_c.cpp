@@ -45,6 +45,7 @@ struct QBatch {
 
 struct QResult {
     OperatorPtr                op;
+    MemoryManager*             mm = nullptr;  // borrowed from QEngine
     std::optional<ColumnBatch> current;
     QBatch                     viewHandle;  // reused across q_result_next calls
 };
@@ -213,6 +214,7 @@ extern "C" QResult* q_execute(QEngine*       engine,
         op->open();
         auto* out = new QResult();
         out->op = std::move(op);
+        out->mm = engine->mm.get();
         return out;
     }, nullptr);
 }
@@ -231,8 +233,16 @@ extern "C" const QBatch* q_result_next(QResult* result) {
         }
         result->current = result->op->getNext();
         if (!result->current.has_value()) return nullptr;
-        result->viewHandle.batch = std::move(*result->current);
+        // At the C ABI boundary we materialize any non-identity position
+        // list into densely-packed columns. JVM consumers iterate by row
+        // index 0..numRows-1; they have no way to consume a position list.
+        // The cost is a one-time copy of the active rows per output batch.
+        ColumnBatch batch = std::move(*result->current);
         result->current.reset();
+        if (!batch.positions().isIdentity()) {
+            batch = batch.selectActive(result->mm);
+        }
+        result->viewHandle.batch = std::move(batch);
         return &result->viewHandle;
     }, nullptr);
 }
