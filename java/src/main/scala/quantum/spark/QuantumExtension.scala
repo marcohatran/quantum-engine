@@ -151,13 +151,14 @@ object QuantumStrategy {
     def protoTypeFor(t: DataType): QuantumPlan.TypeId = t match {
       case LongType    => QuantumPlan.TypeId.TYPE_INT64
       case IntegerType => QuantumPlan.TypeId.TYPE_INT64  // widened
+      case DoubleType  => QuantumPlan.TypeId.TYPE_FLOAT64
       case StringType  => QuantumPlan.TypeId.TYPE_STRING
       case other       => throw new IllegalStateException(s"unsupported col type $other")
     }
 
     def isSupportedColType(t: DataType): Boolean = t match {
-      case LongType | StringType | IntegerType => true
-      case _                                   => false
+      case LongType | StringType | IntegerType | DoubleType => true
+      case _                                                => false
     }
 
     val sourceIdCounter = new java.util.concurrent.atomic.AtomicLong(0)
@@ -314,6 +315,9 @@ object QuantumStrategy {
           case IntegerType =>
             LongColumn(data.map(r => if (r.isNullAt(c)) 0L else r.getInt(c).toLong),
                        validityOrNull)
+          case DoubleType =>
+            DoubleColumn(data.map(r => if (r.isNullAt(c)) 0.0 else r.getDouble(c)),
+                         validityOrNull)
           case StringType =>
             StringColumn(data.map(r => if (r.isNullAt(c)) null else r.getString(c)))
           case other =>

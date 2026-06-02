@@ -397,6 +397,36 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.30: source LocalRelation with a `DoubleType` column. `price` is
+   * marshalled as a `DoubleColumn` through `q_column_float64`; the WHERE
+   * comparison `price > 50.5` runs in the engine's Float64 comparison
+   * kernel.
+   */
+  @Test
+  def whereOverDoubleSourceColumn(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("apple",  10.5),
+      ("apple",  60.0),
+      ("banana", 25.5),
+      ("banana", 75.0),
+      ("cherry", 100.0)
+    ).toDF("name", "price")
+    df.createOrReplaceTempView("kv_double")
+
+    val rows = spark.sql(
+      "SELECT name, COUNT(*) AS n FROM kv_double WHERE price > 50.5 GROUP BY name")
+      .collect().map(r => (r.getString(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // > 50.5 keeps: (apple, 60.0), (banana, 75.0), (cherry, 100.0).
+    assertEquals(Seq(("apple", 1L), ("banana", 1L), ("cherry", 1L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "DoubleType source col should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.29: WHERE name LIKE 'a%' pushes natively. The engine's `LikeOp`
    * supports SQL `%` and `_` wildcards on STRING columns; the Spark
    * translator now recognises Catalyst's `Like(child, Literal(pattern), _)`

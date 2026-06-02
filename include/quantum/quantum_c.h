@@ -68,6 +68,14 @@ QColumn* q_column_int64(QEngine* engine,
                         const uint8_t* validity,
                         size_t         num_rows);
 
+// Build a FLOAT64 column from `data[num_rows]` (double-precision values).
+// `validity[num_rows]` (1 = valid, 0 = NULL) is optional; pass NULL for
+// all-valid.
+QColumn* q_column_float64(QEngine*      engine,
+                          const double* data,
+                          const uint8_t* validity,
+                          size_t        num_rows);
+
 // Build a STRING column. `values[i]` is the bytes for row i with length
 // `lens[i]`. Strings need not be NUL-terminated. `validity` per-row.
 QColumn* q_column_string(QEngine*           engine,

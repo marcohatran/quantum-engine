@@ -54,6 +54,8 @@ public final class QuantumEngine {
 
         Column     q_column_int64(Engine engine, Pointer data, Pointer validity,
                                   long num_rows);
+        Column     q_column_float64(Engine engine, Pointer data, Pointer validity,
+                                    long num_rows);
         Column     q_column_string(Engine engine, Pointer values, Pointer lens,
                                    Pointer validity, long num_rows);
 
@@ -89,6 +91,24 @@ public final class QuantumEngine {
     }
 
     public static void destroyEngine(Engine e) { NATIVE.q_destroy_engine(e); }
+
+    /** Build a float64 column from a Java double[] (validity = null for all-valid). */
+    public static Column columnFloat64(Engine e, double[] values, byte[] validity) {
+        Memory dataMem = new Memory((long) values.length * Double.BYTES);
+        dataMem.write(0, values, 0, values.length);
+
+        Memory validityMem = null;
+        if (validity != null) {
+            validityMem = new Memory(validity.length);
+            validityMem.write(0, validity, 0, validity.length);
+        }
+        Column col = NATIVE.q_column_float64(e, dataMem,
+            validityMem == null ? Pointer.NULL : validityMem, values.length);
+        if (col == null) {
+            throw new RuntimeException("q_column_float64 failed: " + lastError());
+        }
+        return col;
+    }
 
     /** Build an int64 column from a Java long[] (validity = null for all-valid). */
     public static Column columnInt64(Engine e, long[] values, byte[] validity) {

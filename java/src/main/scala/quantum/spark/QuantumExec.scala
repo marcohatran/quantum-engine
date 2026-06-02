@@ -19,8 +19,9 @@ sealed trait InputColumn
  * @param validity null = all-valid; otherwise per-row 0/1 bytes — must match
  *                 `values.length`
  */
-final case class LongColumn(values: Array[Long], validity: Array[Byte] = null) extends InputColumn
-final case class StringColumn(values: Array[String])                           extends InputColumn
+final case class LongColumn(values: Array[Long], validity: Array[Byte] = null)     extends InputColumn
+final case class DoubleColumn(values: Array[Double], validity: Array[Byte] = null) extends InputColumn
+final case class StringColumn(values: Array[String])                               extends InputColumn
 
 /**
  * Custom SparkPlan: hands an already-translated PlanNode IR over to the
@@ -66,8 +67,9 @@ case class QuantumExec(
       // FileScanNode in the plan handles its own I/O.
       sources.foreach { case (sourceId, cols) =>
         val builtCols: Array[QuantumEngine.Column] = cols.map {
-          case LongColumn(v, va) => QuantumEngine.columnInt64(eng, v, va)
-          case StringColumn(v)   => QuantumEngine.columnString(eng, v)
+          case LongColumn(v, va)   => QuantumEngine.columnInt64(eng, v, va)
+          case DoubleColumn(v, va) => QuantumEngine.columnFloat64(eng, v, va)
+          case StringColumn(v)     => QuantumEngine.columnString(eng, v)
         }
         val batch = QuantumEngine.batchNew(eng, builtCols)
         QuantumEngine.registerSource(eng, sourceId, Array(batch))

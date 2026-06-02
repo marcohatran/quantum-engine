@@ -123,6 +123,29 @@ extern "C" QColumn* q_column_int64(QEngine*       engine,
     }, nullptr);
 }
 
+extern "C" QColumn* q_column_float64(QEngine*       engine,
+                                     const double*  data,
+                                     const uint8_t* validity,
+                                     size_t         num_rows) {
+    return guarded([&]() -> QColumn* {
+        if (!engine || (!data && num_rows > 0)) {
+            raise(ErrorCode::InvalidArgument, "q_column_float64: null input");
+        }
+        auto col = ColumnVector::make(Float64, num_rows, engine->mm.get());
+        if (num_rows > 0) {
+            std::memcpy(col.values().data(), data, num_rows * sizeof(double));
+        }
+        col.validity().setAllValid();
+        if (validity != nullptr) {
+            for (size_t i = 0; i < num_rows; ++i) {
+                col.validity().setValid(i, validity[i] != 0);
+            }
+        }
+        auto* out = new QColumn{std::move(col)};
+        return out;
+    }, nullptr);
+}
+
 extern "C" QColumn* q_column_string(QEngine*           engine,
                                     const char* const* values,
                                     const int32_t*     lens,
