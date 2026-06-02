@@ -105,6 +105,7 @@ struct ProjectNode;
 struct HashAggregateNode;
 struct HashJoinNode;
 struct LimitNode;
+struct SortNode;
 
 using PlanNode = std::variant<
     ScanNode,
@@ -113,7 +114,8 @@ using PlanNode = std::variant<
     std::unique_ptr<ProjectNode>,
     std::unique_ptr<HashAggregateNode>,
     std::unique_ptr<HashJoinNode>,
-    std::unique_ptr<LimitNode>
+    std::unique_ptr<LimitNode>,
+    std::unique_ptr<SortNode>
 >;
 
 struct FilterNode {
@@ -137,6 +139,13 @@ struct HashAggregateNode {
 struct LimitNode {
     PlanNode child;
     int64_t  limit = 0;
+};
+
+struct SortNode {
+    PlanNode                  child;
+    std::vector<ScalarExpr>   keys;
+    std::vector<bool>         ascending;
+    std::vector<bool>         nulls_first;
 };
 
 enum class JoinTypeIR { Inner, LeftOuter, RightOuter, FullOuter };

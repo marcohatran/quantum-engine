@@ -185,6 +185,13 @@ message LimitNode {
   int64    limit = 2;
 }
 
+message SortNode {
+  PlanNode            child       = 1;
+  repeated ScalarExpr keys        = 2;
+  repeated bool       ascending   = 3;
+  repeated bool       nulls_first = 4;
+}
+
 message PlanNode {
   oneof node {
     ScanNode          scan      = 1;
@@ -194,5 +201,6 @@ message PlanNode {
     HashJoinNode      hash_join = 5;
     FileScanNode      file_scan = 6;
     LimitNode         limit     = 7;
+    SortNode          sort      = 8;
   }
 }

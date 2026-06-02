@@ -310,6 +310,12 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
             auto* m = out->mutable_limit();
             encodePlan(x->child, m->mutable_child());
             m->set_limit(x->limit);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<SortNode>>) {
+            auto* m = out->mutable_sort();
+            encodePlan(x->child, m->mutable_child());
+            for (const auto& k : x->keys)        encodeScalarExpr(k, m->add_keys());
+            for (bool a : x->ascending)          m->add_ascending(a);
+            for (bool nf : x->nulls_first)       m->add_nulls_first(nf);
         }
     }, node);
 }
@@ -383,6 +389,14 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
             auto n = std::make_unique<LimitNode>();
             n->child = decodePlan(msg.limit().child());
             n->limit = msg.limit().limit();
+            return PlanNode{std::move(n)};
+        }
+        case proto::PlanNode::kSort: {
+            auto n = std::make_unique<SortNode>();
+            n->child = decodePlan(msg.sort().child());
+            for (const auto& k : msg.sort().keys())        n->keys.push_back(decodeScalarExpr(k));
+            for (bool a : msg.sort().ascending())          n->ascending.push_back(a);
+            for (bool nf : msg.sort().nulls_first())       n->nulls_first.push_back(nf);
             return PlanNode{std::move(n)};
         }
         case proto::PlanNode::NODE_NOT_SET:

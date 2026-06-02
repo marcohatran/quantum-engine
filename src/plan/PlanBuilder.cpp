@@ -23,6 +23,7 @@
 #include "operator/LimitOperator.hpp"
 #include "operator/ProjectOperator.hpp"
 #include "operator/ScanOperator.hpp"
+#include "operator/SortOperator.hpp"
 
 namespace quantum::plan {
 
@@ -247,6 +248,13 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
         } else if constexpr (std::is_same_v<T, std::unique_ptr<LimitNode>>) {
             return std::make_unique<LimitOperator>(
                 mm_, build(n->child, catalog), n->limit);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<SortNode>>) {
+            std::vector<ExpressionPtr> keys;
+            keys.reserve(n->keys.size());
+            for (const auto& k : n->keys) keys.push_back(buildExpr(k));
+            return std::make_unique<SortOperator>(
+                mm_, build(n->child, catalog),
+                std::move(keys), n->ascending, n->nulls_first);
         }
     }, node);
 }

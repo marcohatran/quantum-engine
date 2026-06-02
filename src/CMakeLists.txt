@@ -33,6 +33,7 @@ add_library(quantum_core SHARED
     operator/HashAggregateOperator.cpp
     operator/HashJoinOperator.cpp
     operator/LimitOperator.cpp
+    operator/SortOperator.cpp
     spill/SpillFile.cpp
     io/CsvReader.cpp
     io/DeltaTableReader.cpp

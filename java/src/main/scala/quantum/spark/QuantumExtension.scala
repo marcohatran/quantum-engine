@@ -4,7 +4,8 @@ import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Contains, EndsWith, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Like, Literal, NamedExpression, Not, Or, StartsWith}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, SubqueryAlias}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, Sort, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -495,6 +496,34 @@ object QuantumStrategy {
           }
           if (pairs.exists(_.isEmpty)) None
           else Some(result.copy(idMap = pairs.flatten.toMap))
+        }
+
+      case Sort(order, _, child) =>
+        // ORDER BY: peel the child then wrap in a SortNode. Each SortOrder
+        // is (Expression, direction, nullOrdering). Inner expression is
+        // typically an AttributeReference that we resolve via the child's
+        // idMap to a column index; non-AttributeReference sort keys
+        // (function calls, arithmetic) currently make us decline.
+        peel(child).flatMap { result =>
+          val translated: Seq[Option[QuantumPlan.ScalarExpr]] = order.map { so =>
+            translateScalarWith(result.idMap)(so.child)
+          }
+          if (translated.exists(_.isEmpty)) {
+            lastTranslated.set(s"reject: sort key untranslatable: $order")
+            None
+          } else {
+            val sortB = QuantumPlan.SortNode.newBuilder().setChild(result.plan)
+            translated.flatten.foreach(sortB.addKeys)
+            order.foreach { so =>
+              sortB.addAscending(so.direction == Ascending)
+              sortB.addNullsFirst(so.nullOrdering match {
+                case org.apache.spark.sql.catalyst.expressions.NullsFirst => true
+                case _ => false
+              })
+            }
+            val sortPlan = QuantumPlan.PlanNode.newBuilder().setSort(sortB).build()
+            Some(result.copy(plan = sortPlan))
+          }
         }
 
       case f: Filter =>
