@@ -184,24 +184,26 @@ Schema decodeSchema(const proto::Schema& msg) {
 
 proto::AggregateKind encodeAggKind(AggregateKind k) {
     switch (k) {
-        case AggregateKind::Sum:       return proto::AGG_SUM;
-        case AggregateKind::CountStar: return proto::AGG_COUNT_STAR;
-        case AggregateKind::Min:       return proto::AGG_MIN;
-        case AggregateKind::Max:       return proto::AGG_MAX;
-        case AggregateKind::Avg:       return proto::AGG_AVG;
-        case AggregateKind::Count:     return proto::AGG_COUNT;
+        case AggregateKind::Sum:           return proto::AGG_SUM;
+        case AggregateKind::CountStar:     return proto::AGG_COUNT_STAR;
+        case AggregateKind::Min:           return proto::AGG_MIN;
+        case AggregateKind::Max:           return proto::AGG_MAX;
+        case AggregateKind::Avg:           return proto::AGG_AVG;
+        case AggregateKind::Count:         return proto::AGG_COUNT;
+        case AggregateKind::CountDistinct: return proto::AGG_COUNT_DISTINCT;
     }
     raise(ErrorCode::Internal, "PlanProto: unknown AggregateKind");
 }
 
 AggregateKind decodeAggKind(proto::AggregateKind k) {
     switch (k) {
-        case proto::AGG_SUM:        return AggregateKind::Sum;
-        case proto::AGG_COUNT_STAR: return AggregateKind::CountStar;
-        case proto::AGG_MIN:        return AggregateKind::Min;
-        case proto::AGG_MAX:        return AggregateKind::Max;
-        case proto::AGG_AVG:        return AggregateKind::Avg;
-        case proto::AGG_COUNT:      return AggregateKind::Count;
+        case proto::AGG_SUM:            return AggregateKind::Sum;
+        case proto::AGG_COUNT_STAR:     return AggregateKind::CountStar;
+        case proto::AGG_MIN:            return AggregateKind::Min;
+        case proto::AGG_MAX:            return AggregateKind::Max;
+        case proto::AGG_AVG:            return AggregateKind::Avg;
+        case proto::AGG_COUNT:          return AggregateKind::Count;
+        case proto::AGG_COUNT_DISTINCT: return AggregateKind::CountDistinct;
         default: raise(ErrorCode::InvalidArgument, "PlanProto: unknown proto AggregateKind");
     }
 }

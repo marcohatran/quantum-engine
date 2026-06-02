@@ -641,12 +641,24 @@ object QuantumStrategy {
       case _ => None
     }
 
+    // COUNT(DISTINCT col) — the isDistinct flag is on AggregateExpression,
+    // not on the wrapped Count function, so classifyAgg can't see it. Caller
+    // peels the AggregateExpression and routes isDistinct through here.
+    def classifyDistinctAgg(fn: AggregateFunction): Option[OutputItem] = fn match {
+      case Count(Seq(ar: AttributeReference)) if ar.dataType == LongType =>
+        exprIdToCol.get(ar.exprId).map(i =>
+          AggOut(specOf(QuantumPlan.AggregateKind.AGG_COUNT_DISTINCT, Some(i)),
+                 "count_distinct"))
+      case _ => None
+    }
+
     val outputItems: Seq[OutputItem] = aggregateExprs.flatMap {
       case ar: AttributeReference if groupKeySet.contains(ar.exprId) =>
         exprIdToCol.get(ar.exprId).map(GroupKeyOut)
       case Alias(ar: AttributeReference, _) if groupKeySet.contains(ar.exprId) =>
         exprIdToCol.get(ar.exprId).map(GroupKeyOut)
-      case Alias(AggregateExpression(fn, _, _, _, _), _) => classifyAgg(fn)
+      case Alias(AggregateExpression(fn, _, true,  _, _), _) => classifyDistinctAgg(fn)
+      case Alias(AggregateExpression(fn, _, false, _, _), _) => classifyAgg(fn)
       case other =>
         lastTranslated.set(s"reject: unsupported output expression: $other")
         return None

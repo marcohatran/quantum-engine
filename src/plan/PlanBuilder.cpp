@@ -70,6 +70,14 @@ AggregateFunctionPtr buildAggregate(const AggregateSpec& spec, PlanBuilder& pb) 
         case AggregateKind::Count:
             return std::make_unique<CountColumn>(inputExpr());
 
+        case AggregateKind::CountDistinct:
+            if (spec.inputType.id != TypeId::INT64) {
+                raise(ErrorCode::NotImplemented,
+                      "PlanBuilder: COUNT(DISTINCT) only supported on INT64 (got {})",
+                      spec.inputType.toString());
+            }
+            return std::make_unique<CountDistinctI64>(inputExpr());
+
         case AggregateKind::Sum:
             if (spec.inputType.id == TypeId::INT64)   return std::make_unique<SumI64>(inputExpr());
             if (spec.inputType.id == TypeId::FLOAT64) return std::make_unique<SumF64>(inputExpr());

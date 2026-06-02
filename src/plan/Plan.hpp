@@ -67,7 +67,7 @@ struct UnaryOpExpr {
 // the only aggregate with no input.
 // ============================================================================
 
-enum class AggregateKind { Sum, CountStar, Min, Max, Avg, Count };
+enum class AggregateKind { Sum, CountStar, Min, Max, Avg, Count, CountDistinct };
 
 struct AggregateSpec {
     AggregateKind             kind;

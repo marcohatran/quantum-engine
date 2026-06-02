@@ -509,6 +509,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      * <code>AGG_COUNT = 5;</code>
      */
     AGG_COUNT(5),
+    /**
+     * <pre>
+     * COUNT(DISTINCT col)
+     * </pre>
+     *
+     * <code>AGG_COUNT_DISTINCT = 6;</code>
+     */
+    AGG_COUNT_DISTINCT(6),
     UNRECOGNIZED(-1),
     ;
 
@@ -549,6 +557,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      * <code>AGG_COUNT = 5;</code>
      */
     public static final int AGG_COUNT_VALUE = 5;
+    /**
+     * <pre>
+     * COUNT(DISTINCT col)
+     * </pre>
+     *
+     * <code>AGG_COUNT_DISTINCT = 6;</code>
+     */
+    public static final int AGG_COUNT_DISTINCT_VALUE = 6;
 
 
     public final int getNumber() {
@@ -581,6 +597,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         case 3: return AGG_MAX;
         case 4: return AGG_AVG;
         case 5: return AGG_COUNT;
+        case 6: return AGG_COUNT_DISTINCT;
         default: return null;
       }
     }
@@ -19515,12 +19532,12 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       "\022\014\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022\r\n\tBINOP_G" +
       "TE\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_OR\020\t*-\n\013Una" +
       "ryOpType\022\014\n\010UNOP_NOT\020\000\022\020\n\014UNOP_IS_NULL\020\001" +
-      "*f\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_CO" +
+      "*~\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_CO" +
       "UNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007" +
-      "AGG_AVG\020\004\022\r\n\tAGG_COUNT\020\005*Z\n\010JoinType\022\016\n\n" +
-      "JOIN_INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JOI" +
-      "N_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006pr" +
-      "oto3"
+      "AGG_AVG\020\004\022\r\n\tAGG_COUNT\020\005\022\026\n\022AGG_COUNT_DI" +
+      "STINCT\020\006*Z\n\010JoinType\022\016\n\nJOIN_INNER\020\000\022\023\n\017" +
+      "JOIN_LEFT_OUTER\020\001\022\024\n\020JOIN_RIGHT_OUTER\020\002\022" +
+      "\023\n\017JOIN_FULL_OUTER\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,

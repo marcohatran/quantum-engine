@@ -397,6 +397,30 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.32: COUNT(DISTINCT col) — per-group distinct cardinality.
+   */
+  @Test
+  def countDistinctPerGroup(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (1L, 10L), (1L, 20L), (1L, 20L), (1L, 30L),  // distinct = 3
+      (2L, 5L),  (2L, 5L),                                     // distinct = 1
+      (3L, 1L),  (3L, 2L),  (3L, 3L),  (3L, 4L)                // distinct = 4
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_dcnt")
+
+    val rows = spark.sql(
+      "SELECT k, COUNT(DISTINCT v) AS n FROM kv_dcnt GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 3L), (2L, 1L), (3L, 4L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "COUNT(DISTINCT) should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.31: aggregates over a `DoubleType` column — `SumF64` / `MinF64`
    * / `MaxF64` / `AvgF64` native paths.
    */

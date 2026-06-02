@@ -6,6 +6,8 @@
 #include <optional>
 #include <vector>
 
+#include <unordered_set>
+
 #include "common/DataType.hpp"
 #include "expression/Expression.hpp"
 #include "vector/ColumnVector.hpp"
@@ -197,6 +199,32 @@ public:
 private:
     ExpressionPtr                    input_;
     mutable std::vector<std::string> values_;
+};
+
+// COUNT(DISTINCT col) where col is INT64. Per group, tracks the set of
+// distinct non-null int64 values seen and emits the set's cardinality.
+// State layout: int32 index into a mutable vector of per-group sets owned
+// by this aggregate function. Init grows the vector by one slot and
+// returns its position. Operator is single-threaded, so the mutable
+// bookkeeping is safe without locking.
+class CountDistinctI64 final : public AggregateFunction {
+public:
+    explicit CountDistinctI64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(int32_t); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Int64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr                                  input_;
+    mutable std::vector<std::unordered_set<int64_t>> sets_;
 };
 
 // SUM(double) -> double. Skips null inputs.
