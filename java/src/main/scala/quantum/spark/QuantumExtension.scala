@@ -1,7 +1,7 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSessionExtensions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Contains, EndsWith, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Like, Literal, NamedExpression, Not, Or, StartsWith}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, SubqueryAlias}
@@ -170,17 +170,28 @@ object QuantumStrategy {
     }
 
     def stripRedundantIsNotNull(conjuncts: Seq[Expression]): Seq[Expression] = {
-      def comparedCols(e: Expression): Seq[ExprId] = e match {
-        case GreaterThan(l, r) => comparedCols(l) ++ comparedCols(r)
-        case LessThan(l, r)    => comparedCols(l) ++ comparedCols(r)
-        case EqualTo(l, r)     => comparedCols(l) ++ comparedCols(r)
-        case ar: AttributeReference => Seq(ar.exprId)
-        case _ => Seq.empty
+      // A column referenced in any null-propagating predicate is implicitly
+      // also IsNotNull — the predicate evaluates to NULL on a NULL input,
+      // and Filter excludes NULL-predicate rows. Spark adds explicit
+      // `isnotnull(col)` to enable parquet page-skipping; we strip it
+      // when redundant.
+      def referencedCols(e: Expression): Seq[ExprId] = e match {
+        case GreaterThan(l, r)        => referencedCols(l) ++ referencedCols(r)
+        case LessThan(l, r)           => referencedCols(l) ++ referencedCols(r)
+        case EqualTo(l, r)            => referencedCols(l) ++ referencedCols(r)
+        case GreaterThanOrEqual(l, r) => referencedCols(l) ++ referencedCols(r)
+        case LessThanOrEqual(l, r)    => referencedCols(l) ++ referencedCols(r)
+        case Like(c, _, _)            => referencedCols(c)
+        case StartsWith(c, _)         => referencedCols(c)
+        case EndsWith(c, _)           => referencedCols(c)
+        case Contains(c, _)           => referencedCols(c)
+        case ar: AttributeReference   => Seq(ar.exprId)
+        case _                        => Seq.empty
       }
-      val compared: Set[ExprId] = conjuncts.flatMap(comparedCols).toSet
+      val referenced: Set[ExprId] = conjuncts.flatMap(referencedCols).toSet
       conjuncts.filter {
-        case IsNotNull(ar: AttributeReference) => !compared.contains(ar.exprId)
-        case _ => true
+        case IsNotNull(ar: AttributeReference) => !referenced.contains(ar.exprId)
+        case _                                 => true
       }
     }
 
@@ -254,9 +265,38 @@ object QuantumStrategy {
             (acc, x) => Or(acc, EqualTo(value, x))
           }
           translateScalarWith(idMap)(rewritten)
+        case Like(child, Literal(pattern: UTF8String, StringType), _) =>
+          // The engine's LikeOp takes a constant `std::string` pattern with
+          // SQL `%` / `_` wildcards. We don't honor Catalyst's escape char
+          // (Phase 3 engine doesn't support escapes); the pattern is
+          // passed through verbatim.
+          translateScalarWith(idMap)(child).map { c =>
+            buildLike(c, pattern.toString)
+          }
+        case StartsWith(child, Literal(prefix: UTF8String, StringType)) =>
+          // Catalyst rewrites `col LIKE 'foo%'` to StartsWith(col, 'foo')
+          // when the pattern's wildcards are only a trailing `%`.
+          translateScalarWith(idMap)(child).map { c =>
+            buildLike(c, prefix.toString + "%")
+          }
+        case EndsWith(child, Literal(suffix: UTF8String, StringType)) =>
+          // Catalyst rewrites `col LIKE '%foo'` to EndsWith(col, 'foo').
+          translateScalarWith(idMap)(child).map { c =>
+            buildLike(c, "%" + suffix.toString)
+          }
+        case Contains(child, Literal(needle: UTF8String, StringType)) =>
+          // Catalyst rewrites `col LIKE '%foo%'` to Contains(col, 'foo').
+          translateScalarWith(idMap)(child).map { c =>
+            buildLike(c, "%" + needle.toString + "%")
+          }
         case _ => None
       }
     }
+
+    def buildLike(input: QuantumPlan.ScalarExpr, pattern: String): QuantumPlan.ScalarExpr =
+      QuantumPlan.ScalarExpr.newBuilder()
+        .setLike(QuantumPlan.LikeOp.newBuilder().setInput(input).setPattern(pattern))
+        .build()
 
     // Marshal a LocalRelation into column-major typed arrays for the JNA bridge.
     def marshalLocalRelation(lr: LocalRelation): Array[InputColumn] = {

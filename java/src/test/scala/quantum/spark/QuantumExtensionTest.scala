@@ -397,6 +397,37 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.29: WHERE name LIKE 'a%' pushes natively. The engine's `LikeOp`
+   * supports SQL `%` and `_` wildcards on STRING columns; the Spark
+   * translator now recognises Catalyst's `Like(child, Literal(pattern), _)`
+   * and emits a `LikeOp` ScalarExpr.
+   */
+  @Test
+  def whereLikePushesNatively(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("apple",     1L),
+      ("apricot",   2L),
+      ("banana",    3L),
+      ("blackberry",4L),
+      ("avocado",   5L)
+    ).toDF("name", "v")
+    df.createOrReplaceTempView("kv_like")
+
+    val rows = spark.sql(
+      "SELECT name, SUM(v) AS s FROM kv_like WHERE name LIKE 'a%' GROUP BY name")
+      .collect().map(r => (r.getString(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // Matches: apple, apricot, avocado
+    assertEquals(Seq(("apple", 1L), ("apricot", 2L), ("avocado", 5L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("1 pushed filters")),
+      "LIKE should push as 1 filter; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.28: LIMIT N over an Aggregate.
    *
    * Caveat: Spark's physical planner handles LIMIT via its own
