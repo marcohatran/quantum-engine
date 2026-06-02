@@ -397,6 +397,96 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.24: LEFT OUTER JOIN preserves left rows that have no match on
+   * the right; right-side columns become NULL for those rows. Verified by
+   * counting rows per left key — keys with no right match still appear
+   * with COUNT(b.v) = 0 (CountColumn skips nulls).
+   */
+  @Test
+  def leftOuterJoinPreservesUnmatchedLeftRows(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, "alpha"), (2L, "beta"), (3L, "gamma"), (4L, "delta"))
+      .toDF("k", "name")
+    val b = Seq((1L, 10L), (1L, 20L), (3L, 30L))  // 2 and 4 absent
+      .toDF("k", "v")
+    a.createOrReplaceTempView("la")
+    b.createOrReplaceTempView("lb")
+
+    val rows = spark.sql(
+      """SELECT la.k, COUNT(lb.v) AS n
+        |  FROM la LEFT OUTER JOIN lb ON la.k = lb.k
+        | GROUP BY la.k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // k=1: two matches -> 2 ; k=2: no match -> 0 ; k=3: one match -> 1 ; k=4: no match -> 0.
+    assertEquals(Seq((1L, 2L), (2L, 0L), (3L, 1L), (4L, 0L)), rows)
+  }
+
+  /**
+   * Phase 5.24: RIGHT OUTER JOIN preserves right rows that have no match
+   * on the left.
+   */
+  @Test
+  def rightOuterJoinPreservesUnmatchedRightRows(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, 100L), (3L, 300L))  // only k = 1 and 3
+      .toDF("k", "x")
+    val b = Seq((1L, "alpha"), (2L, "beta"), (3L, "gamma"), (4L, "delta"))
+      .toDF("k", "name")
+    a.createOrReplaceTempView("ra")
+    b.createOrReplaceTempView("rb")
+
+    val rows = spark.sql(
+      """SELECT rb.k, COUNT(ra.x) AS n
+        |  FROM ra RIGHT OUTER JOIN rb ON ra.k = rb.k
+        | GROUP BY rb.k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // Right preserved: all 4 keys appear. k=1 -> 1 match, k=2 -> 0, k=3 -> 1, k=4 -> 0.
+    assertEquals(Seq((1L, 1L), (2L, 0L), (3L, 1L), (4L, 0L)), rows)
+  }
+
+  /**
+   * Phase 5.24: FULL OUTER JOIN preserves unmatched rows from BOTH sides.
+   * Each key appears once even if only one side has it. Uses COALESCE
+   * (or COUNT(*) of synthesized rows) to make the assertion simple.
+   */
+  @Test
+  def fullOuterJoinPreservesBothUnmatched(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, "alpha"), (2L, "beta"))             // k in {1, 2}
+      .toDF("k", "name")
+    val b = Seq((2L, 200L), (3L, 300L))                   // k in {2, 3}
+      .toDF("k", "v")
+    a.createOrReplaceTempView("fa")
+    b.createOrReplaceTempView("fb")
+
+    // Group by a-side key (will be null for rows present only on b-side).
+    // COUNT(fa.name) tells us if the left side contributed.
+    val rows = spark.sql(
+      """SELECT fa.k, COUNT(fa.name) AS la, COUNT(fb.v) AS lb
+        |  FROM fa FULL OUTER JOIN fb ON fa.k = fb.k
+        | GROUP BY fa.k""".stripMargin)
+      .collect().map(r => (
+        if (r.isNullAt(0)) -1L else r.getLong(0),
+        r.getLong(1), r.getLong(2)))
+      .sortBy(_._1)
+      .toSeq
+
+    // k=NULL (the row from b-side only, k=3): la=0, lb=1
+    // k=1 (only a): la=1, lb=0
+    // k=2 (both):  la=1, lb=1
+    assertEquals(Seq(
+      (-1L, 0L, 1L),
+      (1L,  1L, 0L),
+      (2L,  1L, 1L)
+    ), rows)
+  }
+
+  /**
    * Phase 5.23: JOIN over two Parquet sources. Exercises the file-scan
    * leaf in both sides of the Join peel — the underlying scans are
    * `FileScanNode`s rather than registered `ScanNode`s, so the strategy

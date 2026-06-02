@@ -280,12 +280,19 @@ object QuantumStrategy {
       }
     }
 
-    // Translate Spark's JoinType to our proto enum. Only the four "real"
-    // joins are supported; LeftSemi / LeftAnti / Cross decline.
+    // Translate Spark's JoinType to our proto enum. Naming-convention twist:
+    // the native engine's `LEFT_OUTER` preserves the PROBE side (emits probe
+    // rows that didn't match with NULL build cols), and `RIGHT_OUTER`
+    // preserves the BUILD side. Our Spark strategy puts Spark's LEFT input
+    // into `build` and Spark's RIGHT into `probe`, so to preserve Spark's
+    // LEFT we want the engine to preserve build -> JOIN_RIGHT_OUTER; to
+    // preserve Spark's RIGHT we want the engine to preserve probe ->
+    // JOIN_LEFT_OUTER. Spark's INNER and FULL OUTER map straight through.
+    // LeftSemi / LeftAnti / Cross decline.
     def translateJoinType(jt: JoinType): Option[QuantumPlan.JoinType] = jt match {
       case Inner      => Some(QuantumPlan.JoinType.JOIN_INNER)
-      case LeftOuter  => Some(QuantumPlan.JoinType.JOIN_LEFT_OUTER)
-      case RightOuter => Some(QuantumPlan.JoinType.JOIN_RIGHT_OUTER)
+      case LeftOuter  => Some(QuantumPlan.JoinType.JOIN_RIGHT_OUTER)
+      case RightOuter => Some(QuantumPlan.JoinType.JOIN_LEFT_OUTER)
       case FullOuter  => Some(QuantumPlan.JoinType.JOIN_FULL_OUTER)
       case _          => None
     }
