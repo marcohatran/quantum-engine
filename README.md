@@ -139,6 +139,7 @@ Key invariants the codebase enforces:
 | **5** | Predicates — `=` `<` `<=` `>` `>=` `AND` `OR` (Kleene) `NOT` `IS NULL` `IS NOT NULL` `IN(list)` `LIKE` / `StartsWith` / `EndsWith` / `Contains` over Long/Int/Double/Bool/String literals | done |
 | **5** | Aggregates — `SUM` / `MIN` / `MAX` / `AVG` (Long + Double), `MIN`/`MAX` (String), `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long/string/double)`; multi-column GROUP BY (any type mix via `KeyCodec`) | done |
 | **5** | Joins — Inner / Left / Right / Full Outer; composite (multi-key) joins; N-way; over any source mix | done |
+| **5** | `UNION ALL` — native N-ary `UnionAllOperator` + plan IR `UnionAllNode` + Spark `Union` peel | done |
 | **5** | End-to-end FileScan→HashAgg benchmark (~3.3 M items/sec, dominated by Parquet decode) | done |
 | 5 | Force native LIMIT / ORDER BY routing through Spark (vs Spark's CollectLimitExec / SortExec); needs `injectOptimizerRule` | planned |
 | 5 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |

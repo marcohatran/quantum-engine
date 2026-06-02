@@ -192,15 +192,20 @@ message SortNode {
   repeated bool       nulls_first = 4;
 }
 
+message UnionAllNode {
+  repeated PlanNode children = 1;
+}
+
 message PlanNode {
   oneof node {
-    ScanNode          scan      = 1;
-    FilterNode        filter    = 2;
-    ProjectNode       project   = 3;
-    HashAggregateNode hash_agg  = 4;
-    HashJoinNode      hash_join = 5;
-    FileScanNode      file_scan = 6;
-    LimitNode         limit     = 7;
-    SortNode          sort      = 8;
+    ScanNode          scan       = 1;
+    FilterNode        filter     = 2;
+    ProjectNode       project    = 3;
+    HashAggregateNode hash_agg   = 4;
+    HashJoinNode      hash_join  = 5;
+    FileScanNode      file_scan  = 6;
+    LimitNode         limit      = 7;
+    SortNode          sort       = 8;
+    UnionAllNode      union_all  = 9;
   }
 }

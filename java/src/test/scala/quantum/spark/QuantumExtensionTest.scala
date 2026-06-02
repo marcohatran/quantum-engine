@@ -397,6 +397,36 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.35: UNION ALL. Two LocalRelations with the same schema; the
+   * strategy emits a UnionAllNode at the leaves of the (outer)
+   * Aggregate's child tree and the native operator concatenates each
+   * child's batches in declared order.
+   */
+  @Test
+  def unionAllThenAggregate(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, 10L), (2L, 20L)).toDF("k", "v")
+    val b = Seq((2L, 30L), (3L, 40L), (3L, 50L)).toDF("k", "v")
+    a.createOrReplaceTempView("ua_a")
+    b.createOrReplaceTempView("ua_b")
+
+    val rows = spark.sql(
+      """SELECT k, SUM(v) AS s FROM
+        |  (SELECT k, v FROM ua_a UNION ALL SELECT k, v FROM ua_b)
+        |GROUP BY k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    //  k=1: 10
+    //  k=2: 20 + 30 = 50
+    //  k=3: 40 + 50 = 90
+    assertEquals(Seq((1L, 10L), (2L, 50L), (3L, 90L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "UNION ALL + GROUP BY should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.33: ORDER BY. The strategy peels the Sort node and emits a
    * SortNode in the plan. The native SortOperator materializes and sorts.
    */

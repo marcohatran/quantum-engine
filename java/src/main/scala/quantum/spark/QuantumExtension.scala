@@ -5,7 +5,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, Sort, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, Sort, SubqueryAlias, Union}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -496,6 +496,34 @@ object QuantumStrategy {
           }
           if (pairs.exists(_.isEmpty)) None
           else Some(result.copy(idMap = pairs.flatten.toMap))
+        }
+
+      case Union(children, _, _) =>
+        // UNION ALL: recursively peel each child, combine sources, emit a
+        // UnionAllNode wrapping the per-child plans. The Union's output
+        // schema is the first child's; idMap uses the Union node's own
+        // output attributes (Catalyst makes them positionally aligned
+        // across children) so the parent operator can reference them.
+        val peeled: Seq[Option[PeelResult]] = children.map(peel)
+        if (peeled.exists(_.isEmpty)) {
+          lastTranslated.set("reject: at least one Union child didn't peel")
+          None
+        } else {
+          val rs = peeled.flatten
+          val unionB = QuantumPlan.UnionAllNode.newBuilder()
+          rs.foreach(r => unionB.addChildren(r.plan))
+          val unionPlan = QuantumPlan.PlanNode.newBuilder().setUnionAll(unionB).build()
+          // Union output: Catalyst's `Union.output` is positional across
+          // children with the first child's exprIds (canonical). Use that
+          // as our peel.output and remap idMap accordingly.
+          val unionOutput = children.head.output  // same positional schema as Union.output
+          val idMap = unionOutput.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
+          Some(PeelResult(
+            plan        = unionPlan,
+            idMap       = idMap,
+            output      = unionOutput,
+            sources     = rs.flatMap(_.sources),
+            filterCount = rs.map(_.filterCount).sum))
         }
 
       case Sort(order, _, child) =>

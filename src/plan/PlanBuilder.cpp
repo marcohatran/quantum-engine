@@ -24,6 +24,7 @@
 #include "operator/ProjectOperator.hpp"
 #include "operator/ScanOperator.hpp"
 #include "operator/SortOperator.hpp"
+#include "operator/UnionAllOperator.hpp"
 
 namespace quantum::plan {
 
@@ -255,6 +256,11 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
             return std::make_unique<SortOperator>(
                 mm_, build(n->child, catalog),
                 std::move(keys), n->ascending, n->nulls_first);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<UnionAllNode>>) {
+            std::vector<OperatorPtr> ops;
+            ops.reserve(n->children.size());
+            for (const auto& c : n->children) ops.push_back(build(c, catalog));
+            return std::make_unique<UnionAllOperator>(mm_, std::move(ops));
         }
     }, node);
 }
