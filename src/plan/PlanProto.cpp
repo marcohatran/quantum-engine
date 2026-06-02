@@ -304,6 +304,10 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
             for (const auto& k : x->probe_keys) encodeScalarExpr(k, m->add_probe_keys());
             m->set_join_type(encodeJoinType(x->join_type));
             for (const auto& n : x->output_names) m->add_output_names(n);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<LimitNode>>) {
+            auto* m = out->mutable_limit();
+            encodePlan(x->child, m->mutable_child());
+            m->set_limit(x->limit);
         }
     }, node);
 }
@@ -371,6 +375,12 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
             for (const auto& k : msg.hash_join().probe_keys()) n->probe_keys.push_back(decodeScalarExpr(k));
             n->join_type = decodeJoinType(msg.hash_join().join_type());
             for (const auto& s : msg.hash_join().output_names()) n->output_names.push_back(s);
+            return PlanNode{std::move(n)};
+        }
+        case proto::PlanNode::kLimit: {
+            auto n = std::make_unique<LimitNode>();
+            n->child = decodePlan(msg.limit().child());
+            n->limit = msg.limit().limit();
             return PlanNode{std::move(n)};
         }
         case proto::PlanNode::NODE_NOT_SET:

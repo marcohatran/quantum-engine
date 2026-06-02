@@ -4,7 +4,7 @@ import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, EqualTo, ExprId, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, NamedExpression, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan, Project, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -31,18 +31,20 @@ class QuantumStrategy extends SparkStrategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     QuantumStrategy.lastSeen.set(plan)
     QuantumStrategy.seenClasses.add(plan.getClass.getSimpleName)
-    plan match {
-      // HAVING: Catalyst plans `... GROUP BY k HAVING <cond>` as a Filter
-      // wrapping the Aggregate. Translate the HAVING into a FilterNode
-      // pushed above the HashAggregateNode. If untranslatable, decline so
-      // Spark falls back to its own Filter on top of QuantumExec.
+    // Strip outer LIMIT wrappers and translate the inner plan with the
+    // limit threaded through. Catalyst typically plans `LIMIT N` over an
+    // Aggregate as `GlobalLimit(N, LocalLimit(N, Aggregate(...)))`, both
+    // operating on the same logical limit; we collapse to one LimitNode.
+    val (inner, limit) = QuantumStrategy.stripOuterLimits(plan)
+    inner match {
       case Filter(having, agg @ Aggregate(groupingExprs, aggregateExprs, child)) =>
         QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, Some(having))
+            agg, groupingExprs, aggregateExprs, child, Some(having), limit)
           .map(qe => Seq(qe))
           .getOrElse(Nil)
       case agg @ Aggregate(groupingExprs, aggregateExprs, child) =>
-        QuantumStrategy.tryTranslateLongAggregate(agg, groupingExprs, aggregateExprs, child)
+        QuantumStrategy.tryTranslateLongAggregate(
+            agg, groupingExprs, aggregateExprs, child, None, limit)
           .map(quantumExec => Seq(quantumExec))
           .getOrElse(Nil)
       case _ => Nil
@@ -56,14 +58,25 @@ object QuantumStrategy {
   val lastTranslated: AtomicReference[String] = new AtomicReference[String]()
   val seenClasses: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.LinkedHashSet[String]())
+  // Append-only log of every translation result this strategy produced
+  // during a query. Spark's planner may call `apply` multiple times on
+  // different subtrees, so `lastTranslated` can be overwritten —
+  // `translationLog` preserves every label.
+  val translationLog: java.util.List[String] =
+    java.util.Collections.synchronizedList(new java.util.ArrayList[String]())
 
   def reset(): Unit = {
     lastSeen.set(null)
     lastTranslated.set(null)
     seenClasses.clear()
+    translationLog.clear()
   }
   def lastObservedPlan: Option[LogicalPlan] = Option(lastSeen.get())
   def lastTranslation: Option[String]       = Option(lastTranslated.get())
+  def translations: Seq[String] = {
+    import scala.jdk.CollectionConverters._
+    translationLog.asScala.toSeq
+  }
   def observedClasses: Set[String] = {
     import scala.jdk.CollectionConverters._
     seenClasses.asScala.toSet
@@ -88,12 +101,48 @@ object QuantumStrategy {
       sources:     Seq[(String, Array[InputColumn])],
       filterCount: Int)
 
+  /**
+   * Strip outer GlobalLimit / LocalLimit wrappers, returning the inner
+   * plan plus the tightest limit seen. Catalyst plans `LIMIT N` over an
+   * Aggregate as `GlobalLimit(N, LocalLimit(N, Aggregate(...)))`; we
+   * collapse both into one limit value to pass downstream.
+   */
+  def stripOuterLimits(plan: LogicalPlan): (LogicalPlan, Option[Long]) = {
+    def extractLimit(e: Expression): Option[Long] = e match {
+      case Literal(n: java.lang.Integer, IntegerType) => Some(n.longValue)
+      case Literal(n: java.lang.Long, LongType)       => Some(n)
+      case _                                          => None
+    }
+    plan match {
+      case GlobalLimit(le, child) =>
+        val (inner, innerLimit) = stripOuterLimits(child)
+        val outer = extractLimit(le)
+        (inner, (outer, innerLimit) match {
+          case (Some(a), Some(b)) => Some(math.min(a, b))
+          case (Some(a), None)    => Some(a)
+          case (None, Some(b))    => Some(b)
+          case _                  => None
+        })
+      case LocalLimit(le, child) =>
+        val (inner, innerLimit) = stripOuterLimits(child)
+        val outer = extractLimit(le)
+        (inner, (outer, innerLimit) match {
+          case (Some(a), Some(b)) => Some(math.min(a, b))
+          case (Some(a), None)    => Some(a)
+          case (None, Some(b))    => Some(b)
+          case _                  => None
+        })
+      case other => (other, None)
+    }
+  }
+
   def tryTranslateLongAggregate(
       agg: Aggregate,
       groupingExprs: Seq[Expression],
       aggregateExprs: Seq[NamedExpression],
       child: LogicalPlan,
-      havingCondition: Option[Expression] = None): Option[SparkPlan] = {
+      havingCondition: Option[Expression] = None,
+      limit: Option[Long] = None): Option[SparkPlan] = {
 
     // ------------------------------------------------------------------
     // Helpers
@@ -605,13 +654,26 @@ object QuantumStrategy {
       return None
     }
 
-    lastTranslated.set("HashAggregate(" + aggregateExprs.size + " outputs over " +
+    // Wrap in a LimitNode if a LIMIT was stripped off the outer plan.
+    val rootWithLimit: QuantumPlan.PlanNode = limit match {
+      case None    => root
+      case Some(n) =>
+        QuantumPlan.PlanNode.newBuilder()
+          .setLimit(QuantumPlan.LimitNode.newBuilder().setChild(root).setLimit(n))
+          .build()
+    }
+
+    val label = "HashAggregate(" + aggregateExprs.size + " outputs over " +
       groupColIndices.size + " group keys, " + peeled.filterCount + " pushed filters, " +
-      havingPushed + " HAVING filters, " + peeled.sources.size + " sources)")
+      havingPushed + " HAVING filters, " +
+      limit.map(n => s"LIMIT $n, ").getOrElse("") +
+      peeled.sources.size + " sources)"
+    lastTranslated.set(label)
+    translationLog.add(label)
     Some(QuantumExec(
       output        = agg.output,
       sources       = peeled.sources,
-      planBytes     = root.toByteArray,
+      planBytes     = rootWithLimit.toByteArray,
       physicalIndex = physicalIndex))
   }
 }

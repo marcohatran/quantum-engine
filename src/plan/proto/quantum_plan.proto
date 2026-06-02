@@ -179,6 +179,11 @@ message HashJoinNode {
   repeated string      output_names = 6;
 }
 
+message LimitNode {
+  PlanNode child = 1;
+  int64    limit = 2;
+}
+
 message PlanNode {
   oneof node {
     ScanNode          scan      = 1;
@@ -187,5 +192,6 @@ message PlanNode {
     HashAggregateNode hash_agg  = 4;
     HashJoinNode      hash_join = 5;
     FileScanNode      file_scan = 6;
+    LimitNode         limit     = 7;
   }
 }

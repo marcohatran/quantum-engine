@@ -16701,6 +16701,649 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
 
   }
 
+  public interface LimitNodeOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:quantum.plan.proto.LimitNode)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return Whether the child field is set.
+     */
+    boolean hasChild();
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return The child.
+     */
+    quantum.plan.proto.QuantumPlan.PlanNode getChild();
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     */
+    quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildOrBuilder();
+
+    /**
+     * <code>int64 limit = 2;</code>
+     * @return The limit.
+     */
+    long getLimit();
+  }
+  /**
+   * Protobuf type {@code quantum.plan.proto.LimitNode}
+   */
+  public static final class LimitNode extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:quantum.plan.proto.LimitNode)
+      LimitNodeOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "LimitNode");
+    }
+    // Use LimitNode.newBuilder() to construct.
+    private LimitNode(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private LimitNode() {
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_LimitNode_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_LimitNode_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              quantum.plan.proto.QuantumPlan.LimitNode.class, quantum.plan.proto.QuantumPlan.LimitNode.Builder.class);
+    }
+
+    private int bitField0_;
+    public static final int CHILD_FIELD_NUMBER = 1;
+    private quantum.plan.proto.QuantumPlan.PlanNode child_;
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return Whether the child field is set.
+     */
+    @java.lang.Override
+    public boolean hasChild() {
+      return ((bitField0_ & 0x00000001) != 0);
+    }
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return The child.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PlanNode getChild() {
+      return child_ == null ? quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+    }
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildOrBuilder() {
+      return child_ == null ? quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+    }
+
+    public static final int LIMIT_FIELD_NUMBER = 2;
+    private long limit_ = 0L;
+    /**
+     * <code>int64 limit = 2;</code>
+     * @return The limit.
+     */
+    @java.lang.Override
+    public long getLimit() {
+      return limit_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (((bitField0_ & 0x00000001) != 0)) {
+        output.writeMessage(1, getChild());
+      }
+      if (limit_ != 0L) {
+        output.writeInt64(2, limit_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, getChild());
+      }
+      if (limit_ != 0L) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(2, limit_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof quantum.plan.proto.QuantumPlan.LimitNode)) {
+        return super.equals(obj);
+      }
+      quantum.plan.proto.QuantumPlan.LimitNode other = (quantum.plan.proto.QuantumPlan.LimitNode) obj;
+
+      if (hasChild() != other.hasChild()) return false;
+      if (hasChild()) {
+        if (!getChild()
+            .equals(other.getChild())) return false;
+      }
+      if (getLimit()
+          != other.getLimit()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      if (hasChild()) {
+        hash = (37 * hash) + CHILD_FIELD_NUMBER;
+        hash = (53 * hash) + getChild().hashCode();
+      }
+      hash = (37 * hash) + LIMIT_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+          getLimit());
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.LimitNode parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(quantum.plan.proto.QuantumPlan.LimitNode prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code quantum.plan.proto.LimitNode}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:quantum.plan.proto.LimitNode)
+        quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_LimitNode_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_LimitNode_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                quantum.plan.proto.QuantumPlan.LimitNode.class, quantum.plan.proto.QuantumPlan.LimitNode.Builder.class);
+      }
+
+      // Construct using quantum.plan.proto.QuantumPlan.LimitNode.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage
+                .alwaysUseFieldBuilders) {
+          internalGetChildFieldBuilder();
+        }
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        child_ = null;
+        if (childBuilder_ != null) {
+          childBuilder_.dispose();
+          childBuilder_ = null;
+        }
+        limit_ = 0L;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_LimitNode_descriptor;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.LimitNode getDefaultInstanceForType() {
+        return quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.LimitNode build() {
+        quantum.plan.proto.QuantumPlan.LimitNode result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.LimitNode buildPartial() {
+        quantum.plan.proto.QuantumPlan.LimitNode result = new quantum.plan.proto.QuantumPlan.LimitNode(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(quantum.plan.proto.QuantumPlan.LimitNode result) {
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.child_ = childBuilder_ == null
+              ? child_
+              : childBuilder_.build();
+          to_bitField0_ |= 0x00000001;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.limit_ = limit_;
+        }
+        result.bitField0_ |= to_bitField0_;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof quantum.plan.proto.QuantumPlan.LimitNode) {
+          return mergeFrom((quantum.plan.proto.QuantumPlan.LimitNode)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(quantum.plan.proto.QuantumPlan.LimitNode other) {
+        if (other == quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance()) return this;
+        if (other.hasChild()) {
+          mergeChild(other.getChild());
+        }
+        if (other.getLimit() != 0L) {
+          setLimit(other.getLimit());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                input.readMessage(
+                    internalGetChildFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 10
+              case 16: {
+                limit_ = input.readInt64();
+                bitField0_ |= 0x00000002;
+                break;
+              } // case 16
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private quantum.plan.proto.QuantumPlan.PlanNode child_;
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> childBuilder_;
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       * @return Whether the child field is set.
+       */
+      public boolean hasChild() {
+        return ((bitField0_ & 0x00000001) != 0);
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       * @return The child.
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode getChild() {
+        if (childBuilder_ == null) {
+          return child_ == null ? quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+        } else {
+          return childBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder setChild(quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          child_ = value;
+        } else {
+          childBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder setChild(
+          quantum.plan.proto.QuantumPlan.PlanNode.Builder builderForValue) {
+        if (childBuilder_ == null) {
+          child_ = builderForValue.build();
+        } else {
+          childBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder mergeChild(quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childBuilder_ == null) {
+          if (((bitField0_ & 0x00000001) != 0) &&
+            child_ != null &&
+            child_ != quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance()) {
+            getChildBuilder().mergeFrom(value);
+          } else {
+            child_ = value;
+          }
+        } else {
+          childBuilder_.mergeFrom(value);
+        }
+        if (child_ != null) {
+          bitField0_ |= 0x00000001;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder clearChild() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        child_ = null;
+        if (childBuilder_ != null) {
+          childBuilder_.dispose();
+          childBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode.Builder getChildBuilder() {
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return internalGetChildFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildOrBuilder() {
+        if (childBuilder_ != null) {
+          return childBuilder_.getMessageOrBuilder();
+        } else {
+          return child_ == null ?
+              quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> 
+          internalGetChildFieldBuilder() {
+        if (childBuilder_ == null) {
+          childBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder>(
+                  getChild(),
+                  getParentForChildren(),
+                  isClean());
+          child_ = null;
+        }
+        return childBuilder_;
+      }
+
+      private long limit_ ;
+      /**
+       * <code>int64 limit = 2;</code>
+       * @return The limit.
+       */
+      @java.lang.Override
+      public long getLimit() {
+        return limit_;
+      }
+      /**
+       * <code>int64 limit = 2;</code>
+       * @param value The limit to set.
+       * @return This builder for chaining.
+       */
+      public Builder setLimit(long value) {
+
+        limit_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int64 limit = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearLimit() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        limit_ = 0L;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:quantum.plan.proto.LimitNode)
+    }
+
+    // @@protoc_insertion_point(class_scope:quantum.plan.proto.LimitNode)
+    private static final quantum.plan.proto.QuantumPlan.LimitNode DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new quantum.plan.proto.QuantumPlan.LimitNode();
+    }
+
+    public static quantum.plan.proto.QuantumPlan.LimitNode getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<LimitNode>
+        PARSER = new com.google.protobuf.AbstractParser<LimitNode>() {
+      @java.lang.Override
+      public LimitNode parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<LimitNode> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<LimitNode> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.LimitNode getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface PlanNodeOrBuilder extends
       // @@protoc_insertion_point(interface_extends:quantum.plan.proto.PlanNode)
       com.google.protobuf.MessageOrBuilder {
@@ -16795,6 +17438,21 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      */
     quantum.plan.proto.QuantumPlan.FileScanNodeOrBuilder getFileScanOrBuilder();
 
+    /**
+     * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+     * @return Whether the limit field is set.
+     */
+    boolean hasLimit();
+    /**
+     * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+     * @return The limit.
+     */
+    quantum.plan.proto.QuantumPlan.LimitNode getLimit();
+    /**
+     * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+     */
+    quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder getLimitOrBuilder();
+
     quantum.plan.proto.QuantumPlan.PlanNode.NodeCase getNodeCase();
   }
   /**
@@ -16846,6 +17504,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       HASH_AGG(4),
       HASH_JOIN(5),
       FILE_SCAN(6),
+      LIMIT(7),
       NODE_NOT_SET(0);
       private final int value;
       private NodeCase(int value) {
@@ -16869,6 +17528,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           case 4: return HASH_AGG;
           case 5: return HASH_JOIN;
           case 6: return FILE_SCAN;
+          case 7: return LIMIT;
           case 0: return NODE_NOT_SET;
           default: return null;
         }
@@ -17070,6 +17730,37 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       return quantum.plan.proto.QuantumPlan.FileScanNode.getDefaultInstance();
     }
 
+    public static final int LIMIT_FIELD_NUMBER = 7;
+    /**
+     * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+     * @return Whether the limit field is set.
+     */
+    @java.lang.Override
+    public boolean hasLimit() {
+      return nodeCase_ == 7;
+    }
+    /**
+     * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+     * @return The limit.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.LimitNode getLimit() {
+      if (nodeCase_ == 7) {
+         return (quantum.plan.proto.QuantumPlan.LimitNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+    }
+    /**
+     * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder getLimitOrBuilder() {
+      if (nodeCase_ == 7) {
+         return (quantum.plan.proto.QuantumPlan.LimitNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -17101,6 +17792,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       }
       if (nodeCase_ == 6) {
         output.writeMessage(6, (quantum.plan.proto.QuantumPlan.FileScanNode) node_);
+      }
+      if (nodeCase_ == 7) {
+        output.writeMessage(7, (quantum.plan.proto.QuantumPlan.LimitNode) node_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -17134,6 +17828,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (nodeCase_ == 6) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(6, (quantum.plan.proto.QuantumPlan.FileScanNode) node_);
+      }
+      if (nodeCase_ == 7) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(7, (quantum.plan.proto.QuantumPlan.LimitNode) node_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -17176,6 +17874,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           if (!getFileScan()
               .equals(other.getFileScan())) return false;
           break;
+        case 7:
+          if (!getLimit()
+              .equals(other.getLimit())) return false;
+          break;
         case 0:
         default:
       }
@@ -17214,6 +17916,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         case 6:
           hash = (37 * hash) + FILE_SCAN_FIELD_NUMBER;
           hash = (53 * hash) + getFileScan().hashCode();
+          break;
+        case 7:
+          hash = (37 * hash) + LIMIT_FIELD_NUMBER;
+          hash = (53 * hash) + getLimit().hashCode();
           break;
         case 0:
         default:
@@ -17367,6 +18073,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (fileScanBuilder_ != null) {
           fileScanBuilder_.clear();
         }
+        if (limitBuilder_ != null) {
+          limitBuilder_.clear();
+        }
         nodeCase_ = 0;
         node_ = null;
         return this;
@@ -17432,6 +18141,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
             fileScanBuilder_ != null) {
           result.node_ = fileScanBuilder_.build();
         }
+        if (nodeCase_ == 7 &&
+            limitBuilder_ != null) {
+          result.node_ = limitBuilder_.build();
+        }
       }
 
       @java.lang.Override
@@ -17469,6 +18182,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           }
           case FILE_SCAN: {
             mergeFileScan(other.getFileScan());
+            break;
+          }
+          case LIMIT: {
+            mergeLimit(other.getLimit());
             break;
           }
           case NODE_NOT_SET: {
@@ -17543,6 +18260,13 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
                 nodeCase_ = 6;
                 break;
               } // case 50
+              case 58: {
+                input.readMessage(
+                    internalGetLimitFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                nodeCase_ = 7;
+                break;
+              } // case 58
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -18427,6 +19151,148 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         return fileScanBuilder_;
       }
 
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.LimitNode, quantum.plan.proto.QuantumPlan.LimitNode.Builder, quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder> limitBuilder_;
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       * @return Whether the limit field is set.
+       */
+      @java.lang.Override
+      public boolean hasLimit() {
+        return nodeCase_ == 7;
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       * @return The limit.
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.LimitNode getLimit() {
+        if (limitBuilder_ == null) {
+          if (nodeCase_ == 7) {
+            return (quantum.plan.proto.QuantumPlan.LimitNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+        } else {
+          if (nodeCase_ == 7) {
+            return limitBuilder_.getMessage();
+          }
+          return quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      public Builder setLimit(quantum.plan.proto.QuantumPlan.LimitNode value) {
+        if (limitBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          node_ = value;
+          onChanged();
+        } else {
+          limitBuilder_.setMessage(value);
+        }
+        nodeCase_ = 7;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      public Builder setLimit(
+          quantum.plan.proto.QuantumPlan.LimitNode.Builder builderForValue) {
+        if (limitBuilder_ == null) {
+          node_ = builderForValue.build();
+          onChanged();
+        } else {
+          limitBuilder_.setMessage(builderForValue.build());
+        }
+        nodeCase_ = 7;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      public Builder mergeLimit(quantum.plan.proto.QuantumPlan.LimitNode value) {
+        if (limitBuilder_ == null) {
+          if (nodeCase_ == 7 &&
+              node_ != quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance()) {
+            node_ = quantum.plan.proto.QuantumPlan.LimitNode.newBuilder((quantum.plan.proto.QuantumPlan.LimitNode) node_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            node_ = value;
+          }
+          onChanged();
+        } else {
+          if (nodeCase_ == 7) {
+            limitBuilder_.mergeFrom(value);
+          } else {
+            limitBuilder_.setMessage(value);
+          }
+        }
+        nodeCase_ = 7;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      public Builder clearLimit() {
+        if (limitBuilder_ == null) {
+          if (nodeCase_ == 7) {
+            nodeCase_ = 0;
+            node_ = null;
+            onChanged();
+          }
+        } else {
+          if (nodeCase_ == 7) {
+            nodeCase_ = 0;
+            node_ = null;
+          }
+          limitBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.LimitNode.Builder getLimitBuilder() {
+        return internalGetLimitFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder getLimitOrBuilder() {
+        if ((nodeCase_ == 7) && (limitBuilder_ != null)) {
+          return limitBuilder_.getMessageOrBuilder();
+        } else {
+          if (nodeCase_ == 7) {
+            return (quantum.plan.proto.QuantumPlan.LimitNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.LimitNode limit = 7;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.LimitNode, quantum.plan.proto.QuantumPlan.LimitNode.Builder, quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder> 
+          internalGetLimitFieldBuilder() {
+        if (limitBuilder_ == null) {
+          if (!(nodeCase_ == 7)) {
+            node_ = quantum.plan.proto.QuantumPlan.LimitNode.getDefaultInstance();
+          }
+          limitBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.LimitNode, quantum.plan.proto.QuantumPlan.LimitNode.Builder, quantum.plan.proto.QuantumPlan.LimitNodeOrBuilder>(
+                  (quantum.plan.proto.QuantumPlan.LimitNode) node_,
+                  getParentForChildren(),
+                  isClean());
+          node_ = null;
+        }
+        nodeCase_ = 7;
+        onChanged();
+        return limitBuilder_;
+      }
+
       // @@protoc_insertion_point(builder_scope:quantum.plan.proto.PlanNode)
     }
 
@@ -18559,6 +19425,11 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_quantum_plan_proto_HashJoinNode_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_quantum_plan_proto_LimitNode_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_quantum_plan_proto_LimitNode_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_quantum_plan_proto_PlanNode_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -18625,28 +19496,31 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       "probe_keys\030\004 \003(\0132\036.quantum.plan.proto.Sc" +
       "alarExpr\022/\n\tjoin_type\030\005 \001(\0162\034.quantum.pl" +
       "an.proto.JoinType\022\024\n\014output_names\030\006 \003(\t\"" +
-      "\317\002\n\010PlanNode\022,\n\004scan\030\001 \001(\0132\034.quantum.pla" +
-      "n.proto.ScanNodeH\000\0220\n\006filter\030\002 \001(\0132\036.qua" +
-      "ntum.plan.proto.FilterNodeH\000\0222\n\007project\030" +
-      "\003 \001(\0132\037.quantum.plan.proto.ProjectNodeH\000" +
-      "\0229\n\010hash_agg\030\004 \001(\0132%.quantum.plan.proto." +
-      "HashAggregateNodeH\000\0225\n\thash_join\030\005 \001(\0132 " +
-      ".quantum.plan.proto.HashJoinNodeH\000\0225\n\tfi" +
-      "le_scan\030\006 \001(\0132 .quantum.plan.proto.FileS" +
-      "canNodeH\000B\006\n\004node*Z\n\006TypeId\022\r\n\tTYPE_BOOL" +
-      "\020\000\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TY" +
-      "PE_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004*\240\001\n\014Binary" +
-      "OpType\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\t" +
-      "BINOP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022" +
-      "\014\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022\r\n\tBINOP_GT" +
-      "E\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_OR\020\t*-\n\013Unar" +
-      "yOpType\022\014\n\010UNOP_NOT\020\000\022\020\n\014UNOP_IS_NULL\020\001*" +
-      "f\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_COU" +
-      "NT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007A" +
-      "GG_AVG\020\004\022\r\n\tAGG_COUNT\020\005*Z\n\010JoinType\022\016\n\nJ" +
-      "OIN_INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JOIN" +
-      "_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006pro" +
-      "to3"
+      "G\n\tLimitNode\022+\n\005child\030\001 \001(\0132\034.quantum.pl" +
+      "an.proto.PlanNode\022\r\n\005limit\030\002 \001(\003\"\377\002\n\010Pla" +
+      "nNode\022,\n\004scan\030\001 \001(\0132\034.quantum.plan.proto" +
+      ".ScanNodeH\000\0220\n\006filter\030\002 \001(\0132\036.quantum.pl" +
+      "an.proto.FilterNodeH\000\0222\n\007project\030\003 \001(\0132\037" +
+      ".quantum.plan.proto.ProjectNodeH\000\0229\n\010has" +
+      "h_agg\030\004 \001(\0132%.quantum.plan.proto.HashAgg" +
+      "regateNodeH\000\0225\n\thash_join\030\005 \001(\0132 .quantu" +
+      "m.plan.proto.HashJoinNodeH\000\0225\n\tfile_scan" +
+      "\030\006 \001(\0132 .quantum.plan.proto.FileScanNode" +
+      "H\000\022.\n\005limit\030\007 \001(\0132\035.quantum.plan.proto.L" +
+      "imitNodeH\000B\006\n\004node*Z\n\006TypeId\022\r\n\tTYPE_BOO" +
+      "L\020\000\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014T" +
+      "YPE_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004*\240\001\n\014Binar" +
+      "yOpType\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n" +
+      "\tBINOP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010BINOP_LT\020\004" +
+      "\022\014\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022\r\n\tBINOP_G" +
+      "TE\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_OR\020\t*-\n\013Una" +
+      "ryOpType\022\014\n\010UNOP_NOT\020\000\022\020\n\014UNOP_IS_NULL\020\001" +
+      "*f\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_CO" +
+      "UNT_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007" +
+      "AGG_AVG\020\004\022\r\n\tAGG_COUNT\020\005*Z\n\010JoinType\022\016\n\n" +
+      "JOIN_INNER\020\000\022\023\n\017JOIN_LEFT_OUTER\020\001\022\024\n\020JOI" +
+      "N_RIGHT_OUTER\020\002\022\023\n\017JOIN_FULL_OUTER\020\003b\006pr" +
+      "oto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -18748,12 +19622,18 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashJoinNode_descriptor,
         new java.lang.String[] { "Build", "Probe", "BuildKeys", "ProbeKeys", "JoinType", "OutputNames", });
-    internal_static_quantum_plan_proto_PlanNode_descriptor =
+    internal_static_quantum_plan_proto_LimitNode_descriptor =
       getDescriptor().getMessageType(16);
+    internal_static_quantum_plan_proto_LimitNode_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_quantum_plan_proto_LimitNode_descriptor,
+        new java.lang.String[] { "Child", "Limit", });
+    internal_static_quantum_plan_proto_PlanNode_descriptor =
+      getDescriptor().getMessageType(17);
     internal_static_quantum_plan_proto_PlanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_PlanNode_descriptor,
-        new java.lang.String[] { "Scan", "Filter", "Project", "HashAgg", "HashJoin", "FileScan", "Node", });
+        new java.lang.String[] { "Scan", "Filter", "Project", "HashAgg", "HashJoin", "FileScan", "Limit", "Node", });
     descriptor.resolveAllFeaturesImmutable();
   }
 

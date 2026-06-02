@@ -20,6 +20,7 @@
 #include "operator/FilterOperator.hpp"
 #include "operator/HashAggregateOperator.hpp"
 #include "operator/HashJoinOperator.hpp"
+#include "operator/LimitOperator.hpp"
 #include "operator/ProjectOperator.hpp"
 #include "operator/ScanOperator.hpp"
 
@@ -245,6 +246,9 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
                 mm_, build(n->build, catalog), build(n->probe, catalog),
                 std::move(bk), std::move(pk),
                 n->output_names, toJoinType(n->join_type));
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<LimitNode>>) {
+            return std::make_unique<LimitOperator>(
+                mm_, build(n->child, catalog), n->limit);
         }
     }, node);
 }

@@ -21,6 +21,7 @@ add_executable(quantum_tests
     operator/test_aggregate_function.cpp
     operator/test_hash_aggregate_operator.cpp
     operator/test_hash_join_operator.cpp
+    operator/test_limit_operator.cpp
     operator/test_string_join.cpp
     operator/test_string_keys.cpp
     operator/test_outer_joins.cpp

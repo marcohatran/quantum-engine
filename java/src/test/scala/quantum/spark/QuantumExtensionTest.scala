@@ -397,6 +397,39 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.28: LIMIT N over an Aggregate.
+   *
+   * Caveat: Spark's physical planner handles LIMIT via its own
+   * `CollectLimitExec` BEFORE our strategy gets a chance to claim the
+   * GlobalLimit/LocalLimit node. So our QuantumExec runs the Aggregate
+   * and Spark's CollectLimitExec sits on top — correct result, but the
+   * LIMIT isn't pushed into the native engine. Native `LimitOperator`
+   * exists and is exercised by C++ tests; future work could wire it
+   * end-to-end via an injectOptimizerRule or a more aggressive strategy.
+   */
+  @Test
+  def limitOverAggregate(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_limit")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_limit GROUP BY k LIMIT 2")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).toSeq
+
+    assertEquals(2, rows.size)
+    val full = Set((1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L))
+    rows.foreach(r => assertTrue(full.contains(r), s"unexpected row $r"))
+    // Inner Aggregate must still route through native.
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Inner Aggregate should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.27: HAVING clause. Catalyst plans `HAVING SUM(v) > N` as a
    * Filter above the Aggregate. The strategy currently doesn't match the
    * outer Filter, so Spark's own FilterExec sits above our QuantumExec —
