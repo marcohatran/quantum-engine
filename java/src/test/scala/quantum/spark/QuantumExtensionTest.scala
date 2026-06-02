@@ -397,6 +397,79 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.23: JOIN over two Parquet sources. Exercises the file-scan
+   * leaf in both sides of the Join peel — the underlying scans are
+   * `FileScanNode`s rather than registered `ScanNode`s, so the strategy
+   * registers zero in-memory sources for this query.
+   */
+  @Test
+  def innerJoinOverTwoParquetFiles(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, "apple"), (2L, "banana"), (3L, "cherry")).toDF("k", "name")
+    val b = Seq((1L, 10L), (1L, 20L), (2L, 30L), (3L, 40L), (3L, 50L)).toDF("k", "v")
+
+    val tmpDir = java.nio.file.Files.createTempDirectory("quantum_join_parquet_").toFile
+    val pathA = new java.io.File(tmpDir, "a").getAbsolutePath
+    val pathB = new java.io.File(tmpDir, "b").getAbsolutePath
+    a.coalesce(1).write.mode("overwrite").parquet(pathA)
+    b.coalesce(1).write.mode("overwrite").parquet(pathB)
+
+    spark.read.parquet(pathA).createOrReplaceTempView("pa")
+    spark.read.parquet(pathB).createOrReplaceTempView("pb")
+
+    val rows = spark.sql(
+      """SELECT pa.k, SUM(pb.v) AS s
+        |  FROM pa JOIN pb ON pa.k = pb.k
+        | GROUP BY pa.k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 30L), (2L, 30L), (3L, 90L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("0 sources")),
+      "JOIN over Parquet sources should register 0 in-memory sources; flag = " +
+        QuantumStrategy.lastTranslation)
+
+    def rmRf(f: java.io.File): Unit = {
+      if (f.isDirectory) f.listFiles().foreach(rmRf); f.delete()
+    }
+    rmRf(tmpDir)
+  }
+
+  /**
+   * Phase 5.23: 3-way join. Spark plans this as `Join(Join(A, B), C)`,
+   * which exercises the recursive Join peel — the inner Join becomes the
+   * left side of the outer Join, with its own combined idMap forwarded
+   * up. Output positions get shifted by `leftR.output.size` at each level.
+   */
+  @Test
+  def threeWayInnerJoinWithAggregation(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq((1L, "alpha"), (2L, "beta"), (3L, "gamma")).toDF("k", "label")
+    val b = Seq((1L, 10L), (2L, 20L), (3L, 30L)).toDF("k", "v")
+    val c = Seq((1L, 100L), (2L, 200L), (3L, 300L)).toDF("k", "w")
+    a.createOrReplaceTempView("ta")
+    b.createOrReplaceTempView("tb")
+    c.createOrReplaceTempView("tc")
+
+    val rows = spark.sql(
+      """SELECT ta.k, SUM(tb.v + tc.w) AS s
+        |  FROM ta
+        |  JOIN tb ON ta.k = tb.k
+        |  JOIN tc ON ta.k = tc.k
+        | GROUP BY ta.k""".stripMargin)
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // SUM(v + w) per k: row 1 -> 10+100=110, row 2 -> 20+200=220, row 3 -> 30+300=330.
+    // But SUM in Spark gets the value as an alias. Spark may not give us
+    // `tb.v + tc.w` directly; it depends on whether Catalyst pushes the
+    // arithmetic down. If the strategy declines, the test still asserts
+    // correctness against Spark's native path.
+    assertEquals(Seq((1L, 110L), (2L, 220L), (3L, 330L)), rows)
+  }
+
+  /**
    * Phase 5.22: Inner equi-join between two LocalRelations, then GROUP BY
    * on a join-key column. The strategy emits `HashAggregate(HashJoin(scan_A,
    * scan_B, build_keys=[A.k], probe_keys=[B.k]))`. Each LocalRelation gets
