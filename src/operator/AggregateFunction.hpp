@@ -227,6 +227,51 @@ private:
     mutable std::vector<std::unordered_set<int64_t>> sets_;
 };
 
+// COUNT(DISTINCT col) over STRING. Same out-of-line state pattern as
+// CountDistinctI64 but stores `std::string` keys.
+class CountDistinctString final : public AggregateFunction {
+public:
+    explicit CountDistinctString(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(int32_t); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Int64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr                                      input_;
+    mutable std::vector<std::unordered_set<std::string>> sets_;
+};
+
+// COUNT(DISTINCT col) over FLOAT64. Uses std::hash<double>'s bit-pattern
+// hashing — NaN values that aren't bitwise identical count as distinct
+// (consistent with SQL's "DISTINCT preserves NaN bit patterns").
+class CountDistinctF64 final : public AggregateFunction {
+public:
+    explicit CountDistinctF64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(int32_t); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Int64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr                                input_;
+    mutable std::vector<std::unordered_set<double>> sets_;
+};
+
 // SUM(double) -> double. Skips null inputs.
 class SumF64 final : public AggregateFunction {
 public:

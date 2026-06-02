@@ -423,6 +423,54 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.34: COUNT(DISTINCT name) per group, where name is StringType.
+   */
+  @Test
+  def countDistinctStringPerGroup(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, "apple"),  (1L, "apple"), (1L, "banana"),
+      (2L, "cherry"), (2L, "cherry"),
+      (3L, "x"),      (3L, "y"),     (3L, "z")
+    ).toDF("k", "name")
+    df.createOrReplaceTempView("kv_dcs")
+
+    val rows = spark.sql(
+      "SELECT k, COUNT(DISTINCT name) AS n FROM kv_dcs GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 2L), (2L, 1L), (3L, 3L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "COUNT(DISTINCT String) should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
+   * Phase 5.34: COUNT(DISTINCT price) per group, where price is DoubleType.
+   */
+  @Test
+  def countDistinctDoublePerGroup(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 1.5), (1L, 1.5), (1L, 2.5),       // 2 distinct
+      (2L, 3.0),                              // 1 distinct
+      (3L, 4.0), (3L, 5.0), (3L, 4.0), (3L, 6.0)  // 3 distinct
+    ).toDF("k", "price")
+    df.createOrReplaceTempView("kv_dcd")
+
+    val rows = spark.sql(
+      "SELECT k, COUNT(DISTINCT price) AS n FROM kv_dcd GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 2L), (2L, 1L), (3L, 3L)), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "COUNT(DISTINCT Double) should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.32: COUNT(DISTINCT col) — per-group distinct cardinality.
    */
   @Test

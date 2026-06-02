@@ -137,14 +137,14 @@ Key invariants the codebase enforces:
 | **5** | Plan IR — `FileScanNode`, `LimitNode`, `SortNode`; new comparison ops (`Gte`/`Lte`), logical ops (`And`/`Or`), unary ops (`Not`/`IsNull`); aggregate kinds `Count`/`CountDistinct` | done |
 | **5** | Spark strategy — full classic SQL (`SELECT … FROM A [JOIN B …] WHERE … GROUP BY … HAVING … ORDER BY … LIMIT …`) over LocalRelation + Parquet + Delta sources | done |
 | **5** | Predicates — `=` `<` `<=` `>` `>=` `AND` `OR` (Kleene) `NOT` `IS NULL` `IS NOT NULL` `IN(list)` `LIKE` / `StartsWith` / `EndsWith` / `Contains` over Long/Int/Double/Bool/String literals | done |
-| **5** | Aggregates — `SUM` / `MIN` / `MAX` / `AVG` (Long + Double), `MIN`/`MAX` (String), `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long)`; multi-column GROUP BY (any type mix via `KeyCodec`) | done |
+| **5** | Aggregates — `SUM` / `MIN` / `MAX` / `AVG` (Long + Double), `MIN`/`MAX` (String), `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long/string/double)`; multi-column GROUP BY (any type mix via `KeyCodec`) | done |
 | **5** | Joins — Inner / Left / Right / Full Outer; composite (multi-key) joins; N-way; over any source mix | done |
 | **5** | End-to-end FileScan→HashAgg benchmark (~3.3 M items/sec, dominated by Parquet decode) | done |
 | 5 | Force native LIMIT / ORDER BY routing through Spark (vs Spark's CollectLimitExec / SortExec); needs `injectOptimizerRule` | planned |
 | 5 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |
 | 5 | Delta — checkpoint `.parquet` log support, schema evolution, column mapping | planned |
-| 5 | `COUNT(DISTINCT)` for String / Double; sort spill; `MinString`/`MaxString` spill | planned |
+| 5 | Sort spill; `MinString`/`MaxString`/`CountDistinct*` spill (out-of-line state serialization) | planned |
 | 5 | NVMe disk cache for object-store reads | planned |
 | 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |
 | 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |

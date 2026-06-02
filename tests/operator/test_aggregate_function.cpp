@@ -90,6 +90,54 @@ TEST(CountColumn, CountsNonNullRowsOnly) {
     EXPECT_EQ(cnt, 3);  // rows 0, 2, 4 are valid; 1 and 3 are NULL.
 }
 
+#include "vector/StringBuilder.hpp"
+
+TEST(CountDistinctString, CountsDistinctNonNullStrings) {
+    MemoryManager mm(64 * 1024);
+    StringBuilder b(&mm);
+    b.append("apple");
+    b.append("banana");
+    b.append("apple");
+    b.appendNull();
+    b.append("cherry");
+    b.append("banana");
+    std::vector<ColumnVector> cols;
+    cols.push_back(b.build());
+    ColumnBatch batch(std::move(cols), PositionList::identity(6));
+
+    CountDistinctString agg(std::make_unique<ColumnRef>(0));
+    uint8_t state[4];
+    agg.init(state);
+    auto input = agg.inputExpr()->eval(batch, &mm);
+    std::vector<uint8_t*> slots(6, state);
+    agg.update(slots.data(), &input, batch.positions());
+
+    auto out = agg.finalize({state}, &mm);
+    EXPECT_EQ(out.typed<int64_t>()[0], 3);  // apple, banana, cherry
+}
+
+TEST(CountDistinctF64, CountsDistinctNonNullDoubles) {
+    MemoryManager mm(64 * 1024);
+    auto col = ColumnVector::make(Float64, 5, &mm);
+    col.validity().setAllValid();
+    auto* p = col.typed<double>();
+    p[0] = 1.5; p[1] = 2.5; p[2] = 1.5; p[3] = 0.0; p[4] = 2.5;
+    col.validity().setValid(3, false);
+    std::vector<ColumnVector> cols;
+    cols.push_back(std::move(col));
+    ColumnBatch batch(std::move(cols), PositionList::identity(5));
+
+    CountDistinctF64 agg(std::make_unique<ColumnRef>(0));
+    uint8_t state[4];
+    agg.init(state);
+    auto input = agg.inputExpr()->eval(batch, &mm);
+    std::vector<uint8_t*> slots(5, state);
+    agg.update(slots.data(), &input, batch.positions());
+
+    auto out = agg.finalize({state}, &mm);
+    EXPECT_EQ(out.typed<int64_t>()[0], 2);  // 1.5, 2.5; null skipped
+}
+
 TEST(CountColumn, AllNullsCountsZero) {
     MemoryManager mm(64 * 1024);
     CountColumn agg(std::make_unique<ColumnRef>(0));

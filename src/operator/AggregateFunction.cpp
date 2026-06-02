@@ -502,6 +502,108 @@ void CountDistinctI64::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
           "(distinct sets are stored out-of-line and aren't serialisable yet)");
 }
 
+// ---------- CountDistinctString ----------
+
+CountDistinctString::CountDistinctString(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "CountDistinctString: input expression required");
+}
+
+void CountDistinctString::init(uint8_t* state) const {
+    int32_t idx = static_cast<int32_t>(sets_.size());
+    sets_.emplace_back();
+    std::memcpy(state, &idx, sizeof(idx));
+}
+
+void CountDistinctString::update(uint8_t* const* groupSlots,
+                                 const ColumnVector* input,
+                                 const PositionList& pos) const {
+    if (input == nullptr) {
+        raise(ErrorCode::InvalidArgument, "CountDistinctString: input column required");
+    }
+    if (input->type().id != TypeId::STRING) {
+        raise(ErrorCode::TypeMismatch, "CountDistinctString: input type {} != STRING",
+              input->type().toString());
+    }
+    const ValidityBitmask& validity = input->validity();
+    const size_t n = pos.size();
+    for (size_t k = 0; k < n; ++k) {
+        const auto i = static_cast<size_t>(pos.at(k));
+        if (!validity.isValid(i)) continue;
+        int32_t idx;
+        std::memcpy(&idx, groupSlots[k], sizeof(idx));
+        const std::string_view sv = input->stringAt(i);
+        sets_[static_cast<size_t>(idx)].emplace(sv);
+    }
+}
+
+ColumnVector CountDistinctString::finalize(const std::vector<const uint8_t*>& states,
+                                           MemoryManager* mm) const {
+    ColumnVector out = ColumnVector::make(Int64, states.size(), mm);
+    out.validity().setAllValid();
+    int64_t* o = out.typed<int64_t>();
+    for (size_t i = 0; i < states.size(); ++i) {
+        int32_t idx;
+        std::memcpy(&idx, states[i], sizeof(idx));
+        o[i] = static_cast<int64_t>(sets_[static_cast<size_t>(idx)].size());
+    }
+    return out;
+}
+
+void CountDistinctString::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
+    raise(ErrorCode::NotImplemented, "CountDistinctString: spill-merge not implemented");
+}
+
+// ---------- CountDistinctF64 ----------
+
+CountDistinctF64::CountDistinctF64(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "CountDistinctF64: input expression required");
+}
+
+void CountDistinctF64::init(uint8_t* state) const {
+    int32_t idx = static_cast<int32_t>(sets_.size());
+    sets_.emplace_back();
+    std::memcpy(state, &idx, sizeof(idx));
+}
+
+void CountDistinctF64::update(uint8_t* const* groupSlots,
+                              const ColumnVector* input,
+                              const PositionList& pos) const {
+    if (input == nullptr) {
+        raise(ErrorCode::InvalidArgument, "CountDistinctF64: input column required");
+    }
+    if (input->type().id != TypeId::FLOAT64) {
+        raise(ErrorCode::TypeMismatch, "CountDistinctF64: input type {} != FLOAT64",
+              input->type().toString());
+    }
+    const double*          vals     = input->typed<double>();
+    const ValidityBitmask& validity = input->validity();
+    const size_t n = pos.size();
+    for (size_t k = 0; k < n; ++k) {
+        const auto i = static_cast<size_t>(pos.at(k));
+        if (!validity.isValid(i)) continue;
+        int32_t idx;
+        std::memcpy(&idx, groupSlots[k], sizeof(idx));
+        sets_[static_cast<size_t>(idx)].insert(vals[i]);
+    }
+}
+
+ColumnVector CountDistinctF64::finalize(const std::vector<const uint8_t*>& states,
+                                        MemoryManager* mm) const {
+    ColumnVector out = ColumnVector::make(Int64, states.size(), mm);
+    out.validity().setAllValid();
+    int64_t* o = out.typed<int64_t>();
+    for (size_t i = 0; i < states.size(); ++i) {
+        int32_t idx;
+        std::memcpy(&idx, states[i], sizeof(idx));
+        o[i] = static_cast<int64_t>(sets_[static_cast<size_t>(idx)].size());
+    }
+    return out;
+}
+
+void CountDistinctF64::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
+    raise(ErrorCode::NotImplemented, "CountDistinctF64: spill-merge not implemented");
+}
+
 // ---------- SumF64 ----------
 
 SumF64::SumF64(ExpressionPtr input) : input_(std::move(input)) {

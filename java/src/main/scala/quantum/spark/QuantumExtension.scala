@@ -670,14 +670,26 @@ object QuantumStrategy {
       case _ => None
     }
 
+    // Map an input column's DataType to the proto TypeId for distinct
+    // counting (INT64 / STRING / FLOAT64 supported).
+    def distinctInputType(t: DataType): Option[QuantumPlan.TypeId] = t match {
+      case LongType    => Some(QuantumPlan.TypeId.TYPE_INT64)
+      case StringType  => Some(QuantumPlan.TypeId.TYPE_STRING)
+      case DoubleType  => Some(QuantumPlan.TypeId.TYPE_FLOAT64)
+      case _           => None
+    }
+
     // COUNT(DISTINCT col) — the isDistinct flag is on AggregateExpression,
     // not on the wrapped Count function, so classifyAgg can't see it. Caller
     // peels the AggregateExpression and routes isDistinct through here.
     def classifyDistinctAgg(fn: AggregateFunction): Option[OutputItem] = fn match {
-      case Count(Seq(ar: AttributeReference)) if ar.dataType == LongType =>
-        exprIdToCol.get(ar.exprId).map(i =>
-          AggOut(specOf(QuantumPlan.AggregateKind.AGG_COUNT_DISTINCT, Some(i)),
-                 "count_distinct"))
+      case Count(Seq(ar: AttributeReference)) =>
+        for {
+          it  <- distinctInputType(ar.dataType)
+          idx <- exprIdToCol.get(ar.exprId)
+        } yield AggOut(
+          specOf(QuantumPlan.AggregateKind.AGG_COUNT_DISTINCT, Some(idx), it),
+          "count_distinct")
       case _ => None
     }
 
