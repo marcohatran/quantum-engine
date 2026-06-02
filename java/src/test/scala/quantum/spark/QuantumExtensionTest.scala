@@ -397,6 +397,42 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.31: aggregates over a `DoubleType` column — `SumF64` / `MinF64`
+   * / `MaxF64` / `AvgF64` native paths.
+   */
+  @Test
+  def doubleAggregatesPerGroup(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      ("a", 10.0), ("a", 20.0), ("a", 30.0),
+      ("b", 5.0),  ("b", 15.0)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_dagg")
+
+    val rows = spark.sql(
+      """SELECT k, SUM(v) AS s, MIN(v) AS lo, MAX(v) AS hi, AVG(v) AS a
+        |  FROM kv_dagg GROUP BY k""".stripMargin)
+      .collect()
+      .map(r => (r.getString(0), r.getDouble(1), r.getDouble(2), r.getDouble(3), r.getDouble(4)))
+      .sortBy(_._1)
+      .toSeq
+
+    assertEquals(2, rows.size)
+    val a = rows.find(_._1 == "a").get
+    val b = rows.find(_._1 == "b").get
+    assertEquals(60.0, a._2, 1e-9)
+    assertEquals(10.0, a._3, 1e-9); assertEquals(30.0, a._4, 1e-9)
+    assertEquals(20.0, a._5, 1e-9)
+    assertEquals(20.0, b._2, 1e-9)
+    assertEquals(5.0,  b._3, 1e-9); assertEquals(15.0, b._4, 1e-9)
+    assertEquals(10.0, b._5, 1e-9)
+    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
+      "Double aggregates should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.30: source LocalRelation with a `DoubleType` column. `price` is
    * marshalled as a `DoubleColumn` through `q_column_float64`; the WHERE
    * comparison `price > 50.5` runs in the engine's Float64 comparison

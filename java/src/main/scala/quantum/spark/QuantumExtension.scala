@@ -601,22 +601,38 @@ object QuantumStrategy {
       QuantumPlan.ScalarExpr.newBuilder()
         .setColumnRef(QuantumPlan.ColumnRef.newBuilder().setIndex(idx)).build()
 
-    def specOf(kind: QuantumPlan.AggregateKind, inputCol: Option[Int]): QuantumPlan.AggregateSpec = {
+    def specOf(kind: QuantumPlan.AggregateKind, inputCol: Option[Int],
+               inputType: QuantumPlan.TypeId = QuantumPlan.TypeId.TYPE_INT64):
+        QuantumPlan.AggregateSpec = {
       val b = QuantumPlan.AggregateSpec.newBuilder()
-        .setKind(kind).setInputType(QuantumPlan.TypeId.TYPE_INT64)
+        .setKind(kind).setInputType(inputType)
       inputCol.foreach(idx => b.setInput(aggCol(idx)))
       b.build()
     }
 
+    def aggTypeFor(t: DataType): Option[QuantumPlan.TypeId] = t match {
+      case LongType    => Some(QuantumPlan.TypeId.TYPE_INT64)
+      case DoubleType  => Some(QuantumPlan.TypeId.TYPE_FLOAT64)
+      case _           => None
+    }
+
     def classifyAgg(fn: AggregateFunction): Option[OutputItem] = fn match {
-      case Sum(ar: AttributeReference, _) if ar.dataType == LongType =>
-        exprIdToCol.get(ar.exprId).map(i => AggOut(specOf(QuantumPlan.AggregateKind.AGG_SUM, Some(i)), "sum"))
-      case Min(ar: AttributeReference) if ar.dataType == LongType =>
-        exprIdToCol.get(ar.exprId).map(i => AggOut(specOf(QuantumPlan.AggregateKind.AGG_MIN, Some(i)), "min"))
-      case Max(ar: AttributeReference) if ar.dataType == LongType =>
-        exprIdToCol.get(ar.exprId).map(i => AggOut(specOf(QuantumPlan.AggregateKind.AGG_MAX, Some(i)), "max"))
-      case Average(ar: AttributeReference, _) if ar.dataType == LongType =>
-        exprIdToCol.get(ar.exprId).map(i => AggOut(specOf(QuantumPlan.AggregateKind.AGG_AVG, Some(i)), "avg"))
+      case Sum(ar: AttributeReference, _) =>
+        for { it  <- aggTypeFor(ar.dataType)
+              idx <- exprIdToCol.get(ar.exprId) }
+          yield AggOut(specOf(QuantumPlan.AggregateKind.AGG_SUM, Some(idx), it), "sum")
+      case Min(ar: AttributeReference) =>
+        for { it  <- aggTypeFor(ar.dataType)
+              idx <- exprIdToCol.get(ar.exprId) }
+          yield AggOut(specOf(QuantumPlan.AggregateKind.AGG_MIN, Some(idx), it), "min")
+      case Max(ar: AttributeReference) =>
+        for { it  <- aggTypeFor(ar.dataType)
+              idx <- exprIdToCol.get(ar.exprId) }
+          yield AggOut(specOf(QuantumPlan.AggregateKind.AGG_MAX, Some(idx), it), "max")
+      case Average(ar: AttributeReference, _) =>
+        for { it  <- aggTypeFor(ar.dataType)
+              idx <- exprIdToCol.get(ar.exprId) }
+          yield AggOut(specOf(QuantumPlan.AggregateKind.AGG_AVG, Some(idx), it), "avg")
       case Count(children) if children.forall { case _: Literal => true; case _ => false } =>
         Some(AggOut(specOf(QuantumPlan.AggregateKind.AGG_COUNT_STAR, None), "count_star"))
       case Count(Seq(ar: AttributeReference)) =>

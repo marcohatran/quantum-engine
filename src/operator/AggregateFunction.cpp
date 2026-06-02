@@ -449,4 +449,230 @@ void AvgI64::merge(uint8_t* dst, const uint8_t* src) const {
     std::memcpy(dst + 8, &cntA, sizeof(cntA));
 }
 
+// ---------- SumF64 ----------
+
+SumF64::SumF64(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "SumF64: input expression required");
+}
+
+void SumF64::init(uint8_t* state) const {
+    double z = 0.0;
+    std::memcpy(state, &z, sizeof(z));
+}
+
+void SumF64::update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const {
+    if (input == nullptr) raise(ErrorCode::InvalidArgument, "SumF64: input column required");
+    if (input->type().id != TypeId::FLOAT64) {
+        raise(ErrorCode::TypeMismatch, "SumF64: input type {} != FLOAT64",
+              input->type().toString());
+    }
+    const double*          vals     = input->typed<double>();
+    const ValidityBitmask& validity = input->validity();
+    const size_t n = pos.size();
+    for (size_t k = 0; k < n; ++k) {
+        const auto i = static_cast<size_t>(pos.at(k));
+        if (!validity.isValid(i)) continue;
+        double cur;
+        std::memcpy(&cur, groupSlots[k], sizeof(cur));
+        cur += vals[i];
+        std::memcpy(groupSlots[k], &cur, sizeof(cur));
+    }
+}
+
+ColumnVector SumF64::finalize(const std::vector<const uint8_t*>& states,
+                              MemoryManager* mm) const {
+    ColumnVector out = ColumnVector::make(Float64, states.size(), mm);
+    out.validity().setAllValid();
+    double* o = out.typed<double>();
+    for (size_t i = 0; i < states.size(); ++i) {
+        std::memcpy(&o[i], states[i], sizeof(double));
+    }
+    return out;
+}
+
+void SumF64::merge(uint8_t* dst, const uint8_t* src) const {
+    double a, b;
+    std::memcpy(&a, dst, sizeof(a));
+    std::memcpy(&b, src, sizeof(b));
+    a += b;
+    std::memcpy(dst, &a, sizeof(a));
+}
+
+// ---------- MIN/MAX F64 helpers ----------
+
+namespace {
+
+void initMinMaxF64State(uint8_t* state) { std::memset(state, 0, 16); }
+
+inline bool   minMaxF64HasValue(const uint8_t* state) noexcept { return state[8] != 0; }
+inline double minMaxF64Value   (const uint8_t* state) noexcept {
+    double v; std::memcpy(&v, state, sizeof(v)); return v;
+}
+inline void   minMaxF64Set     (uint8_t* state, double v) noexcept {
+    std::memcpy(state, &v, sizeof(v));
+    state[8] = 1;
+}
+
+template <typename Cmp>
+void updateMinMaxF64(uint8_t* const* groupSlots,
+                     const ColumnVector* input,
+                     const PositionList& pos,
+                     const char* opName) {
+    if (input == nullptr) raise(ErrorCode::InvalidArgument, "{}: input column required", opName);
+    if (input->type().id != TypeId::FLOAT64) {
+        raise(ErrorCode::TypeMismatch, "{}: input type {} != FLOAT64", opName,
+              input->type().toString());
+    }
+    const double*          vals     = input->typed<double>();
+    const ValidityBitmask& validity = input->validity();
+    Cmp                    cmp;
+    const size_t n = pos.size();
+    for (size_t k = 0; k < n; ++k) {
+        const auto i = static_cast<size_t>(pos.at(k));
+        if (!validity.isValid(i)) continue;
+        uint8_t* st = groupSlots[k];
+        if (!minMaxF64HasValue(st) || cmp(vals[i], minMaxF64Value(st))) {
+            minMaxF64Set(st, vals[i]);
+        }
+    }
+}
+
+ColumnVector finalizeMinMaxF64(const std::vector<const uint8_t*>& states,
+                               MemoryManager* mm) {
+    ColumnVector out = ColumnVector::make(Float64, states.size(), mm);
+    out.validity().setAllValid();
+    double* o = out.typed<double>();
+    for (size_t i = 0; i < states.size(); ++i) {
+        if (minMaxF64HasValue(states[i])) {
+            o[i] = minMaxF64Value(states[i]);
+        } else {
+            o[i] = 0.0;
+            out.validity().setValid(i, false);
+        }
+    }
+    return out;
+}
+
+template <typename Cmp>
+void mergeMinMaxF64(uint8_t* dst, const uint8_t* src) {
+    if (!minMaxF64HasValue(src)) return;
+    if (!minMaxF64HasValue(dst)) { std::memcpy(dst, src, 16); return; }
+    Cmp cmp;
+    if (cmp(minMaxF64Value(src), minMaxF64Value(dst))) {
+        minMaxF64Set(dst, minMaxF64Value(src));
+    }
+}
+
+} // namespace
+
+// ---------- MinF64 ----------
+
+MinF64::MinF64(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "MinF64: input expression required");
+}
+void MinF64::init(uint8_t* state) const { initMinMaxF64State(state); }
+void MinF64::update(uint8_t* const* groupSlots, const ColumnVector* input,
+                    const PositionList& pos) const {
+    updateMinMaxF64<std::less<double>>(groupSlots, input, pos, "MinF64");
+}
+ColumnVector MinF64::finalize(const std::vector<const uint8_t*>& states,
+                              MemoryManager* mm) const {
+    return finalizeMinMaxF64(states, mm);
+}
+void MinF64::merge(uint8_t* dst, const uint8_t* src) const {
+    mergeMinMaxF64<std::less<double>>(dst, src);
+}
+
+// ---------- MaxF64 ----------
+
+MaxF64::MaxF64(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "MaxF64: input expression required");
+}
+void MaxF64::init(uint8_t* state) const { initMinMaxF64State(state); }
+void MaxF64::update(uint8_t* const* groupSlots, const ColumnVector* input,
+                    const PositionList& pos) const {
+    updateMinMaxF64<std::greater<double>>(groupSlots, input, pos, "MaxF64");
+}
+ColumnVector MaxF64::finalize(const std::vector<const uint8_t*>& states,
+                              MemoryManager* mm) const {
+    return finalizeMinMaxF64(states, mm);
+}
+void MaxF64::merge(uint8_t* dst, const uint8_t* src) const {
+    mergeMinMaxF64<std::greater<double>>(dst, src);
+}
+
+// ---------- AvgF64 ----------
+
+AvgF64::AvgF64(ExpressionPtr input) : input_(std::move(input)) {
+    if (!input_) raise(ErrorCode::InvalidArgument, "AvgF64: input expression required");
+}
+
+void AvgF64::init(uint8_t* state) const {
+    double  zSum   = 0.0;
+    int64_t zCount = 0;
+    std::memcpy(state,     &zSum,   sizeof(zSum));
+    std::memcpy(state + 8, &zCount, sizeof(zCount));
+}
+
+void AvgF64::update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const {
+    if (input == nullptr) raise(ErrorCode::InvalidArgument, "AvgF64: input column required");
+    if (input->type().id != TypeId::FLOAT64) {
+        raise(ErrorCode::TypeMismatch, "AvgF64: input type {} != FLOAT64",
+              input->type().toString());
+    }
+    const double*          vals     = input->typed<double>();
+    const ValidityBitmask& validity = input->validity();
+    const size_t n = pos.size();
+    for (size_t k = 0; k < n; ++k) {
+        const auto i = static_cast<size_t>(pos.at(k));
+        if (!validity.isValid(i)) continue;
+        uint8_t* st = groupSlots[k];
+        double  sum;
+        int64_t cnt;
+        std::memcpy(&sum, st,     sizeof(sum));
+        std::memcpy(&cnt, st + 8, sizeof(cnt));
+        sum += vals[i];
+        cnt += 1;
+        std::memcpy(st,     &sum, sizeof(sum));
+        std::memcpy(st + 8, &cnt, sizeof(cnt));
+    }
+}
+
+ColumnVector AvgF64::finalize(const std::vector<const uint8_t*>& states,
+                              MemoryManager* mm) const {
+    ColumnVector out = ColumnVector::make(Float64, states.size(), mm);
+    out.validity().setAllValid();
+    double* o = out.typed<double>();
+    for (size_t i = 0; i < states.size(); ++i) {
+        double  sum;
+        int64_t cnt;
+        std::memcpy(&sum, states[i],     sizeof(sum));
+        std::memcpy(&cnt, states[i] + 8, sizeof(cnt));
+        if (cnt == 0) {
+            o[i] = 0.0;
+            out.validity().setValid(i, false);
+        } else {
+            o[i] = sum / static_cast<double>(cnt);
+        }
+    }
+    return out;
+}
+
+void AvgF64::merge(uint8_t* dst, const uint8_t* src) const {
+    double  sumA, sumB;
+    int64_t cntA, cntB;
+    std::memcpy(&sumA, dst,     sizeof(sumA));
+    std::memcpy(&cntA, dst + 8, sizeof(cntA));
+    std::memcpy(&sumB, src,     sizeof(sumB));
+    std::memcpy(&cntB, src + 8, sizeof(cntB));
+    sumA += sumB;
+    cntA += cntB;
+    std::memcpy(dst,     &sumA, sizeof(sumA));
+    std::memcpy(dst + 8, &cntA, sizeof(cntA));
+}
+
 } // namespace quantum

@@ -199,6 +199,86 @@ private:
     mutable std::vector<std::string> values_;
 };
 
+// SUM(double) -> double. Skips null inputs.
+class SumF64 final : public AggregateFunction {
+public:
+    explicit SumF64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return sizeof(double); }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Float64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
+// MIN(double) -> double. State: [double value][uint8_t hasValue].
+class MinF64 final : public AggregateFunction {
+public:
+    explicit MinF64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return 16; }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Float64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
+// MAX(double) -> double.
+class MaxF64 final : public AggregateFunction {
+public:
+    explicit MaxF64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return 16; }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Float64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
+// AVG(double) -> double. State: [double sum][int64 count].
+class AvgF64 final : public AggregateFunction {
+public:
+    explicit AvgF64(ExpressionPtr input);
+
+    size_t   stateSize() const override { return 16; }
+    void     init(uint8_t* state) const override;
+    void     update(uint8_t* const* groupSlots,
+                    const ColumnVector* input,
+                    const PositionList& pos) const override;
+    ColumnVector finalize(const std::vector<const uint8_t*>& states,
+                          MemoryManager* mm) const override;
+    void     merge(uint8_t* dst, const uint8_t* src) const override;
+    DataType outputType() const override { return Float64; }
+    const Expression* inputExpr() const override { return input_.get(); }
+
+private:
+    ExpressionPtr input_;
+};
+
 // AVG(int64) -> double. State: [double sum][int64 count]. Skips nulls.
 // Returns NULL for a group with no non-null inputs.
 class AvgI64 final : public AggregateFunction {

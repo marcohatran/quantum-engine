@@ -71,40 +71,30 @@ AggregateFunctionPtr buildAggregate(const AggregateSpec& spec, PlanBuilder& pb) 
             return std::make_unique<CountColumn>(inputExpr());
 
         case AggregateKind::Sum:
-            if (spec.inputType.id != TypeId::INT64) {
-                raise(ErrorCode::NotImplemented,
-                      "PlanBuilder: SUM only supported on INT64 (got {})",
-                      spec.inputType.toString());
-            }
-            return std::make_unique<SumI64>(inputExpr());
+            if (spec.inputType.id == TypeId::INT64)   return std::make_unique<SumI64>(inputExpr());
+            if (spec.inputType.id == TypeId::FLOAT64) return std::make_unique<SumF64>(inputExpr());
+            raise(ErrorCode::NotImplemented,
+                  "PlanBuilder: SUM not supported on {}", spec.inputType.toString());
 
         case AggregateKind::Min:
-            if (spec.inputType.id == TypeId::INT64) {
-                return std::make_unique<MinI64>(inputExpr());
-            }
-            if (spec.inputType.id == TypeId::STRING) {
-                return std::make_unique<MinString>(inputExpr());
-            }
+            if (spec.inputType.id == TypeId::INT64)   return std::make_unique<MinI64>(inputExpr());
+            if (spec.inputType.id == TypeId::FLOAT64) return std::make_unique<MinF64>(inputExpr());
+            if (spec.inputType.id == TypeId::STRING)  return std::make_unique<MinString>(inputExpr());
             raise(ErrorCode::NotImplemented,
                   "PlanBuilder: MIN not supported on {}", spec.inputType.toString());
 
         case AggregateKind::Max:
-            if (spec.inputType.id == TypeId::INT64) {
-                return std::make_unique<MaxI64>(inputExpr());
-            }
-            if (spec.inputType.id == TypeId::STRING) {
-                return std::make_unique<MaxString>(inputExpr());
-            }
+            if (spec.inputType.id == TypeId::INT64)   return std::make_unique<MaxI64>(inputExpr());
+            if (spec.inputType.id == TypeId::FLOAT64) return std::make_unique<MaxF64>(inputExpr());
+            if (spec.inputType.id == TypeId::STRING)  return std::make_unique<MaxString>(inputExpr());
             raise(ErrorCode::NotImplemented,
                   "PlanBuilder: MAX not supported on {}", spec.inputType.toString());
 
         case AggregateKind::Avg:
-            if (spec.inputType.id != TypeId::INT64) {
-                raise(ErrorCode::NotImplemented,
-                      "PlanBuilder: AVG only supported on INT64 (got {})",
-                      spec.inputType.toString());
-            }
-            return std::make_unique<AvgI64>(inputExpr());
+            if (spec.inputType.id == TypeId::INT64)   return std::make_unique<AvgI64>(inputExpr());
+            if (spec.inputType.id == TypeId::FLOAT64) return std::make_unique<AvgF64>(inputExpr());
+            raise(ErrorCode::NotImplemented,
+                  "PlanBuilder: AVG not supported on {}", spec.inputType.toString());
     }
     raise(ErrorCode::Internal, "PlanBuilder: unknown AggregateKind");
 }
