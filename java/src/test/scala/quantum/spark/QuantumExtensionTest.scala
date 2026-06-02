@@ -397,6 +397,55 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.25: JOIN on a composite (k1, k2) key. The strategy's
+   * `extractEquiKeys` decomposes `AND`-chained `EqualTo` conjuncts in
+   * the join condition into a sequence of (build_col, probe_col) pairs.
+   * The native HashJoin uses `KeyCodec` for multi-column keys.
+   */
+  @Test
+  def multiKeyInnerJoin(): Unit = {
+    val s = spark
+    import s.implicits._
+    val a = Seq(
+      (1L, "x", "alpha"),
+      (1L, "y", "beta"),
+      (2L, "x", "gamma"))
+      .toDF("k1", "k2", "label")
+    val b = Seq(
+      (1L, "x", 10L),
+      (1L, "x", 11L),   // duplicate composite (1, "x")
+      (1L, "y", 20L),
+      (2L, "x", 30L),
+      (2L, "z", 999L))  // unmatched composite — only "x" exists for k1=2
+      .toDF("k1", "k2", "v")
+    a.createOrReplaceTempView("mka")
+    b.createOrReplaceTempView("mkb")
+
+    val rows = spark.sql(
+      """SELECT mka.k1, mka.k2, SUM(mkb.v) AS s, COUNT(*) AS n
+        |  FROM mka JOIN mkb ON mka.k1 = mkb.k1 AND mka.k2 = mkb.k2
+        | GROUP BY mka.k1, mka.k2""".stripMargin)
+      .collect()
+      .map(r => (r.getLong(0), r.getString(1), r.getLong(2), r.getLong(3)))
+      .sortBy(t => (t._1, t._2))
+      .toSeq
+
+    // (1, "x") matches b's (1,"x",10) + (1,"x",11)  -> SUM=21, n=2
+    // (1, "y") matches b's (1,"y",20)               -> SUM=20, n=1
+    // (2, "x") matches b's (2,"x",30)               -> SUM=30, n=1
+    // (2, "z") in b is unmatched and excluded.
+    assertEquals(Seq(
+      (1L, "x", 21L, 2L),
+      (1L, "y", 20L, 1L),
+      (2L, "x", 30L, 1L)
+    ), rows)
+    assertTrue(QuantumStrategy.lastTranslation.exists(t =>
+      t.startsWith("HashAggregate") && t.contains("2 sources")),
+      "Multi-key JOIN should route through native; flag = " +
+        QuantumStrategy.lastTranslation)
+  }
+
+  /**
    * Phase 5.24: LEFT OUTER JOIN preserves left rows that have no match on
    * the right; right-side columns become NULL for those rows. Verified by
    * counting rows per left key — keys with no right match still appear
