@@ -43,9 +43,9 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Phase 5 — Complete** (40 slices)
+**Phase 5 — Complete** (41 slices)
 
-A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … GROUP BY … HAVING … ORDER BY … LIMIT …`, plus `UNION ALL` between any two peelable subqueries.
+A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … [GROUP BY … HAVING …] ORDER BY … LIMIT …` — GROUP BY is optional: plain query roots (filter/join/sort/limit without an aggregate) route natively too — plus `UNION ALL` between any two peelable subqueries.
 
 *Storage I/O.* Pluggable `FileFormatReader` interface (`open`/`nextBatch`/`close`/`schema`) covers CSV, Parquet (single + multi-file via `ConcatFileReader`), Hive-style partitioned directories (`PartitionedFileReader` synthesizes partition columns from the path), and Delta tables (`DeltaTableReader` seeds the live-file set from the latest checkpoint parquet via `_last_checkpoint` — single- and multi-part — then replays only newer `_delta_log/*.json` commits, so tables survive Delta's log cleanup; streams the surviving Parquet files). `io::FileSystem` URI dispatch — `file://`, `s3://`, `gs://`, `abfs[s]://` — via Arrow's `FileSystemFromUri`, with S3 lazily-initialised on first use. New plan IR `FileScanNode { paths, format, partition_columns, partition_values }` lets the native engine open files itself (no JNA row marshalling for file sources).
 
@@ -58,6 +58,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 - **Aggregates**: `Aggregate(groupingExprs, aggregateExprs, child)` with multi-column `GROUP BY` over any mix of Long/Int/String/Double keys. Supported aggregates: `SUM(long|double)`, `MIN/MAX(long|double|string)`, `AVG(long|double)`, `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long|double|string)`. The `isDistinct` flag on `AggregateExpression` routes through a distinct classifier.
 - **HAVING**: `Filter(having, Aggregate(...))` pushes the HAVING condition as `FilterNode`s above the `HashAggregateNode`, translated against the post-aggregate exprId-to-engine-column map.
 - **LIMIT / ORDER BY**: the strategy matches through the planner's `ReturnAnswer` wrapper, so it claims outer `GlobalLimit / LocalLimit / Sort` before Spark's `SpecialLimits` can plan `CollectLimitExec` / `TakeOrderedAndProjectExec` / `SortExec`. Limits strip via `stripOuterLimits` (tightest combined) and emit a `LimitNode`; a root `Sort` over the Aggregate translates its keys against the post-aggregate exprId map and emits a `SortNode` between the HAVING filters and the LimitNode (HAVING → ORDER BY → LIMIT). `QuantumExec` yields a single partition, so the native total order survives `collect()`. A `Sort` below the Aggregate still peels via the child path. ORDER BY over a non-selected aggregate (Catalyst's `Limit(Project(_, Sort(…)))` shape, where a hidden ordering aggregate is added to the Aggregate and projected away above the Sort) is claimed too: the Project becomes a pure `physicalIndex` remap in `QuantumExec`, so the hidden column is computed and sorted on natively but never marshalled back to Spark.
+- **Plain (non-aggregate) roots**: when the whole root plan peels (scans / filters / joins / sort / limit, no Aggregate), the strategy claims it directly — gated to the `ReturnAnswer` root so it claims whole end-user queries, not subtrees of plans Spark is mid-planning. The root plan's output attributes (or a stripped outer Project) drive QuantumExec's output mapping.
 - **Set ops**: `Union(children, …)` (UNION ALL) — each child is peeled recursively, their `sources` maps are merged, and a `UnionAllNode` wraps the per-child plans (the Union's idMap canonicalizes to the first child's exprIds). UNION DISTINCT surfaces as `Aggregate(Union(…))` and routes through the Aggregate path naturally when every child peels.
 
 *Predicates.* The translator covers `=` `<` `<=` `>` `>=` over any combination of `AttributeReference`s and Long / Int / Double / Boolean / String / `UTF8String` literals; boolean `AND` (top-level flattened to chained FilterNodes), `OR` and nested `And` (Kleene three-valued logic — `T OR NULL = T`, `F AND NULL = F`); unary `NOT` and `IS NULL` (always-valid output); `IS NOT NULL` translated as `NOT(IsNull)` (or stripped when null-propagation makes it redundant); `IN (list)` rewritten to OR-chains; `LIKE` plus Catalyst's `StartsWith`/`EndsWith`/`Contains` simplifications, all routed through the engine's `LikeOp`. The `stripRedundantIsNotNull` rule treats all comparison and string-predicate ops as null-propagating, so Spark's auto-added `isnotnull(col)` doesn't surface as an extra Filter.
@@ -68,7 +69,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 203 C++ tests + 49 JVM tests (2 EngineEndToEnd + 1 Delta + 46 strategy / agg / predicate / join / source-shape).
+**Tests** — 203 C++ tests + 53 JVM tests (2 EngineEndToEnd + 1 Delta + 50 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -85,7 +86,7 @@ cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5 + Delta 3.2)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 49 tests (JNA + Spark + Delta)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 53 tests (JNA + Spark + Delta)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -144,6 +145,7 @@ Key invariants the codebase enforces:
 | **5** | End-to-end FileScan→HashAgg benchmark (~3.3 M items/sec, dominated by Parquet decode) | done |
 | **5** | Native LIMIT / ORDER BY routing end-to-end — strategy matches through `ReturnAnswer`, beating Spark's `SpecialLimits` (`CollectLimitExec` / `TakeOrderedAndProjectExec` / `SortExec`) | done |
 | **5** | ORDER BY non-selected aggregates — `Limit(Project(_, Sort(…)))` roots claimed; hidden ordering column computed/sorted natively, projected via `physicalIndex` remap | done |
+| **5** | Plain query roots — `SELECT … WHERE … ORDER BY … LIMIT` without GROUP BY (incl. joins, projection/rename) claimed at the `ReturnAnswer` root | done |
 | 5 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |
 | **5** | Delta — checkpoint `.parquet` log support (`_last_checkpoint`, single- + multi-part; only post-checkpoint JSON commits replayed) | done |

@@ -1403,4 +1403,104 @@ class QuantumExtensionTest {
     }
     rmRf(tmpDir)
   }
+  /**
+   * Phase 5.41: plain (non-aggregate) query roots. SELECT … WHERE …
+   * ORDER BY … LIMIT without GROUP BY routes natively when the whole
+   * root plan peels — the strategy claims it through ReturnAnswer.
+   */
+  @Test
+  def plainSelectWhereOrderByLimit(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 50L), (2L, 10L), (3L, 40L), (4L, 20L), (5L, 30L)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_plain")
+
+    val rows = spark.sql(
+      "SELECT k, v FROM kv_plain WHERE v > 15 ORDER BY v DESC LIMIT 2")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).toSeq
+
+    // v > 15 keeps {50,40,20,30}; top-2 by v desc: (1,50), (3,40)
+    assertEquals(Seq((1L, 50L), (3L, 40L)), rows)
+    assertTrue(QuantumStrategy.translations.exists(t =>
+        t.startsWith("Plain(") && t.contains("ORDER BY 1 keys") &&
+        t.contains("LIMIT 2") && t.contains("1 pushed filters")),
+      "plain root should route natively; translations = " +
+        QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 5.41: plain root with column pruning + rename — the Project
+   * collapses into an idMap rebind and the output mapping emits the
+   * alias attribute.
+   */
+  @Test
+  def plainProjectionRename(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((1L, 10L), (2L, 20L), (1L, 30L)).toDF("k", "v")
+    df.createOrReplaceTempView("kv_plain_proj")
+
+    val rows = spark.sql(
+      "SELECT v AS x FROM kv_plain_proj WHERE k = 1 ORDER BY x")
+      .collect().map(_.getLong(0)).toSeq
+
+    assertEquals(Seq(10L, 30L), rows)
+    assertTrue(QuantumStrategy.translations.exists(_.startsWith("Plain(")),
+      "plain root should route natively; translations = " +
+        QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 5.41: plain root ORDER BY a non-selected column — Catalyst
+   * plans Project(selected, Sort(other, …)); the stripped Project drives
+   * the output mapping while the engine sorts on the dropped column.
+   */
+  @Test
+  def plainOrderByNonSelectedColumn(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq((10L, 3L), (20L, 1L), (30L, 2L)).toDF("k", "v")
+    df.createOrReplaceTempView("kv_plain_hidden")
+
+    val rows = spark.sql(
+      "SELECT k FROM kv_plain_hidden ORDER BY v")
+      .collect().map(_.getLong(0)).toSeq
+
+    // order by v asc: v=1 -> k=20, v=2 -> k=30, v=3 -> k=10
+    assertEquals(Seq(20L, 30L, 10L), rows)
+    assertTrue(QuantumStrategy.translations.exists(t =>
+        t.startsWith("Plain(") && t.contains("ORDER BY 1 keys") &&
+        t.contains("project 1/")),
+      "plain Project(Sort) root should route natively; translations = " +
+        QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 5.41: a JOIN without any aggregate at the root also routes
+   * natively (peel already handles joins; the root gate was the only
+   * thing missing).
+   */
+  @Test
+  def plainJoinWithoutAggregate(): Unit = {
+    val s = spark
+    import s.implicits._
+    Seq((1L, "alice"), (2L, "bob"), (3L, "carol")).toDF("id", "name")
+      .createOrReplaceTempView("users_plain")
+    Seq((1L, 100L), (3L, 300L), (4L, 400L)).toDF("uid", "amount")
+      .createOrReplaceTempView("orders_plain")
+
+    val rows = spark.sql(
+      "SELECT u.name, o.amount FROM users_plain u JOIN orders_plain o " +
+      "ON u.id = o.uid ORDER BY o.amount")
+      .collect().map(r => (r.getString(0), r.getLong(1))).toSeq
+
+    assertEquals(Seq(("alice", 100L), ("carol", 300L)), rows)
+    assertTrue(QuantumStrategy.translations.exists(t =>
+        t.startsWith("Plain(") && t.contains("2 sources")),
+      "plain join root should route natively; translations = " +
+        QuantumStrategy.translations)
+  }
+
 }

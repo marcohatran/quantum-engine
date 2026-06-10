@@ -37,9 +37,9 @@ class QuantumStrategy extends SparkStrategy {
     // sees (emitting CollectLimitExec / TakeOrderedAndProjectExec for
     // outer LIMIT / ORDER BY). Injected strategies run first, so matching
     // through ReturnAnswer here is what lets native LIMIT / SORT win.
-    val unwrapped = plan match {
-      case ReturnAnswer(child) => child
-      case other               => other
+    val (unwrapped, isRoot) = plan match {
+      case ReturnAnswer(child) => (child, true)
+      case other               => (other, false)
     }
     // Strip outer LIMIT wrappers and translate the inner plan with the
     // limit threaded through. Catalyst typically plans `LIMIT N` over an
@@ -63,16 +63,25 @@ class QuantumStrategy extends SparkStrategy {
       case other                 => (other, None)
     }
     inner match {
-      case Filter(having, agg @ Aggregate(groupingExprs, aggregateExprs, child)) =>
-        QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, Some(having), limit, sortOrder,
+      case Filter(having, agg: Aggregate) =>
+        QuantumStrategy.tryTranslate(
+            Some(agg), agg.child, postLimit.output, Some(having), limit, sortOrder,
             projectList)
           .map(qe => Seq(qe))
           .getOrElse(Nil)
-      case agg @ Aggregate(groupingExprs, aggregateExprs, child) =>
-        QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, None, limit, sortOrder,
+      case agg: Aggregate =>
+        QuantumStrategy.tryTranslate(
+            Some(agg), agg.child, postLimit.output, None, limit, sortOrder,
             projectList)
+          .map(quantumExec => Seq(quantumExec))
+          .getOrElse(Nil)
+      case other if isRoot =>
+        // Plain (non-aggregate) query root: SELECT … WHERE … ORDER BY …
+        // LIMIT without GROUP BY. Gated to the ReturnAnswer root so we
+        // claim whole end-user queries, not arbitrary subtrees of plans
+        // Spark is in the middle of planning.
+        QuantumStrategy.tryTranslate(
+            None, other, postLimit.output, None, limit, sortOrder, projectList)
           .map(quantumExec => Seq(quantumExec))
           .getOrElse(Nil)
       case _ => Nil
@@ -164,11 +173,17 @@ object QuantumStrategy {
     }
   }
 
-  def tryTranslateLongAggregate(
-      agg: Aggregate,
-      groupingExprs: Seq[Expression],
-      aggregateExprs: Seq[NamedExpression],
-      child: LogicalPlan,
+  /**
+   * Translate a recognised plan shape to a QuantumExec. With `aggOpt` set,
+   * `peelTarget` is the Aggregate's child and a HashAggregateNode (plus
+   * HAVING filters) is built above it. With `aggOpt` empty — a plain
+   * query root — the peeled plan is used directly and `plainOutput` (the
+   * root plan's output attributes) drives the output mapping.
+   */
+  def tryTranslate(
+      aggOpt: Option[Aggregate],
+      peelTarget: LogicalPlan,
+      plainOutput: Seq[Attribute],
       havingCondition: Option[Expression] = None,
       limit: Option[Long] = None,
       sortOrder: Option[Seq[SortOrder]] = None,
@@ -653,17 +668,32 @@ object QuantumStrategy {
     }
 
     // ------------------------------------------------------------------
-    // tryTranslateLongAggregate body — peel the child then wrap in HashAgg.
+    // tryTranslate body — peel the target, then build the HashAggregate
+    // (or pass the peeled plan through for plain query roots).
     // ------------------------------------------------------------------
 
-    val peeled: PeelResult = peel(child) match {
+    val peeled: PeelResult = peel(peelTarget) match {
       case Some(r) => r
       case None    =>
         if (lastTranslated.get == null || !lastTranslated.get.startsWith("reject:"))
-          lastTranslated.set("reject: child didn't peel\n" + child.treeString)
+          lastTranslated.set("reject: plan didn't peel\n" + peelTarget.treeString)
         return None
     }
     val exprIdToCol = peeled.idMap
+
+    // Build the plan above the peeled child and the column map that's
+    // valid above it: `outMap` resolves exprIds to engine output columns
+    // for sort keys and the final output mapping; `defaultItems` is the
+    // output when no outer Project was stripped.
+    val (root0, outMap, defaultItems, labelPrefix):
+        (QuantumPlan.PlanNode, Map[ExprId, Int], Seq[NamedExpression], String) =
+      aggOpt match {
+      case None =>
+        (peeled.plan, peeled.idMap, plainOutput,
+         s"Plain(${plainOutput.size} outputs, ${peeled.filterCount} pushed filters, ")
+      case Some(agg) =>
+        val groupingExprs  = agg.groupingExpressions
+        val aggregateExprs = agg.aggregateExpressions
 
     // Grouping
     val groupColIndices: Seq[Int] = groupingExprs.flatMap {
@@ -824,23 +854,28 @@ object QuantumStrategy {
       return None
     }
 
-    // ORDER BY over the aggregate output: SortNode sits above the HAVING
-    // filters and below the LimitNode (SQL semantics: HAVING → ORDER BY →
-    // LIMIT). Sort keys reference agg.output exprIds, same map as HAVING.
+        val aggOutMap: Map[ExprId, Int] =
+          agg.output.zip(physicalIndex).map { case (attr, idx) => attr.exprId -> idx }.toMap
+        (root, aggOutMap, agg.output,
+         "HashAggregate(" + aggregateExprs.size + " outputs over " +
+           groupColIndices.size + " group keys, " + peeled.filterCount +
+           " pushed filters, " + havingPushed + " HAVING filters, ")
+    }
+
+    // ORDER BY above root0: SortNode sits above the HAVING filters and
+    // below the LimitNode (SQL semantics: HAVING → ORDER BY → LIMIT).
     // Declining here is safe — the planner re-applies strategies to the
-    // inner Aggregate via planLater, so the agg still routes natively
+    // subtrees via planLater, so an inner Aggregate still routes natively
     // under Spark's own SortExec.
     val (rootWithSort, sortPushed) = sortOrder match {
-      case None        => (root, false)
+      case None        => (root0, false)
       case Some(order) =>
-        val sortIdMap: Map[ExprId, Int] =
-          agg.output.zip(physicalIndex).map { case (attr, idx) => attr.exprId -> idx }.toMap
-        val translated = order.map(so => translateScalarWith(sortIdMap)(so.child))
+        val translated = order.map(so => translateScalarWith(outMap)(so.child))
         if (translated.exists(_.isEmpty)) {
           lastTranslated.set(s"reject: sort key untranslatable: $order")
           return None
         }
-        val sortB = QuantumPlan.SortNode.newBuilder().setChild(root)
+        val sortB = QuantumPlan.SortNode.newBuilder().setChild(root0)
         translated.flatten.foreach(sortB.addKeys)
         order.foreach { so =>
           sortB.addAscending(so.direction == Ascending)
@@ -861,38 +896,31 @@ object QuantumStrategy {
           .build()
     }
 
-    // Final projection above the Sort (Catalyst's drop of hidden ordering
-    // aggregates). The engine still emits every aggregate column; the
-    // projection is purely a remap of QuantumExec's output attributes and
-    // physicalIndex — dropped columns are simply never read at the JNA
-    // boundary. Only attribute-shaped items are supported; anything else
-    // declines the whole match (the inner Aggregate then routes natively
-    // under Spark's own ProjectExec/SortExec via planLater).
-    val (finalOutput, finalPhysicalIndex) = projectList match {
-      case None     => (agg.output, physicalIndex)
-      case Some(pl) =>
-        val aggColByExprId: Map[ExprId, Int] =
-          agg.output.zip(physicalIndex).map { case (attr, idx) => attr.exprId -> idx }.toMap
-        val mapped: Seq[Option[(Attribute, Int)]] = pl.map {
-          case ar: AttributeReference =>
-            aggColByExprId.get(ar.exprId).map(i => (ar: Attribute, i))
-          case a @ Alias(ar: AttributeReference, _) =>
-            aggColByExprId.get(ar.exprId).map(i => (a.toAttribute, i))
-          case _ => None
-        }
-        if (mapped.exists(_.isEmpty)) {
-          lastTranslated.set(s"reject: project list untranslatable: $pl")
-          return None
-        }
-        (mapped.flatten.map(_._1), mapped.flatten.map(_._2).toArray)
+    // Output mapping: each output item resolves to an engine column via
+    // outMap. With a stripped outer Project this also drops/renames
+    // columns (e.g. Catalyst's hidden ordering aggregates) — the engine
+    // still emits every column; dropped ones are simply never read at the
+    // JNA boundary. Only attribute-shaped items are supported; anything
+    // else declines the whole match.
+    val items: Seq[NamedExpression] = projectList.getOrElse(defaultItems)
+    val mapped: Seq[Option[(Attribute, Int)]] = items.map {
+      case a @ Alias(ar: AttributeReference, _) =>
+        outMap.get(ar.exprId).map(i => (a.toAttribute, i))
+      case ar: Attribute =>
+        outMap.get(ar.exprId).map(i => (ar, i))
+      case _ => None
     }
+    if (mapped.exists(_.isEmpty)) {
+      lastTranslated.set(s"reject: output expressions unmappable: $items")
+      return None
+    }
+    val finalOutput        = mapped.flatten.map(_._1)
+    val finalPhysicalIndex = mapped.flatten.map(_._2).toArray
 
-    val label = "HashAggregate(" + aggregateExprs.size + " outputs over " +
-      groupColIndices.size + " group keys, " + peeled.filterCount + " pushed filters, " +
-      havingPushed + " HAVING filters, " +
+    val label = labelPrefix +
       (if (sortPushed) s"ORDER BY ${sortOrder.get.size} keys, " else "") +
       limit.map(n => s"LIMIT $n, ").getOrElse("") +
-      projectList.map(pl => s"project ${pl.size}/${agg.output.size} cols, ").getOrElse("") +
+      projectList.map(pl => s"project ${pl.size}/${defaultItems.size} cols, ").getOrElse("") +
       peeled.sources.size + " sources)"
     lastTranslated.set(label)
     translationLog.add(label)
