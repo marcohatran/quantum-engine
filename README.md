@@ -43,7 +43,7 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Phase 5 — Complete** (35 slices)
+**Phase 5 — Complete** (36 slices)
 
 A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … GROUP BY … HAVING … ORDER BY … LIMIT …`, plus `UNION ALL` between any two peelable subqueries.
 
@@ -57,18 +57,18 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 - **Joins**: `Join(L, R, joinType, condition)` for `Inner` / `LeftOuter` / `RightOuter` / `FullOuter`. Equi-keys extracted from AND-chained `EqualTo(leftAttr, rightAttr)` (mirror tolerated); composite keys via `KeyCodec`. N-way joins work via recursive peel.
 - **Aggregates**: `Aggregate(groupingExprs, aggregateExprs, child)` with multi-column `GROUP BY` over any mix of Long/Int/String/Double keys. Supported aggregates: `SUM(long|double)`, `MIN/MAX(long|double|string)`, `AVG(long|double)`, `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long|double|string)`. The `isDistinct` flag on `AggregateExpression` routes through a distinct classifier.
 - **HAVING**: `Filter(having, Aggregate(...))` pushes the HAVING condition as `FilterNode`s above the `HashAggregateNode`, translated against the post-aggregate exprId-to-engine-column map.
-- **LIMIT / ORDER BY**: outer `GlobalLimit / LocalLimit` wrappers strip via `stripOuterLimits` (tightest combined); `Sort(order, _, child)` translates each SortOrder's inner key through the child's idMap. Both emit native nodes (`LimitNode` / `SortNode`); Spark's physical planner sometimes claims these via `CollectLimitExec` / `SortExec` before our strategy sees them, in which case the inner Aggregate still routes through us.
+- **LIMIT / ORDER BY**: the strategy matches through the planner's `ReturnAnswer` wrapper, so it claims outer `GlobalLimit / LocalLimit / Sort` before Spark's `SpecialLimits` can plan `CollectLimitExec` / `TakeOrderedAndProjectExec` / `SortExec`. Limits strip via `stripOuterLimits` (tightest combined) and emit a `LimitNode`; a root `Sort` over the Aggregate translates its keys against the post-aggregate exprId map and emits a `SortNode` between the HAVING filters and the LimitNode (HAVING → ORDER BY → LIMIT). `QuantumExec` yields a single partition, so the native total order survives `collect()`. A `Sort` below the Aggregate still peels via the child path.
 - **Set ops**: `Union(children, …)` (UNION ALL) — each child is peeled recursively, their `sources` maps are merged, and a `UnionAllNode` wraps the per-child plans (the Union's idMap canonicalizes to the first child's exprIds). UNION DISTINCT surfaces as `Aggregate(Union(…))` and routes through the Aggregate path naturally when every child peels.
 
 *Predicates.* The translator covers `=` `<` `<=` `>` `>=` over any combination of `AttributeReference`s and Long / Int / Double / Boolean / String / `UTF8String` literals; boolean `AND` (top-level flattened to chained FilterNodes), `OR` and nested `And` (Kleene three-valued logic — `T OR NULL = T`, `F AND NULL = F`); unary `NOT` and `IS NULL` (always-valid output); `IS NOT NULL` translated as `NOT(IsNull)` (or stripped when null-propagation makes it redundant); `IN (list)` rewritten to OR-chains; `LIKE` plus Catalyst's `StartsWith`/`EndsWith`/`Contains` simplifications, all routed through the engine's `LikeOp`. The `stripRedundantIsNotNull` rule treats all comparison and string-predicate ops as null-propagating, so Spark's auto-added `isnotnull(col)` doesn't surface as an extra Filter.
 
 *Native operators added in Phase 5.* `FileScanOperator`, `ConcatFileReader`, `PartitionedFileReader` (constant column broadcast), `LimitOperator` (PositionList truncation), `SortOperator` (materialize + permutation sort over any of INT32/INT64/FLOAT64/BOOL/STRING), `UnionAllOperator` (N-ary; drains one child at a time, output schema = first child's). Aggregate functions added: `SumF64`, `MinF64`, `MaxF64`, `AvgF64`, `CountColumn`, `CountDistinctI64`, plus Double/String COUNT(DISTINCT) variants. New expression machinery: `UnaryExpr` (Not, IsNull), `kernels::LogicalKernels` (Kleene And/Or), comparison kernels gained `Gte/Lte`. Plan IR added `BinaryOp::And/Or/Lte/Gte`, `UnaryOp::Not/IsNull`, `AggregateKind::Count/CountDistinct`.
 
-*Caveats & known follow-ups.* Spark's `CollectLimitExec` / `SortExec` can claim outer `Limit`/`Sort` before our strategy sees them — the native operators are exercised via C++ tests but end-to-end Spark routing for those two cases would need an `injectOptimizerRule` or more aggressive strategy registration. `COUNT(DISTINCT)` covers Long/Double/String but is in-memory only (distinct-set spill not implemented). `LogicalQueryStage` peeling (for shuffle-bearing AQE plans), Iceberg, NVMe disk cache, Arrow IPC cross-JVM transport, and an exchange operator for intra-operator parallelism remain on the roadmap.
+*Caveats & known follow-ups.* `Limit(Project(_, Sort(…)))` roots (ORDER BY + LIMIT with a projection in between) aren't matched yet and fall back to Spark's `TakeOrderedAndProjectExec` (inner Aggregate still routes natively). `COUNT(DISTINCT)` covers Long/Double/String but is in-memory only (distinct-set spill not implemented). `LogicalQueryStage` peeling (for shuffle-bearing AQE plans), Iceberg, NVMe disk cache, Arrow IPC cross-JVM transport, and an exchange operator for intra-operator parallelism remain on the roadmap.
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 194 C++ tests + 46 JVM tests (1 EngineEndToEnd + 1 Delta + 44 strategy / agg / predicate / join / source-shape).
+**Tests** — 194 C++ tests + 47 JVM tests (2 EngineEndToEnd + 1 Delta + 44 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -85,7 +85,7 @@ cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5 + Delta 3.2)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 46 tests (JNA + Spark + Delta)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 47 tests (JNA + Spark + Delta)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -142,7 +142,7 @@ Key invariants the codebase enforces:
 | **5** | Joins — Inner / Left / Right / Full Outer; composite (multi-key) joins; N-way; over any source mix | done |
 | **5** | `UNION ALL` — native N-ary `UnionAllOperator` + plan IR `UnionAllNode` + Spark `Union` peel | done |
 | **5** | End-to-end FileScan→HashAgg benchmark (~3.3 M items/sec, dominated by Parquet decode) | done |
-| 5 | Force native LIMIT / ORDER BY routing through Spark (vs Spark's CollectLimitExec / SortExec); needs `injectOptimizerRule` | planned |
+| **5** | Native LIMIT / ORDER BY routing end-to-end — strategy matches through `ReturnAnswer`, beating Spark's `SpecialLimits` (`CollectLimitExec` / `TakeOrderedAndProjectExec` / `SortExec`) | done |
 | 5 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |
 | 5 | Delta — checkpoint `.parquet` log support, schema evolution, column mapping | planned |

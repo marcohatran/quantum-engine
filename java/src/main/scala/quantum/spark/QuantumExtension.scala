@@ -5,7 +5,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, Sort, SubqueryAlias, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, ReturnAnswer, Sort, SubqueryAlias, Union}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -32,20 +32,36 @@ class QuantumStrategy extends SparkStrategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     QuantumStrategy.lastSeen.set(plan)
     QuantumStrategy.seenClasses.add(plan.getClass.getSimpleName)
+    // The planner wraps the root plan in ReturnAnswer before applying
+    // strategies, and Spark's SpecialLimits claims any ReturnAnswer it
+    // sees (emitting CollectLimitExec / TakeOrderedAndProjectExec for
+    // outer LIMIT / ORDER BY). Injected strategies run first, so matching
+    // through ReturnAnswer here is what lets native LIMIT / SORT win.
+    val unwrapped = plan match {
+      case ReturnAnswer(child) => child
+      case other               => other
+    }
     // Strip outer LIMIT wrappers and translate the inner plan with the
     // limit threaded through. Catalyst typically plans `LIMIT N` over an
     // Aggregate as `GlobalLimit(N, LocalLimit(N, Aggregate(...)))`, both
     // operating on the same logical limit; we collapse to one LimitNode.
-    val (inner, limit) = QuantumStrategy.stripOuterLimits(plan)
+    val (postLimit, limit) = QuantumStrategy.stripOuterLimits(unwrapped)
+    // ORDER BY plans as Sort above the Aggregate (below any LIMIT).
+    // QuantumExec yields a single partition, so a partition-local sort is
+    // also a total order — global=false is fine to claim.
+    val (inner, sortOrder) = postLimit match {
+      case Sort(order, _, child) => (child, Some(order))
+      case other                 => (other, None)
+    }
     inner match {
       case Filter(having, agg @ Aggregate(groupingExprs, aggregateExprs, child)) =>
         QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, Some(having), limit)
+            agg, groupingExprs, aggregateExprs, child, Some(having), limit, sortOrder)
           .map(qe => Seq(qe))
           .getOrElse(Nil)
       case agg @ Aggregate(groupingExprs, aggregateExprs, child) =>
         QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, None, limit)
+            agg, groupingExprs, aggregateExprs, child, None, limit, sortOrder)
           .map(quantumExec => Seq(quantumExec))
           .getOrElse(Nil)
       case _ => Nil
@@ -143,7 +159,8 @@ object QuantumStrategy {
       aggregateExprs: Seq[NamedExpression],
       child: LogicalPlan,
       havingCondition: Option[Expression] = None,
-      limit: Option[Long] = None): Option[SparkPlan] = {
+      limit: Option[Long] = None,
+      sortOrder: Option[Seq[SortOrder]] = None): Option[SparkPlan] = {
 
     // ------------------------------------------------------------------
     // Helpers
@@ -795,18 +812,47 @@ object QuantumStrategy {
       return None
     }
 
+    // ORDER BY over the aggregate output: SortNode sits above the HAVING
+    // filters and below the LimitNode (SQL semantics: HAVING → ORDER BY →
+    // LIMIT). Sort keys reference agg.output exprIds, same map as HAVING.
+    // Declining here is safe — the planner re-applies strategies to the
+    // inner Aggregate via planLater, so the agg still routes natively
+    // under Spark's own SortExec.
+    val (rootWithSort, sortPushed) = sortOrder match {
+      case None        => (root, false)
+      case Some(order) =>
+        val sortIdMap: Map[ExprId, Int] =
+          agg.output.zip(physicalIndex).map { case (attr, idx) => attr.exprId -> idx }.toMap
+        val translated = order.map(so => translateScalarWith(sortIdMap)(so.child))
+        if (translated.exists(_.isEmpty)) {
+          lastTranslated.set(s"reject: sort key untranslatable: $order")
+          return None
+        }
+        val sortB = QuantumPlan.SortNode.newBuilder().setChild(root)
+        translated.flatten.foreach(sortB.addKeys)
+        order.foreach { so =>
+          sortB.addAscending(so.direction == Ascending)
+          sortB.addNullsFirst(so.nullOrdering match {
+            case org.apache.spark.sql.catalyst.expressions.NullsFirst => true
+            case _ => false
+          })
+        }
+        (QuantumPlan.PlanNode.newBuilder().setSort(sortB).build(), true)
+    }
+
     // Wrap in a LimitNode if a LIMIT was stripped off the outer plan.
     val rootWithLimit: QuantumPlan.PlanNode = limit match {
-      case None    => root
+      case None    => rootWithSort
       case Some(n) =>
         QuantumPlan.PlanNode.newBuilder()
-          .setLimit(QuantumPlan.LimitNode.newBuilder().setChild(root).setLimit(n))
+          .setLimit(QuantumPlan.LimitNode.newBuilder().setChild(rootWithSort).setLimit(n))
           .build()
     }
 
     val label = "HashAggregate(" + aggregateExprs.size + " outputs over " +
       groupColIndices.size + " group keys, " + peeled.filterCount + " pushed filters, " +
       havingPushed + " HAVING filters, " +
+      (if (sortPushed) s"ORDER BY ${sortOrder.get.size} keys, " else "") +
       limit.map(n => s"LIMIT $n, ").getOrElse("") +
       peeled.sources.size + " sources)"
     lastTranslated.set(label)

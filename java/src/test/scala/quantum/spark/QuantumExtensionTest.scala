@@ -443,13 +443,13 @@ class QuantumExtensionTest {
       "SELECT k, SUM(v) AS s FROM kv_sort GROUP BY k ORDER BY k DESC")
       .collect().map(r => (r.getLong(0), r.getLong(1))).toSeq
 
-    // Caveat: Spark may handle ORDER BY natively (via its own SortExec).
-    // What matters is correctness and that our QuantumExec ran the inner
-    // aggregate.
+    // Phase 5.36: the strategy matches through ReturnAnswer, so the Sort
+    // is claimed before Spark's SpecialLimits can plan its own SortExec —
+    // the SortNode runs in the native engine.
     assertEquals(Seq((5L, 50L), (4L, 40L), (3L, 30L), (2L, 20L), (1L, 10L)), rows)
-    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
-      "Inner Aggregate should route through native; flag = " +
-        QuantumStrategy.lastTranslation)
+    assertTrue(QuantumStrategy.translations.exists(_.contains("ORDER BY 1 keys")),
+      "ORDER BY should push into the native plan; translations = " +
+        QuantumStrategy.translations)
   }
 
   /**
@@ -624,13 +624,9 @@ class QuantumExtensionTest {
   /**
    * Phase 5.28: LIMIT N over an Aggregate.
    *
-   * Caveat: Spark's physical planner handles LIMIT via its own
-   * `CollectLimitExec` BEFORE our strategy gets a chance to claim the
-   * GlobalLimit/LocalLimit node. So our QuantumExec runs the Aggregate
-   * and Spark's CollectLimitExec sits on top — correct result, but the
-   * LIMIT isn't pushed into the native engine. Native `LimitOperator`
-   * exists and is exercised by C++ tests; future work could wire it
-   * end-to-end via an injectOptimizerRule or a more aggressive strategy.
+   * Phase 5.36: the strategy matches through ReturnAnswer, so it claims
+   * the GlobalLimit/LocalLimit wrappers before Spark's SpecialLimits can
+   * plan a CollectLimitExec — the LIMIT now runs natively as a LimitNode.
    */
   @Test
   def limitOverAggregate(): Unit = {
@@ -648,10 +644,38 @@ class QuantumExtensionTest {
     assertEquals(2, rows.size)
     val full = Set((1L, 10L), (2L, 20L), (3L, 30L), (4L, 40L), (5L, 50L))
     rows.foreach(r => assertTrue(full.contains(r), s"unexpected row $r"))
-    // Inner Aggregate must still route through native.
-    assertTrue(QuantumStrategy.lastTranslation.exists(_.startsWith("HashAggregate")),
-      "Inner Aggregate should route through native; flag = " +
-        QuantumStrategy.lastTranslation)
+    assertTrue(QuantumStrategy.translations.exists(_.contains("LIMIT 2")),
+      "LIMIT should push into the native plan; translations = " +
+        QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 5.36: ORDER BY <agg result> DESC LIMIT N — the TopK shape that
+   * Spark's SpecialLimits would otherwise claim as
+   * TakeOrderedAndProjectExec. Matching through ReturnAnswer lets the
+   * whole Sort+Limit run natively (SortNode under LimitNode), so the
+   * returned rows are deterministic: top-N by sum, descending.
+   */
+  @Test
+  def orderByAggregateDescWithLimit(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (2L, 200L), (3L, 30L), (4L, 400L), (5L, 50L),
+      (2L, 1L),  (4L, 1L)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_topk")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS s FROM kv_topk GROUP BY k ORDER BY s DESC LIMIT 2")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).toSeq
+
+    // sums: k=1:10, k=2:201, k=3:30, k=4:401, k=5:50 → top-2 desc: (4,401),(2,201)
+    assertEquals(Seq((4L, 401L), (2L, 201L)), rows)
+    assertTrue(QuantumStrategy.translations.exists(t =>
+        t.contains("ORDER BY 1 keys") && t.contains("LIMIT 2")),
+      "ORDER BY + LIMIT should both push natively; translations = " +
+        QuantumStrategy.translations)
   }
 
   /**
