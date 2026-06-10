@@ -115,27 +115,58 @@ uint8_t* HashAggregateOperator::fastPathStateForCode(int32_t globalCode) {
     return codeStates_.data() + static_cast<size_t>(globalCode) * stateBytes_;
 }
 
+// Serialize one group's state slab — including out-of-line data (strings,
+// distinct sets) — into `rec` via each aggregate's serializeState.
+void HashAggregateOperator::serializeSlab(const uint8_t*        slab,
+                                          std::vector<uint8_t>& rec) const {
+    rec.clear();
+    for (size_t a = 0; a < aggs_.size(); ++a) {
+        aggs_[a]->serializeState(slab + aggOffsets_[a], rec);
+    }
+}
+
+// Rebuild a state slab from a spilled record into `scratch` (init'd per
+// aggregate first), then fold it into `dst`.
+void HashAggregateOperator::mergeSerializedInto(uint8_t*       dst,
+                                                const uint8_t* data) {
+    if (mergeScratch_.size() < stateBytes_) mergeScratch_.resize(stateBytes_);
+    uint8_t* scratch = mergeScratch_.data();
+    const uint8_t* p = data;
+    for (size_t a = 0; a < aggs_.size(); ++a) {
+        aggs_[a]->init(scratch + aggOffsets_[a]);
+        p += aggs_[a]->deserializeState(scratch + aggOffsets_[a], p);
+    }
+    for (size_t a = 0; a < aggs_.size(); ++a) {
+        aggs_[a]->merge(dst + aggOffsets_[a], scratch + aggOffsets_[a]);
+    }
+}
+
 void HashAggregateOperator::spillStringFastPath() {
     if (globalDictReverse_.empty() && !nullGroupInit_) return;
 
     SpillFile file(stateBytes_);
+    std::vector<uint8_t> rec;
     for (size_t c = 0; c < globalDictReverse_.size(); ++c) {
         const auto& s = globalDictReverse_[c];
+        serializeSlab(codeStates_.data() + c * stateBytes_, rec);
         file.write(reinterpret_cast<const uint8_t*>(s.data()),
                    static_cast<int32_t>(s.size()),
-                   codeStates_.data() + c * stateBytes_);
+                   rec.data(), rec.size());
     }
     if (nullGroupInit_) {
-        file.writeNullGroup(nullGroupState_.data());
+        serializeSlab(nullGroupState_.data(), rec);
+        file.writeNullGroup(rec.data(), rec.size());
     }
     file.finishWriting();
     spillFiles_.push_back(std::move(file));
 
-    // Reset in-memory state.
+    // Reset in-memory state. Every group was spilled, so out-of-line
+    // aggregate state (strings, distinct sets) can be released too.
     globalDict_.clear();
     globalDictReverse_.clear();
     codeStates_.clear();
     nullGroupInit_ = false;
+    for (auto& a : aggs_) a->clearOutOfLineState();
 }
 
 void HashAggregateOperator::mergeSpillFiles() {
@@ -152,20 +183,13 @@ void HashAggregateOperator::mergeSpillFiles() {
                     initSlab(nullGroupState_.data());
                     nullGroupInit_ = true;
                 }
-                for (size_t a = 0; a < aggs_.size(); ++a) {
-                    aggs_[a]->merge(
-                        nullGroupState_.data() + aggOffsets_[a],
-                        srcState                  + aggOffsets_[a]);
-                }
+                mergeSerializedInto(nullGroupState_.data(), srcState);
             } else {
                 std::string_view s(reinterpret_cast<const char*>(reader.key()),
                                    reader.keyLen());
                 const int32_t g = internGlobalString(s);
                 uint8_t* dstSlab = fastPathStateForCode(g);
-                for (size_t a = 0; a < aggs_.size(); ++a) {
-                    aggs_[a]->merge(dstSlab + aggOffsets_[a],
-                                    srcState + aggOffsets_[a]);
-                }
+                mergeSerializedInto(dstSlab, srcState);
             }
         }
     }
@@ -175,23 +199,31 @@ void HashAggregateOperator::mergeSpillFiles() {
 void HashAggregateOperator::spillFixed() {
     if (tableFixed_->numGroups() == 0) return;
     SpillFile file(stateBytes_);
+    std::vector<uint8_t> rec;
     for (auto cur = tableFixed_->cursor(); cur.valid(); cur.next()) {
-        file.write(cur.key(), static_cast<int32_t>(codec_->keyBytes()), cur.state());
+        serializeSlab(cur.state(), rec);
+        file.write(cur.key(), static_cast<int32_t>(codec_->keyBytes()),
+                   rec.data(), rec.size());
     }
     file.finishWriting();
     spillFiles_.push_back(std::move(file));
     tableFixed_ = std::make_unique<BytesHashTable>(codec_->keyBytes(), stateBytes_, mm_);
+    for (auto& a : aggs_) a->clearOutOfLineState();
 }
 
 void HashAggregateOperator::spillVar() {
     if (tableVar_->numGroups() == 0) return;
     SpillFile file(stateBytes_);
+    std::vector<uint8_t> rec;
     for (auto cur = tableVar_->cursor(); cur.valid(); cur.next()) {
-        file.write(cur.key(), static_cast<int32_t>(cur.keyLen()), cur.state());
+        serializeSlab(cur.state(), rec);
+        file.write(cur.key(), static_cast<int32_t>(cur.keyLen()),
+                   rec.data(), rec.size());
     }
     file.finishWriting();
     spillFiles_.push_back(std::move(file));
     tableVar_ = std::make_unique<VarBytesHashTable>(stateBytes_, mm_);
+    for (auto& a : aggs_) a->clearOutOfLineState();
 }
 
 void HashAggregateOperator::mergeSpillFilesFixed() {
@@ -202,10 +234,7 @@ void HashAggregateOperator::mergeSpillFilesFixed() {
         auto reader = file.reader();
         while (reader.next()) {
             uint8_t* dst = tableFixed_->findOrInsert(reader.key(), initSlab);
-            for (size_t a = 0; a < aggs_.size(); ++a) {
-                aggs_[a]->merge(dst + aggOffsets_[a],
-                                reader.state() + aggOffsets_[a]);
-            }
+            mergeSerializedInto(dst, reader.state());
         }
     }
     g_initCtx = nullptr;
@@ -220,10 +249,7 @@ void HashAggregateOperator::mergeSpillFilesVar() {
         auto reader = file.reader();
         while (reader.next()) {
             uint8_t* dst = tableVar_->findOrInsert(reader.key(), reader.keyLen(), initSlab);
-            for (size_t a = 0; a < aggs_.size(); ++a) {
-                aggs_[a]->merge(dst + aggOffsets_[a],
-                                reader.state() + aggOffsets_[a]);
-            }
+            mergeSerializedInto(dst, reader.state());
         }
     }
     g_initCtx = nullptr;

@@ -78,23 +78,36 @@ SpillFile& SpillFile::operator=(SpillFile&& other) noexcept {
 }
 
 void SpillFile::write(const uint8_t* key, int32_t keyLen, const uint8_t* state) {
+    write(key, keyLen, state, stateBytes_);
+}
+
+void SpillFile::write(const uint8_t* key, int32_t keyLen,
+                      const uint8_t* state, size_t stateLen) {
     if (!writeFp_) raise(ErrorCode::Internal, "SpillFile: write after finishWriting");
     if (keyLen < 0) raise(ErrorCode::InvalidArgument, "SpillFile: keyLen must be >= 0");
 
+    const auto stateLen32 = static_cast<int32_t>(stateLen);
     if (std::fwrite(&keyLen, sizeof(keyLen), 1, writeFp_) != 1 ||
         (keyLen > 0 && std::fwrite(key, 1, static_cast<size_t>(keyLen), writeFp_)
                        != static_cast<size_t>(keyLen)) ||
-        std::fwrite(state, 1, stateBytes_, writeFp_) != stateBytes_) {
+        std::fwrite(&stateLen32, sizeof(stateLen32), 1, writeFp_) != 1 ||
+        std::fwrite(state, 1, stateLen, writeFp_) != stateLen) {
         raise(ErrorCode::Internal, "SpillFile: write failed (errno={})", errno);
     }
     ++recordCount_;
 }
 
 void SpillFile::writeNullGroup(const uint8_t* state) {
+    writeNullGroup(state, stateBytes_);
+}
+
+void SpillFile::writeNullGroup(const uint8_t* state, size_t stateLen) {
     if (!writeFp_) raise(ErrorCode::Internal, "SpillFile: write after finishWriting");
-    const int32_t sentinel = -1;
+    const int32_t sentinel   = -1;
+    const auto    stateLen32 = static_cast<int32_t>(stateLen);
     if (std::fwrite(&sentinel, sizeof(sentinel), 1, writeFp_) != 1 ||
-        std::fwrite(state, 1, stateBytes_, writeFp_) != stateBytes_) {
+        std::fwrite(&stateLen32, sizeof(stateLen32), 1, writeFp_) != 1 ||
+        std::fwrite(state, 1, stateLen, writeFp_) != stateLen) {
         raise(ErrorCode::Internal, "SpillFile: write failed (errno={})", errno);
     }
     ++recordCount_;
@@ -107,7 +120,9 @@ void SpillFile::finishWriting() {
 }
 
 SpillFile::Reader::Reader(std::FILE* fp, size_t stateBytes)
-    : fp_(fp), stateBytes_(stateBytes), stateBuf_(stateBytes) {}
+    : fp_(fp) {
+    stateBuf_.reserve(stateBytes);
+}
 
 bool SpillFile::Reader::next() {
     if (!fp_) return false;
@@ -120,7 +135,13 @@ bool SpillFile::Reader::next() {
     } else {
         keyBuf_.clear();
     }
-    if (std::fread(stateBuf_.data(), 1, stateBytes_, fp_) != stateBytes_) {
+    int32_t stateLen = 0;
+    if (std::fread(&stateLen, sizeof(stateLen), 1, fp_) != 1 || stateLen < 0) {
+        raise(ErrorCode::Internal, "SpillFile reader: short read on state length");
+    }
+    stateBuf_.resize(static_cast<size_t>(stateLen));
+    if (stateLen > 0 &&
+        std::fread(stateBuf_.data(), 1, stateBuf_.size(), fp_) != stateBuf_.size()) {
         raise(ErrorCode::Internal, "SpillFile reader: short read on state");
     }
     return true;

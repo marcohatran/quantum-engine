@@ -77,6 +77,11 @@ private:
     void     mergeSpillFiles();
     void     mergeSpillFilesFixed();
     void     mergeSpillFilesVar();
+    // Spill record (de)serialization: each aggregate's serializeState /
+    // deserializeState handles its own slice, so out-of-line state
+    // (MIN/MAX(string), COUNT(DISTINCT) sets) round-trips through disk.
+    void     serializeSlab(const uint8_t* slab, std::vector<uint8_t>& rec) const;
+    void     mergeSerializedInto(uint8_t* dst, const uint8_t* data);
 
     OperatorPtr                       child_;
     std::vector<ExpressionPtr>        groupKeys_;
@@ -88,6 +93,7 @@ private:
 
     std::vector<size_t> aggOffsets_;
     size_t              stateBytes_ = 0;
+    std::vector<uint8_t> mergeScratch_;  // reused slab for mergeSerializedInto
 
     // Path::Fixed
     std::unique_ptr<BytesHashTable>    tableFixed_;

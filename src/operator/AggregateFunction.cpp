@@ -11,6 +11,36 @@
 
 namespace quantum {
 
+namespace {
+
+// POD append/read helpers for serializeState / deserializeState.
+template <typename T>
+void appendPod(std::vector<uint8_t>& out, T v) {
+    const auto* p = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+template <typename T>
+T readPod(const uint8_t*& p) {
+    T v;
+    std::memcpy(&v, p, sizeof(T));
+    p += sizeof(T);
+    return v;
+}
+
+} // namespace
+
+void AggregateFunction::serializeState(const uint8_t* state,
+                                       std::vector<uint8_t>& out) const {
+    out.insert(out.end(), state, state + stateSize());
+}
+
+size_t AggregateFunction::deserializeState(uint8_t* state,
+                                           const uint8_t* data) const {
+    std::memcpy(state, data, stateSize());
+    return stateSize();
+}
+
 // ---------- SumI64 ----------
 
 SumI64::SumI64(ExpressionPtr input) : input_(std::move(input)) {
@@ -326,6 +356,55 @@ ColumnVector finalizeStringAgg(const std::vector<const uint8_t*>& states,
     return sb.build();
 }
 
+// merge for MIN/MAX(string): both handles index the same `values` vector.
+// src is a scratch state about to be discarded, so adopting its index is
+// safe — no other slab will ever reference it.
+template <bool IsMax>
+void mergeStringAgg(uint8_t* dst, const uint8_t* src,
+                    const std::vector<std::string>& values) {
+    int32_t s;
+    std::memcpy(&s, src, sizeof(s));
+    if (s == kStringIdxNone) return;
+    int32_t d;
+    std::memcpy(&d, dst, sizeof(d));
+    const bool adopt =
+        d == kStringIdxNone ||
+        (IsMax ? values[static_cast<size_t>(s)] > values[static_cast<size_t>(d)]
+               : values[static_cast<size_t>(s)] < values[static_cast<size_t>(d)]);
+    if (adopt) std::memcpy(dst, &s, sizeof(s));
+}
+
+// Serialized MIN/MAX(string) state: [uint8 hasValue][int32 len][len bytes].
+void serializeStringAgg(const uint8_t* state,
+                        const std::vector<std::string>& values,
+                        std::vector<uint8_t>& out) {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));
+    const uint8_t has = idx != kStringIdxNone ? 1 : 0;
+    appendPod(out, has);
+    if (has) {
+        const std::string& v = values[static_cast<size_t>(idx)];
+        appendPod(out, static_cast<int32_t>(v.size()));
+        out.insert(out.end(), v.begin(), v.end());
+    }
+}
+
+size_t deserializeStringAgg(uint8_t* state,
+                            const uint8_t* data,
+                            std::vector<std::string>& values) {
+    const uint8_t* p = data;
+    const auto has = readPod<uint8_t>(p);
+    if (has) {
+        const auto len = readPod<int32_t>(p);
+        const int32_t idx = static_cast<int32_t>(values.size());
+        values.emplace_back(reinterpret_cast<const char*>(p),
+                            static_cast<size_t>(len));
+        p += len;
+        std::memcpy(state, &idx, sizeof(idx));
+    }
+    return static_cast<size_t>(p - data);
+}
+
 } // namespace
 
 MinString::MinString(ExpressionPtr input) : input_(std::move(input)) {
@@ -348,9 +427,17 @@ ColumnVector MinString::finalize(const std::vector<const uint8_t*>& states,
     return finalizeStringAgg(states, values_, mm);
 }
 
-void MinString::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
-    raise(ErrorCode::NotImplemented,
-          "MinString::merge not supported in spill v1 (state is out-of-line)");
+void MinString::merge(uint8_t* dst, const uint8_t* src) const {
+    mergeStringAgg</*IsMax=*/false>(dst, src, values_);
+}
+
+void MinString::serializeState(const uint8_t* state,
+                               std::vector<uint8_t>& out) const {
+    serializeStringAgg(state, values_, out);
+}
+
+size_t MinString::deserializeState(uint8_t* state, const uint8_t* data) const {
+    return deserializeStringAgg(state, data, values_);
 }
 
 MaxString::MaxString(ExpressionPtr input) : input_(std::move(input)) {
@@ -373,9 +460,17 @@ ColumnVector MaxString::finalize(const std::vector<const uint8_t*>& states,
     return finalizeStringAgg(states, values_, mm);
 }
 
-void MaxString::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
-    raise(ErrorCode::NotImplemented,
-          "MaxString::merge not supported in spill v1 (state is out-of-line)");
+void MaxString::merge(uint8_t* dst, const uint8_t* src) const {
+    mergeStringAgg</*IsMax=*/true>(dst, src, values_);
+}
+
+void MaxString::serializeState(const uint8_t* state,
+                               std::vector<uint8_t>& out) const {
+    serializeStringAgg(state, values_, out);
+}
+
+size_t MaxString::deserializeState(uint8_t* state, const uint8_t* data) const {
+    return deserializeStringAgg(state, data, values_);
 }
 
 // ---------- AvgI64 ----------
@@ -496,10 +591,35 @@ ColumnVector CountDistinctI64::finalize(const std::vector<const uint8_t*>& state
     return out;
 }
 
-void CountDistinctI64::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
-    raise(ErrorCode::NotImplemented,
-          "CountDistinctI64: spill-merge not implemented "
-          "(distinct sets are stored out-of-line and aren't serialisable yet)");
+void CountDistinctI64::merge(uint8_t* dst, const uint8_t* src) const {
+    int32_t s, d;
+    std::memcpy(&s, src, sizeof(s));
+    std::memcpy(&d, dst, sizeof(d));
+    auto& srcSet = sets_[static_cast<size_t>(s)];
+    sets_[static_cast<size_t>(d)].insert(srcSet.begin(), srcSet.end());
+    srcSet.clear();  // src is scratch; release its memory now
+}
+
+// Serialized state: [int64 n][n × int64].
+void CountDistinctI64::serializeState(const uint8_t* state,
+                                      std::vector<uint8_t>& out) const {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));
+    const auto& set = sets_[static_cast<size_t>(idx)];
+    appendPod(out, static_cast<int64_t>(set.size()));
+    for (int64_t v : set) appendPod(out, v);
+}
+
+size_t CountDistinctI64::deserializeState(uint8_t* state,
+                                          const uint8_t* data) const {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));  // init() allocated a fresh set
+    auto& set = sets_[static_cast<size_t>(idx)];
+    const uint8_t* p = data;
+    const auto n = readPod<int64_t>(p);
+    set.reserve(static_cast<size_t>(n));
+    for (int64_t i = 0; i < n; ++i) set.insert(readPod<int64_t>(p));
+    return static_cast<size_t>(p - data);
 }
 
 // ---------- CountDistinctString ----------
@@ -549,8 +669,42 @@ ColumnVector CountDistinctString::finalize(const std::vector<const uint8_t*>& st
     return out;
 }
 
-void CountDistinctString::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
-    raise(ErrorCode::NotImplemented, "CountDistinctString: spill-merge not implemented");
+void CountDistinctString::merge(uint8_t* dst, const uint8_t* src) const {
+    int32_t s, d;
+    std::memcpy(&s, src, sizeof(s));
+    std::memcpy(&d, dst, sizeof(d));
+    auto& srcSet = sets_[static_cast<size_t>(s)];
+    auto& dstSet = sets_[static_cast<size_t>(d)];
+    while (!srcSet.empty()) dstSet.insert(srcSet.extract(srcSet.begin()));
+}
+
+// Serialized state: [int64 n][n × (int32 len + len bytes)].
+void CountDistinctString::serializeState(const uint8_t* state,
+                                         std::vector<uint8_t>& out) const {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));
+    const auto& set = sets_[static_cast<size_t>(idx)];
+    appendPod(out, static_cast<int64_t>(set.size()));
+    for (const auto& v : set) {
+        appendPod(out, static_cast<int32_t>(v.size()));
+        out.insert(out.end(), v.begin(), v.end());
+    }
+}
+
+size_t CountDistinctString::deserializeState(uint8_t* state,
+                                             const uint8_t* data) const {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));
+    auto& set = sets_[static_cast<size_t>(idx)];
+    const uint8_t* p = data;
+    const auto n = readPod<int64_t>(p);
+    set.reserve(static_cast<size_t>(n));
+    for (int64_t i = 0; i < n; ++i) {
+        const auto len = readPod<int32_t>(p);
+        set.emplace(reinterpret_cast<const char*>(p), static_cast<size_t>(len));
+        p += len;
+    }
+    return static_cast<size_t>(p - data);
 }
 
 // ---------- CountDistinctF64 ----------
@@ -600,8 +754,35 @@ ColumnVector CountDistinctF64::finalize(const std::vector<const uint8_t*>& state
     return out;
 }
 
-void CountDistinctF64::merge(uint8_t* /*dst*/, const uint8_t* /*src*/) const {
-    raise(ErrorCode::NotImplemented, "CountDistinctF64: spill-merge not implemented");
+void CountDistinctF64::merge(uint8_t* dst, const uint8_t* src) const {
+    int32_t s, d;
+    std::memcpy(&s, src, sizeof(s));
+    std::memcpy(&d, dst, sizeof(d));
+    auto& srcSet = sets_[static_cast<size_t>(s)];
+    sets_[static_cast<size_t>(d)].insert(srcSet.begin(), srcSet.end());
+    srcSet.clear();
+}
+
+// Serialized state: [int64 n][n × double] (bit patterns, NaN-safe).
+void CountDistinctF64::serializeState(const uint8_t* state,
+                                      std::vector<uint8_t>& out) const {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));
+    const auto& set = sets_[static_cast<size_t>(idx)];
+    appendPod(out, static_cast<int64_t>(set.size()));
+    for (double v : set) appendPod(out, v);
+}
+
+size_t CountDistinctF64::deserializeState(uint8_t* state,
+                                          const uint8_t* data) const {
+    int32_t idx;
+    std::memcpy(&idx, state, sizeof(idx));
+    auto& set = sets_[static_cast<size_t>(idx)];
+    const uint8_t* p = data;
+    const auto n = readPod<int64_t>(p);
+    set.reserve(static_cast<size_t>(n));
+    for (int64_t i = 0; i < n; ++i) set.insert(readPod<double>(p));
+    return static_cast<size_t>(p - data);
 }
 
 // ---------- SumF64 ----------

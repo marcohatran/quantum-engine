@@ -53,3 +53,26 @@ TEST(SpillFile, NullGroupSentinel) {
     EXPECT_EQ(std::memcmp(r.state(), state, stateBytes), 0);
     EXPECT_FALSE(r.next());
 }
+
+TEST(SpillFile, VariableLengthStateRecords) {
+    SpillFile f(/*stateBytes=*/4, "test_varlen");
+
+    const std::string keyA = "k1";
+    const std::vector<uint8_t> stateA = {1, 2, 3};                  // shorter
+    const std::vector<uint8_t> stateB = {9, 8, 7, 6, 5, 4, 3, 2};   // longer
+
+    f.write(reinterpret_cast<const uint8_t*>(keyA.data()),
+            static_cast<int32_t>(keyA.size()), stateA.data(), stateA.size());
+    f.writeNullGroup(stateB.data(), stateB.size());
+    f.finishWriting();
+
+    auto r = f.reader();
+    ASSERT_TRUE(r.next());
+    EXPECT_EQ(r.stateLen(), stateA.size());
+    EXPECT_EQ(std::memcmp(r.state(), stateA.data(), stateA.size()), 0);
+    ASSERT_TRUE(r.next());
+    EXPECT_TRUE(r.isNullGroup());
+    EXPECT_EQ(r.stateLen(), stateB.size());
+    EXPECT_EQ(std::memcmp(r.state(), stateB.data(), stateB.size()), 0);
+    EXPECT_FALSE(r.next());
+}

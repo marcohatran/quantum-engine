@@ -281,3 +281,201 @@ TEST(SpillHashAggregate, VarPathSpillMatchesBaselineForCompositeKey) {
     auto spilled  = run(2);
     EXPECT_EQ(spilled, baseline);
 }
+
+// --- Out-of-line aggregate state through spill (Phase 5.40) ---
+
+TEST(SpillHashAggregate, CountDistinctI64WithSpillMatchesNoSpill) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    auto run = [&](size_t spill) {
+        std::vector<ColumnBatch> src;
+        // Duplicates of the same (group, value) land in different batches,
+        // so post-spill dedup must happen at merge time via set union.
+        src.push_back(nvBatch(mm, {"a", "b", "a", "c"}, {1, 2, 1, 3}));
+        src.push_back(nvBatch(mm, {"a", "b", "c"},      {1, 5, 3}));
+        src.push_back(nvBatch(mm, {"a", "b", "a"},      {7, 2, 1}));
+
+        auto scan = scanNV(mm, std::move(src));
+        std::vector<AggregateFunctionPtr> aggs;
+        aggs.push_back(std::make_unique<CountDistinctI64>(std::make_unique<ColumnRef>(1)));
+        HashAggregateOperator op(&mm, std::move(scan), keyOn(0),
+                                 std::move(aggs),
+                                 std::vector<std::string>{"name", "nd"},
+                                 spill);
+        std::map<std::string, int64_t> got;
+        op.open();
+        while (auto b = op.getNext()) {
+            if (b->numRows() == 0) continue;
+            for (size_t r = 0; r < b->numRows(); ++r) {
+                got[std::string(b->column(0).stringAt(r))] =
+                    b->column(1).typed<int64_t>()[r];
+            }
+        }
+        op.close();
+        return got;
+    };
+
+    auto baseline = run(0);
+    auto spilled  = run(2);
+    EXPECT_EQ(spilled, baseline);
+    // distinct: a={1,7}, b={2,5}, c={3}
+    EXPECT_EQ(baseline.at("a"), 2);
+    EXPECT_EQ(baseline.at("b"), 2);
+    EXPECT_EQ(baseline.at("c"), 1);
+}
+
+namespace {
+
+// (name STRING, sval STRING) batch; svalValid marks null values.
+ColumnBatch ssBatch(MemoryManager& mm,
+                    const std::vector<std::string>& names,
+                    const std::vector<std::string>& svals,
+                    const std::vector<bool>&        svalValid = {}) {
+    DictStringBuilder kb(&mm);
+    for (const auto& s : names) kb.append(s);
+    StringBuilder vb(&mm);
+    for (size_t i = 0; i < svals.size(); ++i) {
+        if (!svalValid.empty() && !svalValid[i]) vb.appendNull();
+        else                                     vb.append(svals[i]);
+    }
+    std::vector<ColumnVector> cols;
+    cols.push_back(kb.build());
+    cols.push_back(vb.build());
+    return ColumnBatch(std::move(cols), PositionList::identity(names.size()));
+}
+
+} // namespace
+
+TEST(SpillHashAggregate, MinMaxStringWithSpillMatchesNoSpill) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    auto run = [&](size_t spill) {
+        std::vector<ColumnBatch> src;
+        src.push_back(ssBatch(mm, {"a", "b", "a"}, {"pear", "mango", "apple"}));
+        // Group c has only a null value -> MIN/MAX NULL must survive the
+        // spill round-trip (hasValue=0 serialization).
+        src.push_back(ssBatch(mm, {"c", "a"},      {"", "zebra"}, {false, true}));
+        src.push_back(ssBatch(mm, {"b", "a"},      {"kiwi", "fig"}));
+
+        auto scan = std::make_unique<ScanOperator>(
+            &mm,
+            Schema({{"name", DataType{TypeId::STRING}},
+                    {"sval", DataType{TypeId::STRING}}}),
+            std::move(src));
+        std::vector<AggregateFunctionPtr> aggs;
+        aggs.push_back(std::make_unique<MinString>(std::make_unique<ColumnRef>(1)));
+        aggs.push_back(std::make_unique<MaxString>(std::make_unique<ColumnRef>(1)));
+        HashAggregateOperator op(&mm, std::move(scan), keyOn(0),
+                                 std::move(aggs),
+                                 std::vector<std::string>{"name", "mn", "mx"},
+                                 spill);
+        std::map<std::string,
+                 std::pair<std::optional<std::string>, std::optional<std::string>>> got;
+        op.open();
+        while (auto b = op.getNext()) {
+            if (b->numRows() == 0) continue;
+            for (size_t r = 0; r < b->numRows(); ++r) {
+                auto strAt = [&](size_t c) -> std::optional<std::string> {
+                    if (!b->column(c).validity().isValid(r)) return std::nullopt;
+                    return std::string(b->column(c).stringAt(r));
+                };
+                got[std::string(b->column(0).stringAt(r))] = {strAt(1), strAt(2)};
+            }
+        }
+        op.close();
+        return got;
+    };
+
+    auto baseline = run(0);
+    auto spilled  = run(2);
+    EXPECT_EQ(spilled, baseline);
+    EXPECT_EQ(baseline.at("a"),
+              (std::pair<std::optional<std::string>, std::optional<std::string>>{
+                  "apple", "zebra"}));
+    EXPECT_EQ(baseline.at("b"),
+              (std::pair<std::optional<std::string>, std::optional<std::string>>{
+                  "kiwi", "mango"}));
+    EXPECT_EQ(baseline.at("c"),
+              (std::pair<std::optional<std::string>, std::optional<std::string>>{
+                  std::nullopt, std::nullopt}));
+}
+
+TEST(SpillHashAggregate, CountDistinctStringWithSpillMatchesNoSpill) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    auto run = [&](size_t spill) {
+        std::vector<ColumnBatch> src;
+        src.push_back(ssBatch(mm, {"a", "b", "a"}, {"x", "y", "x"}));
+        src.push_back(ssBatch(mm, {"a", "b"},      {"x", "z"}));
+        src.push_back(ssBatch(mm, {"a", "b"},      {"w", "y"}));
+
+        auto scan = std::make_unique<ScanOperator>(
+            &mm,
+            Schema({{"name", DataType{TypeId::STRING}},
+                    {"sval", DataType{TypeId::STRING}}}),
+            std::move(src));
+        std::vector<AggregateFunctionPtr> aggs;
+        aggs.push_back(std::make_unique<CountDistinctString>(std::make_unique<ColumnRef>(1)));
+        HashAggregateOperator op(&mm, std::move(scan), keyOn(0),
+                                 std::move(aggs),
+                                 std::vector<std::string>{"name", "nd"},
+                                 spill);
+        std::map<std::string, int64_t> got;
+        op.open();
+        while (auto b = op.getNext()) {
+            if (b->numRows() == 0) continue;
+            for (size_t r = 0; r < b->numRows(); ++r) {
+                got[std::string(b->column(0).stringAt(r))] =
+                    b->column(1).typed<int64_t>()[r];
+            }
+        }
+        op.close();
+        return got;
+    };
+
+    auto baseline = run(0);
+    auto spilled  = run(2);
+    EXPECT_EQ(spilled, baseline);
+    // distinct: a={x,w}, b={y,z}
+    EXPECT_EQ(baseline.at("a"), 2);
+    EXPECT_EQ(baseline.at("b"), 2);
+}
+
+TEST(SpillHashAggregate, FixedPathCountDistinctWithSpill) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    auto run = [&](size_t spill) {
+        std::vector<ColumnBatch> src;
+        src.push_back(intIntBatch(mm, {1, 2, 1, 3}, {10, 20, 10, 30}));
+        src.push_back(intIntBatch(mm, {2, 1},       {20, 40}));
+        src.push_back(intIntBatch(mm, {3, 1, 2},    {30, 10, 50}));
+
+        auto scan = std::make_unique<ScanOperator>(
+            &mm, Schema({{"k", Int64}, {"v", Int64}}), std::move(src));
+        std::vector<AggregateFunctionPtr> aggs;
+        aggs.push_back(std::make_unique<CountDistinctI64>(std::make_unique<ColumnRef>(1)));
+        HashAggregateOperator op(&mm, std::move(scan), keyOn(0),
+                                 std::move(aggs),
+                                 std::vector<std::string>{"k", "nd"},
+                                 spill);
+        std::map<int64_t, int64_t> got;
+        op.open();
+        while (auto b = op.getNext()) {
+            if (b->numRows() == 0) continue;
+            for (size_t i = 0; i < b->numRows(); ++i) {
+                got[b->column(0).typed<int64_t>()[i]] =
+                    b->column(1).typed<int64_t>()[i];
+            }
+        }
+        op.close();
+        return got;
+    };
+
+    auto baseline = run(0);
+    auto spilled  = run(2);
+    EXPECT_EQ(spilled, baseline);
+    // distinct: k=1 -> {10,40}, k=2 -> {20,50}, k=3 -> {30}
+    EXPECT_EQ(baseline.at(1), 2);
+    EXPECT_EQ(baseline.at(2), 2);
+    EXPECT_EQ(baseline.at(3), 1);
+}

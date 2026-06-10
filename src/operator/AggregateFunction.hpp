@@ -50,10 +50,26 @@ public:
 
     // Combine two per-group states into one. `dst` accumulates `src`.
     // Used by spill-and-merge: a spilled partial result is merged back into
-    // the current in-memory state. Aggregates whose state isn't fully self-
-    // contained (e.g. MinString stores its values out-of-line) raise
-    // NotImplemented for v1.
+    // the current in-memory state. For out-of-line aggregates `src` may be
+    // consumed (e.g. its distinct set drained) — src is always a scratch
+    // state about to be discarded.
     virtual void merge(uint8_t* dst, const uint8_t* src) const = 0;
+
+    // Serialize one group's state — including any out-of-line data — by
+    // appending to `out`. Paired with deserializeState. Default: the raw
+    // stateSize() bytes, correct for self-contained fixed-width state.
+    virtual void serializeState(const uint8_t* state,
+                                std::vector<uint8_t>& out) const;
+
+    // Restore a state previously written by serializeState. `state` must
+    // already be init()'d. Returns the number of bytes consumed from `data`.
+    virtual size_t deserializeState(uint8_t* state, const uint8_t* data) const;
+
+    // Discard all out-of-line state owned by this aggregate. The operator
+    // calls this after spilling every in-memory group, so spill actually
+    // releases distinct-set / string memory. Existing state slabs become
+    // invalid. Default: no-op (self-contained state).
+    virtual void clearOutOfLineState() const {}
 };
 
 using AggregateFunctionPtr = std::unique_ptr<AggregateFunction>;
@@ -173,6 +189,10 @@ public:
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
     void     merge(uint8_t* dst, const uint8_t* src) const override;
+    void     serializeState(const uint8_t* state,
+                            std::vector<uint8_t>& out) const override;
+    size_t   deserializeState(uint8_t* state, const uint8_t* data) const override;
+    void     clearOutOfLineState() const override { values_.clear(); }
     DataType outputType() const override { return DataType{TypeId::STRING}; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -193,6 +213,10 @@ public:
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
     void     merge(uint8_t* dst, const uint8_t* src) const override;
+    void     serializeState(const uint8_t* state,
+                            std::vector<uint8_t>& out) const override;
+    size_t   deserializeState(uint8_t* state, const uint8_t* data) const override;
+    void     clearOutOfLineState() const override { values_.clear(); }
     DataType outputType() const override { return DataType{TypeId::STRING}; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -219,6 +243,10 @@ public:
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
     void     merge(uint8_t* dst, const uint8_t* src) const override;
+    void     serializeState(const uint8_t* state,
+                            std::vector<uint8_t>& out) const override;
+    size_t   deserializeState(uint8_t* state, const uint8_t* data) const override;
+    void     clearOutOfLineState() const override { sets_.clear(); }
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -241,6 +269,10 @@ public:
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
     void     merge(uint8_t* dst, const uint8_t* src) const override;
+    void     serializeState(const uint8_t* state,
+                            std::vector<uint8_t>& out) const override;
+    size_t   deserializeState(uint8_t* state, const uint8_t* data) const override;
+    void     clearOutOfLineState() const override { sets_.clear(); }
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return input_.get(); }
 
@@ -264,6 +296,10 @@ public:
     ColumnVector finalize(const std::vector<const uint8_t*>& states,
                           MemoryManager* mm) const override;
     void     merge(uint8_t* dst, const uint8_t* src) const override;
+    void     serializeState(const uint8_t* state,
+                            std::vector<uint8_t>& out) const override;
+    size_t   deserializeState(uint8_t* state, const uint8_t* data) const override;
+    void     clearOutOfLineState() const override { sets_.clear(); }
     DataType outputType() const override { return Int64; }
     const Expression* inputExpr() const override { return input_.get(); }
 
