@@ -46,22 +46,33 @@ class QuantumStrategy extends SparkStrategy {
     // Aggregate as `GlobalLimit(N, LocalLimit(N, Aggregate(...)))`, both
     // operating on the same logical limit; we collapse to one LimitNode.
     val (postLimit, limit) = QuantumStrategy.stripOuterLimits(unwrapped)
+    // ORDER BY over a column that isn't in the SELECT list plans as
+    // Project(selected, Sort(…, Aggregate(… + hidden ordering agg))) —
+    // Catalyst adds the ordering aggregate to the Aggregate and projects
+    // it back out above the Sort. Only attribute-shaped project lists are
+    // claimed; the projection becomes a physicalIndex remap in QuantumExec.
+    val (postProject, projectList) = postLimit match {
+      case Project(pl, s: Sort) => (s: LogicalPlan, Some(pl))
+      case other                => (other, None)
+    }
     // ORDER BY plans as Sort above the Aggregate (below any LIMIT).
     // QuantumExec yields a single partition, so a partition-local sort is
     // also a total order — global=false is fine to claim.
-    val (inner, sortOrder) = postLimit match {
+    val (inner, sortOrder) = postProject match {
       case Sort(order, _, child) => (child, Some(order))
       case other                 => (other, None)
     }
     inner match {
       case Filter(having, agg @ Aggregate(groupingExprs, aggregateExprs, child)) =>
         QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, Some(having), limit, sortOrder)
+            agg, groupingExprs, aggregateExprs, child, Some(having), limit, sortOrder,
+            projectList)
           .map(qe => Seq(qe))
           .getOrElse(Nil)
       case agg @ Aggregate(groupingExprs, aggregateExprs, child) =>
         QuantumStrategy.tryTranslateLongAggregate(
-            agg, groupingExprs, aggregateExprs, child, None, limit, sortOrder)
+            agg, groupingExprs, aggregateExprs, child, None, limit, sortOrder,
+            projectList)
           .map(quantumExec => Seq(quantumExec))
           .getOrElse(Nil)
       case _ => Nil
@@ -160,7 +171,8 @@ object QuantumStrategy {
       child: LogicalPlan,
       havingCondition: Option[Expression] = None,
       limit: Option[Long] = None,
-      sortOrder: Option[Seq[SortOrder]] = None): Option[SparkPlan] = {
+      sortOrder: Option[Seq[SortOrder]] = None,
+      projectList: Option[Seq[NamedExpression]] = None): Option[SparkPlan] = {
 
     // ------------------------------------------------------------------
     // Helpers
@@ -849,18 +861,45 @@ object QuantumStrategy {
           .build()
     }
 
+    // Final projection above the Sort (Catalyst's drop of hidden ordering
+    // aggregates). The engine still emits every aggregate column; the
+    // projection is purely a remap of QuantumExec's output attributes and
+    // physicalIndex — dropped columns are simply never read at the JNA
+    // boundary. Only attribute-shaped items are supported; anything else
+    // declines the whole match (the inner Aggregate then routes natively
+    // under Spark's own ProjectExec/SortExec via planLater).
+    val (finalOutput, finalPhysicalIndex) = projectList match {
+      case None     => (agg.output, physicalIndex)
+      case Some(pl) =>
+        val aggColByExprId: Map[ExprId, Int] =
+          agg.output.zip(physicalIndex).map { case (attr, idx) => attr.exprId -> idx }.toMap
+        val mapped: Seq[Option[(Attribute, Int)]] = pl.map {
+          case ar: AttributeReference =>
+            aggColByExprId.get(ar.exprId).map(i => (ar: Attribute, i))
+          case a @ Alias(ar: AttributeReference, _) =>
+            aggColByExprId.get(ar.exprId).map(i => (a.toAttribute, i))
+          case _ => None
+        }
+        if (mapped.exists(_.isEmpty)) {
+          lastTranslated.set(s"reject: project list untranslatable: $pl")
+          return None
+        }
+        (mapped.flatten.map(_._1), mapped.flatten.map(_._2).toArray)
+    }
+
     val label = "HashAggregate(" + aggregateExprs.size + " outputs over " +
       groupColIndices.size + " group keys, " + peeled.filterCount + " pushed filters, " +
       havingPushed + " HAVING filters, " +
       (if (sortPushed) s"ORDER BY ${sortOrder.get.size} keys, " else "") +
       limit.map(n => s"LIMIT $n, ").getOrElse("") +
+      projectList.map(pl => s"project ${pl.size}/${agg.output.size} cols, ").getOrElse("") +
       peeled.sources.size + " sources)"
     lastTranslated.set(label)
     translationLog.add(label)
     Some(QuantumExec(
-      output        = agg.output,
+      output        = finalOutput,
       sources       = peeled.sources,
       planBytes     = rootWithLimit.toByteArray,
-      physicalIndex = physicalIndex))
+      physicalIndex = finalPhysicalIndex))
   }
 }

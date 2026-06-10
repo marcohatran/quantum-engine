@@ -679,6 +679,64 @@ class QuantumExtensionTest {
   }
 
   /**
+   * Phase 5.37: ORDER BY an aggregate that is NOT in the SELECT list.
+   * Catalyst adds the ordering aggregate to the Aggregate as a hidden
+   * column and plans Project(selected, Sort(…)) above it — the
+   * `Limit(Project(_, Sort(…)))` root shape. The strategy claims the
+   * Project as a physicalIndex remap, so the hidden column is computed
+   * natively, sorted on, and never marshalled back to Spark.
+   */
+  @Test
+  def orderByHiddenAggregateWithLimit(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (2L, 200L), (3L, 30L), (4L, 400L), (5L, 50L),
+      (2L, 1L),  (4L, 1L)
+    ).toDF("k", "v")
+    df.createOrReplaceTempView("kv_hidden")
+
+    val rows = spark.sql(
+      "SELECT k FROM kv_hidden GROUP BY k ORDER BY SUM(v) DESC LIMIT 2")
+      .collect().map(_.getLong(0)).toSeq
+
+    // sums: k=1:10, k=2:201, k=3:30, k=4:401, k=5:50 → top-2 desc: 4, 2
+    assertEquals(Seq(4L, 2L), rows)
+    assertTrue(QuantumStrategy.translations.exists(t =>
+        t.contains("ORDER BY 1 keys") && t.contains("LIMIT 2") &&
+        t.contains("project 1/2 cols")),
+      "Project+Sort+Limit should all push natively; translations = " +
+        QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 5.37: same hidden-ordering-column shape without a LIMIT —
+   * Project(selected, Sort(…)) at the root.
+   */
+  @Test
+  def orderByHiddenAggregateNoLimit(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L, 5L), (1L, 11L, 9L),
+      (2L, 20L, 1L),
+      (3L, 30L, 7L), (3L, 31L, 2L)
+    ).toDF("k", "v", "w")
+    df.createOrReplaceTempView("kvw_hidden")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS sv FROM kvw_hidden GROUP BY k ORDER BY MAX(w)")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).toSeq
+
+    // max(w): k=1:9, k=2:1, k=3:7 → asc order: k=2, k=3, k=1
+    assertEquals(Seq((2L, 20L), (3L, 61L), (1L, 21L)), rows)
+    assertTrue(QuantumStrategy.translations.exists(t =>
+        t.contains("ORDER BY 1 keys") && t.contains("project 2/3 cols")),
+      "Project+Sort should push natively; translations = " +
+        QuantumStrategy.translations)
+  }
+
+  /**
    * Phase 5.27: HAVING clause. Catalyst plans `HAVING SUM(v) > N` as a
    * Filter above the Aggregate. The strategy currently doesn't match the
    * outer Filter, so Spark's own FilterExec sits above our QuantumExec —
