@@ -43,7 +43,7 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Phase 5 — Complete** (41 slices)
+**Phase 5 — Complete** (42 slices)
 
 A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … [GROUP BY … HAVING …] ORDER BY … LIMIT …` — GROUP BY is optional: plain query roots (filter/join/sort/limit without an aggregate) route natively too — plus `UNION ALL` between any two peelable subqueries.
 
@@ -63,13 +63,13 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Predicates.* The translator covers `=` `<` `<=` `>` `>=` over any combination of `AttributeReference`s and Long / Int / Double / Boolean / String / `UTF8String` literals; boolean `AND` (top-level flattened to chained FilterNodes), `OR` and nested `And` (Kleene three-valued logic — `T OR NULL = T`, `F AND NULL = F`); unary `NOT` and `IS NULL` (always-valid output); `IS NOT NULL` translated as `NOT(IsNull)` (or stripped when null-propagation makes it redundant); `IN (list)` rewritten to OR-chains; `LIKE` plus Catalyst's `StartsWith`/`EndsWith`/`Contains` simplifications, all routed through the engine's `LikeOp`. The `stripRedundantIsNotNull` rule treats all comparison and string-predicate ops as null-propagating, so Spark's auto-added `isnotnull(col)` doesn't surface as an extra Filter.
 
-*Native operators added in Phase 5.* `FileScanOperator`, `ConcatFileReader`, `PartitionedFileReader` (constant column broadcast), `LimitOperator` (PositionList truncation), `SortOperator` (materialize + permutation sort over any of INT32/INT64/FLOAT64/BOOL/STRING), `UnionAllOperator` (N-ary; drains one child at a time, output schema = first child's). Aggregate functions added: `SumF64`, `MinF64`, `MaxF64`, `AvgF64`, `CountColumn`, `CountDistinctI64`, plus Double/String COUNT(DISTINCT) variants. New expression machinery: `UnaryExpr` (Not, IsNull), `kernels::LogicalKernels` (Kleene And/Or), comparison kernels gained `Gte/Lte`. Plan IR added `BinaryOp::And/Or/Lte/Gte`, `UnaryOp::Not/IsNull`, `AggregateKind::Count/CountDistinct`.
+*Native operators added in Phase 5.* `FileScanOperator`, `ConcatFileReader`, `PartitionedFileReader` (constant column broadcast), `LimitOperator` (PositionList truncation), `SortOperator` (materialize + permutation sort over any of INT32/INT64/FLOAT64/BOOL/STRING; with a row-count or memory-fraction trigger it switches to an external merge sort — sorted runs spill to disk as `[keys][row]` SpillFile records, then k-way merge by head keys streams 4096-row batches), `UnionAllOperator` (N-ary; drains one child at a time, output schema = first child's). Aggregate functions added: `SumF64`, `MinF64`, `MaxF64`, `AvgF64`, `CountColumn`, `CountDistinctI64`, plus Double/String COUNT(DISTINCT) variants. New expression machinery: `UnaryExpr` (Not, IsNull), `kernels::LogicalKernels` (Kleene And/Or), comparison kernels gained `Gte/Lte`. Plan IR added `BinaryOp::And/Or/Lte/Gte`, `UnaryOp::Not/IsNull`, `AggregateKind::Count/CountDistinct`.
 
 *Caveats & known follow-ups.* `LogicalQueryStage` peeling (for shuffle-bearing AQE plans), Iceberg, NVMe disk cache, Arrow IPC cross-JVM transport, and an exchange operator for intra-operator parallelism remain on the roadmap.
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 203 C++ tests + 53 JVM tests (2 EngineEndToEnd + 1 Delta + 50 strategy / agg / predicate / join / source-shape).
+**Tests** — 207 C++ tests + 53 JVM tests (2 EngineEndToEnd + 1 Delta + 50 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -80,7 +80,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 203 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 207 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -151,7 +151,7 @@ Key invariants the codebase enforces:
 | **5** | Delta — checkpoint `.parquet` log support (`_last_checkpoint`, single- + multi-part; only post-checkpoint JSON commits replayed) | done |
 | 5 | Delta — schema evolution, column mapping | planned |
 | **5** | `MinString`/`MaxString`/`CountDistinct*` spill — per-aggregate state serialization (`serializeState`/`deserializeState`), variable-length spill records, side storage released on spill | done |
-| 5 | Sort spill (external merge sort in `SortOperator`) | planned |
+| **5** | Sort spill — external merge sort in `SortOperator` (sorted runs on disk, k-way merge, streaming output batches) | done |
 | 5 | NVMe disk cache for object-store reads | planned |
 | 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |
 | 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
