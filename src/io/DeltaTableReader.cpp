@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <optional>
 #include <sstream>
@@ -17,6 +18,7 @@
 #include "common/Status.hpp"
 #include "io/FileSystem.hpp"
 #include "io/ParquetReader.hpp"
+#include "vector/StringBuilder.hpp"
 
 namespace quantum {
 
@@ -56,7 +58,10 @@ struct Action {
     std::string path;  // relative to the table root, for Add / Remove
 };
 
-std::vector<Action> parseCommit(const std::string& body) {
+// Parses one commit's actions. metaData actions update `schemaStringOut`
+// in place (later commits processed later, so the latest schema wins).
+std::vector<Action> parseCommit(const std::string& body,
+                                std::string&       schemaStringOut) {
     std::vector<Action> out;
     std::stringstream ss(body);
     std::string line;
@@ -72,6 +77,9 @@ std::vector<Action> parseCommit(const std::string& body) {
         } else if (j.contains("remove") && j["remove"].is_object()) {
             a.kind = Action::Kind::Remove;
             a.path = j["remove"].value("path", "");
+        } else if (j.contains("metaData") && j["metaData"].is_object()) {
+            const std::string ss2 = j["metaData"].value("schemaString", "");
+            if (!ss2.empty()) schemaStringOut = ss2;
         }
         if (a.kind != Action::Kind::Other && !a.path.empty()) {
             out.push_back(std::move(a));
@@ -134,13 +142,17 @@ std::optional<CheckpointInfo> readLastCheckpoint(
     return ci;
 }
 
-// Append the `add.path` entries of one checkpoint parquet to `live`. A
-// checkpoint row is one action: rows where the `add` struct is null are
-// protocol / metaData / remove-tombstone actions and don't contribute.
-void appendCheckpointAdds(
+// Read one checkpoint parquet part: append its `add.path` entries to
+// `live` and capture `metaData.schemaString` if a metaData action row is
+// present. A checkpoint row is one action — rows where a struct column is
+// null belong to other action kinds. The whole part is materialized
+// (ReadTable's column-index form takes LEAF indices, which don't line up
+// with top-level struct fields).
+void readCheckpointPart(
         const std::shared_ptr<arrow::fs::FileSystem>& fs,
         const std::string&                            path,
-        std::vector<std::string>&                     live) {
+        std::vector<std::string>&                     live,
+        std::string&                                  schemaStringOut) {
     auto file_r = fs->OpenInputFile(path);
     if (!file_r.ok()) {
         raise(ErrorCode::Internal,
@@ -156,40 +168,57 @@ void appendCheckpointAdds(
     }
     auto reader = std::move(reader_r).ValueOrDie();
 
-    // Only materialize the `add` column — checkpoints also carry remove /
-    // metaData / protocol / stats, none of which we need.
-    std::shared_ptr<arrow::Schema> fileSchema;
-    auto schema_st = reader->GetSchema(&fileSchema);
-    if (!schema_st.ok()) {
-        raise(ErrorCode::Internal,
-              "DeltaTableReader: checkpoint schema '{}' failed: {}",
-              path, schema_st.ToString());
-    }
-    const int addIdx = fileSchema->GetFieldIndex("add");
-    if (addIdx < 0) return;  // no adds in this part
-
     std::shared_ptr<arrow::Table> table;
-    auto read_st = reader->ReadTable({addIdx}, &table);
+    auto read_st = reader->ReadTable(&table);
     if (!read_st.ok()) {
         raise(ErrorCode::Internal,
               "DeltaTableReader: checkpoint ReadTable '{}' failed: {}",
               path, read_st.ToString());
     }
 
-    auto addCol = table->column(0);
-    for (const auto& chunk : addCol->chunks()) {
-        const auto& sa = static_cast<const arrow::StructArray&>(*chunk);
-        auto pathField = sa.GetFieldByName("path");
-        if (!pathField) {
-            raise(ErrorCode::Internal,
-                  "DeltaTableReader: checkpoint '{}' add struct has no path", path);
+    // Pull a string child out of a top-level struct column, for every
+    // non-null struct row.
+    auto forEachStructString =
+        [&](const char* colName, const char* childName,
+            const std::function<void(const std::string&)>& fn) {
+        auto col = table->GetColumnByName(colName);
+        if (!col) return;
+        for (const auto& chunk : col->chunks()) {
+            const auto& sa = static_cast<const arrow::StructArray&>(*chunk);
+            auto child = sa.GetFieldByName(childName);
+            if (!child) {
+                raise(ErrorCode::Internal,
+                      "DeltaTableReader: checkpoint '{}' {} struct has no {}",
+                      path, colName, childName);
+            }
+            const auto& strArr = static_cast<const arrow::StringArray&>(*child);
+            for (int64_t i = 0; i < sa.length(); ++i) {
+                if (sa.IsNull(i) || strArr.IsNull(i)) continue;
+                fn(strArr.GetString(i));
+            }
         }
-        const auto& pathArr = static_cast<const arrow::StringArray&>(*pathField);
-        for (int64_t i = 0; i < sa.length(); ++i) {
-            if (sa.IsNull(i) || pathArr.IsNull(i)) continue;
-            live.push_back(pathArr.GetString(i));
-        }
-    }
+    };
+
+    forEachStructString("add", "path",
+                        [&](const std::string& p) { live.push_back(p); });
+    forEachStructString("metaData", "schemaString",
+                        [&](const std::string& s) { schemaStringOut = s; });
+}
+
+} // namespace
+
+namespace {
+
+// Map a Spark schemaString field type to our DataType. Nested / unmapped
+// types return nullopt — the whole schemaString is then ignored and the
+// reader falls back to footer-derived schema with no remapping.
+std::optional<DataType> sparkTypeToDataType(const std::string& t) {
+    if (t == "long")    return Int64;
+    if (t == "integer") return Int32;
+    if (t == "double")  return Float64;
+    if (t == "boolean") return Bool;
+    if (t == "string")  return DataType{TypeId::STRING};
+    return std::nullopt;
 }
 
 } // namespace
@@ -202,10 +231,44 @@ DeltaTableReader::DeltaTableReader(std::string       tableUri,
       options_(options) {
     readDeltaLog();
 
-    // Probe the first surviving file for the schema. Downstream operators
-    // (ProjectOperator) compute their output schema at construction time,
-    // so the schema must be available before open() is called.
-    if (!activeFiles_.empty()) {
+    // Prefer the schema from the latest metaData action: it carries the
+    // logical column names + column-mapping physical names, and survives
+    // schema evolution (a data file's footer only knows the columns that
+    // existed when it was written).
+    if (!schemaString_.empty()) {
+        auto j = nlohmann::json::parse(schemaString_, nullptr,
+                                       /*allow_exceptions=*/false);
+        if (!j.is_discarded() && j.is_object() &&
+            j.value("type", "") == "struct" && j["fields"].is_array()) {
+            std::vector<TableField> fields;
+            bool ok = true;
+            for (const auto& f : j["fields"]) {
+                if (!f.is_object() || !f["type"].is_string()) { ok = false; break; }
+                const auto dt = sparkTypeToDataType(f["type"].get<std::string>());
+                const std::string name = f.value("name", "");
+                if (!dt || name.empty()) { ok = false; break; }
+                TableField tf{name, name, *dt};
+                if (f.contains("metadata") && f["metadata"].is_object()) {
+                    const std::string phys =
+                        f["metadata"].value("delta.columnMapping.physicalName", "");
+                    if (!phys.empty()) tf.physicalName = phys;
+                }
+                fields.push_back(std::move(tf));
+            }
+            if (ok && !fields.empty()) tableFields_ = std::move(fields);
+        }
+    }
+
+    if (!tableFields_.empty()) {
+        std::vector<Field> fs;
+        fs.reserve(tableFields_.size());
+        for (const auto& tf : tableFields_) fs.push_back(Field{tf.name, tf.type});
+        schema_ = Schema(std::move(fs));
+    } else if (!activeFiles_.empty()) {
+        // Fallback: probe the first surviving file for the schema.
+        // Downstream operators (ProjectOperator) compute their output
+        // schema at construction time, so the schema must be available
+        // before open() is called.
         ParquetReader probe(activeFiles_.front(), mm_, options_);
         schema_ = probe.schema();
     }
@@ -246,14 +309,15 @@ void DeltaTableReader::readDeltaLog() {
         checkpointVersion = ckpt->version;
         const std::string ver = zeroPad(ckpt->version, 20);
         if (ckpt->parts <= 1) {
-            appendCheckpointAdds(fs, logDir + "/" + ver + ".checkpoint.parquet", live);
+            readCheckpointPart(fs, logDir + "/" + ver + ".checkpoint.parquet",
+                               live, schemaString_);
         } else {
             for (int64_t p = 1; p <= ckpt->parts; ++p) {
-                appendCheckpointAdds(
+                readCheckpointPart(
                     fs,
                     logDir + "/" + ver + ".checkpoint." + zeroPad(p, 10) + "." +
                         zeroPad(ckpt->parts, 10) + ".parquet",
-                    live);
+                    live, schemaString_);
             }
         }
     }
@@ -271,7 +335,7 @@ void DeltaTableReader::readDeltaLog() {
         }
         auto body = slurp(file_r.ValueOrDie(), info.path());
 
-        for (const auto& a : parseCommit(body)) {
+        for (const auto& a : parseCommit(body, schemaString_)) {
             if (a.kind == Action::Kind::Add) {
                 live.push_back(a.path);
             } else if (a.kind == Action::Kind::Remove) {
@@ -307,6 +371,52 @@ void DeltaTableReader::advanceReader() {
     }
     current_ = std::make_unique<ParquetReader>(activeFiles_[cursor_++], mm_, options_);
     current_->open();
+
+    // Match the file's columns against the table schema by physical name.
+    // Identity matches keep the zero-copy pass-through; anything else
+    // (reordered columns, column mapping, missing columns from schema
+    // evolution) goes through remapToTableSchema per batch.
+    fileNeedsRemap_ = false;
+    filePerm_.clear();
+    if (tableFields_.empty()) return;
+
+    const Schema& fileSchema = current_->schema();
+    filePerm_.resize(tableFields_.size());
+    for (size_t i = 0; i < tableFields_.size(); ++i) {
+        int32_t idx = -1;
+        for (size_t j = 0; j < fileSchema.numFields(); ++j) {
+            if (fileSchema.field(j).name == tableFields_[i].physicalName) {
+                idx = static_cast<int32_t>(j);
+                break;
+            }
+        }
+        filePerm_[i] = idx;
+        if (idx != static_cast<int32_t>(i)) fileNeedsRemap_ = true;
+    }
+    if (fileSchema.numFields() != tableFields_.size()) fileNeedsRemap_ = true;
+}
+
+// Reorder a file batch's columns into table-schema order, synthesizing
+// all-null columns for table columns the file predates.
+ColumnBatch DeltaTableReader::remapToTableSchema(ColumnBatch in) {
+    const size_t nRows = in.numRows();
+    std::vector<ColumnVector> cols;
+    cols.reserve(tableFields_.size());
+    for (size_t i = 0; i < tableFields_.size(); ++i) {
+        const int32_t src = filePerm_[i];
+        if (src >= 0) {
+            cols.push_back(std::move(in.columns()[static_cast<size_t>(src)]));
+        } else if (tableFields_[i].type.id == TypeId::STRING) {
+            StringBuilder sb(mm_);
+            for (size_t r = 0; r < nRows; ++r) sb.appendNull();
+            cols.push_back(sb.build());
+        } else {
+            ColumnVector nulls = ColumnVector::make(tableFields_[i].type, nRows, mm_);
+            nulls.validity().setAllNull();
+            cols.push_back(std::move(nulls));
+        }
+    }
+    return ColumnBatch(std::move(cols), PositionList::identity(nRows));
 }
 
 std::optional<ColumnBatch> DeltaTableReader::nextBatch() {
@@ -314,7 +424,10 @@ std::optional<ColumnBatch> DeltaTableReader::nextBatch() {
 
     while (current_) {
         auto batch = current_->nextBatch();
-        if (batch.has_value()) return batch;
+        if (batch.has_value()) {
+            if (fileNeedsRemap_) return remapToTableSchema(std::move(*batch));
+            return batch;
+        }
         current_->close();
         advanceReader();
     }

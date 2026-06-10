@@ -43,11 +43,11 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Phase 5 — Complete** (42 slices)
+**Phase 5 — Complete** (43 slices)
 
 A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … [GROUP BY … HAVING …] ORDER BY … LIMIT …` — GROUP BY is optional: plain query roots (filter/join/sort/limit without an aggregate) route natively too — plus `UNION ALL` between any two peelable subqueries.
 
-*Storage I/O.* Pluggable `FileFormatReader` interface (`open`/`nextBatch`/`close`/`schema`) covers CSV, Parquet (single + multi-file via `ConcatFileReader`), Hive-style partitioned directories (`PartitionedFileReader` synthesizes partition columns from the path), and Delta tables (`DeltaTableReader` seeds the live-file set from the latest checkpoint parquet via `_last_checkpoint` — single- and multi-part — then replays only newer `_delta_log/*.json` commits, so tables survive Delta's log cleanup; streams the surviving Parquet files). `io::FileSystem` URI dispatch — `file://`, `s3://`, `gs://`, `abfs[s]://` — via Arrow's `FileSystemFromUri`, with S3 lazily-initialised on first use. New plan IR `FileScanNode { paths, format, partition_columns, partition_values }` lets the native engine open files itself (no JNA row marshalling for file sources).
+*Storage I/O.* Pluggable `FileFormatReader` interface (`open`/`nextBatch`/`close`/`schema`) covers CSV, Parquet (single + multi-file via `ConcatFileReader`), Hive-style partitioned directories (`PartitionedFileReader` synthesizes partition columns from the path), and Delta tables (`DeltaTableReader` seeds the live-file set from the latest checkpoint parquet via `_last_checkpoint` — single- and multi-part — then replays only newer `_delta_log/*.json` commits, so tables survive Delta's log cleanup; streams the surviving Parquet files. The latest `metaData.schemaString` — from JSON commits or the checkpoint — provides logical names, types, and column-mapping physical names: file columns are matched by physical name and remapped to table-schema order, with add-column schema evolution null-filled; tables without a usable schemaString fall back to footer-derived schema). `io::FileSystem` URI dispatch — `file://`, `s3://`, `gs://`, `abfs[s]://` — via Arrow's `FileSystemFromUri`, with S3 lazily-initialised on first use. New plan IR `FileScanNode { paths, format, partition_columns, partition_values }` lets the native engine open files itself (no JNA row marshalling for file sources).
 
 *Plan IR + bridges.* `PlanNode` variant grew `FileScanNode`, `LimitNode`, `SortNode`, `UnionAllNode`; proto adds the matching messages + `oneof` cases. `PlanBuilder` dispatches each new node to the right operator. C ABI grew `q_column_float64` (mirror of `q_column_int64`); `q_result_next` now densely materializes any non-identity `PositionList` at the JVM boundary (so a FilterNode at the plan root — HAVING, post-join filter — can't silently leak filtered-out rows through `numRows`). JNA Java bindings added `columnFloat64` + `columnString`; Java proto regenerated with the new nodes/enums.
 
@@ -69,7 +69,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 207 C++ tests + 53 JVM tests (2 EngineEndToEnd + 1 Delta + 50 strategy / agg / predicate / join / source-shape).
+**Tests** — 211 C++ tests + 53 JVM tests (2 EngineEndToEnd + 1 Delta + 50 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -80,7 +80,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 207 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 211 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -149,7 +149,7 @@ Key invariants the codebase enforces:
 | 5 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
 | 5 | Iceberg table reader (needs Avro for manifest files) | planned |
 | **5** | Delta — checkpoint `.parquet` log support (`_last_checkpoint`, single- + multi-part; only post-checkpoint JSON commits replayed) | done |
-| 5 | Delta — schema evolution, column mapping | planned |
+| **5** | Delta — column mapping (physical-name remap from `metaData.schemaString`) + add-column schema evolution (null-fill) | done |
 | **5** | `MinString`/`MaxString`/`CountDistinct*` spill — per-aggregate state serialization (`serializeState`/`deserializeState`), variable-length spill records, side storage released on spill | done |
 | **5** | Sort spill — external merge sort in `SortOperator` (sorted runs on disk, k-way merge, streaming output batches) | done |
 | 5 | NVMe disk cache for object-store reads | planned |

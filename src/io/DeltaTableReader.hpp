@@ -26,8 +26,17 @@ class ParquetReader;
 // from the parquet footer is just as accurate for this MVP and avoids
 // parsing Spark's nested struct-schema JSON).
 //
+// Schema: the latest `metaData.schemaString` in the log (JSON commits win
+// over the checkpoint) provides logical column names, types, and Delta
+// column-mapping physical names. Each data file's columns are matched by
+// physical name and remapped to the table schema's order; columns a file
+// predates (schema evolution add-column) are filled with nulls. When no
+// schemaString is found, or it contains nested / unsupported types, the
+// schema falls back to the first surviving file's parquet footer with no
+// remapping (pre-column-mapping behavior).
+//
 // Limitations:
-//  - No partition pruning, no schema evolution, no column mapping
+//  - No partition pruning; no type-changing or column-dropping evolution
 //  - All data files are read in full; no row-group skipping
 //  - `_last_checkpoint` is trusted; no fallback scan for newer complete
 //    checkpoints if it's stale (readers are allowed to do better)
@@ -53,8 +62,16 @@ public:
     const std::vector<std::string>& activeFiles() const noexcept { return activeFiles_; }
 
 private:
-    void readDeltaLog();
-    void advanceReader();
+    // One column of the table schema parsed from metaData.schemaString.
+    struct TableField {
+        std::string name;          // logical name
+        std::string physicalName;  // parquet column name (== name unless mapped)
+        DataType    type;
+    };
+
+    void        readDeltaLog();
+    void        advanceReader();
+    ColumnBatch remapToTableSchema(ColumnBatch in);
 
     std::string              tableUri_;
     MemoryManager*           mm_;
@@ -62,7 +79,12 @@ private:
     Schema                   schema_;
     std::vector<std::string> activeFiles_;
 
+    std::string             schemaString_;  // latest metaData.schemaString
+    std::vector<TableField> tableFields_;   // empty -> footer schema, no remap
+
     std::unique_ptr<ParquetReader> current_;
+    std::vector<int32_t>           filePerm_;        // table field -> file col (-1 missing)
+    bool                           fileNeedsRemap_ = false;
     size_t                         cursor_ = 0;
     bool                           open_   = false;
 };
