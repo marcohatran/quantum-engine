@@ -28,7 +28,7 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **`RightOuter` and `FullOuter` joins** — `HashJoinOperator` tracks a build-side matched bitmap during probe and emits one trailing batch of unmatched build rows (with NULL probe columns) after the probe stream ends. NULL-keyed build rows naturally appear in the right tail since they were never insertable into the index.
 - **`MinString` / `MaxString` aggregates** — lexicographic MIN/MAX over `STRING` columns, NULL-skipping, NULL for all-null groups. Per-group state is an `int32` index into an aggregate-owned `std::vector<std::string>`; finalize emits via `StringBuilder`.
 - **`LikeExpr`** — SQL `LIKE` with `%` (any substring) and `_` (any single char). Anchored, iterative non-backtracking matcher. Null inputs propagate; pattern is a constant `std::string` for Phase 3.
-- **Dictionary-encoded STRING columns** — `ColumnVector` grows a third layout: `values_` holds `int32` codes; `dictOffsets_` + `dictValues_` hold the shared dictionary. `DictStringBuilder` builds dict columns row-by-row with dedup. `stringAt()` dispatches uniformly so existing kernels (compare, LIKE, MIN/MAX) and GROUP BY/JOIN key codecs work unchanged. Dict layout is preserved through `clone` / `selectActive` / `HashJoin gather`; `HashJoin concatDense` currently decodes mixed-dict inputs to regular STRING (dict-merge is a follow-up).
+- **Dictionary-encoded STRING columns** — `ColumnVector` grows a third layout: `values_` holds `int32` codes; `dictOffsets_` + `dictValues_` hold the shared dictionary. `DictStringBuilder` builds dict columns row-by-row with dedup. `stringAt()` dispatches uniformly so existing kernels (compare, LIKE, MIN/MAX) and GROUP BY/JOIN key codecs work unchanged. Dict layout is preserved through `clone` / `selectActive` / `HashJoin gather`, and through `HashJoin concatDense` when every build batch is dict-encoded (per-batch dictionaries are merged/deduped with a code remap — O(dict entries) hashing, not O(rows)); mixed dict/plain build batches still decode to regular STRING.
 - **Dict-aware equality fast path** — `Literal(std::string)` now emits a dict-encoded broadcast (`dictSize=1`), and the STRING `Eq` kernel detects dict-vs-dict inputs, precomputes a `rhsCode → lhsCode` translation table, and compares int32s per row. Measured **~4× throughput** on `dict_size=10` vs the per-row `stringAt` path; gains shrink as dict size grows.
 - **Dict-aware LIKE fast path** — `LikeExpr::eval` on a dict-encoded column evaluates the pattern matcher once per dictionary entry (into a `dictResult[dictSize]` table), then per row just indexes into that table by code. Measured **~3× throughput** at `dict_size=10`, **~3.6×** at `dict_size=100`, **~2.4×** at `dict_size=1000` — LIKE benefits more than `Eq` because per-row pattern matching is the expensive bit.
 - **Code-aware GROUP BY (single STRING key)** — `HashAggregateOperator` adds a `StringFastPath` selected for single-STRING-key aggregates. Maintains a global dictionary across batches; for dict-encoded inputs per-row work shrinks to a `batchCode → globalCode` array lookup plus an array-indexed group state slot. Non-dict batches still intern per row into the same global dictionary so results are identical. Measured on 1M-row aggregation: **~4× throughput** at `dict_size=10` (128M vs 33M items/s), **~3.9×** at 100, **~1.6×** at 1000.
@@ -43,7 +43,7 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Phase 5 — Complete** (37 slices)
+**Phase 5 — Complete** (38 slices)
 
 A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … GROUP BY … HAVING … ORDER BY … LIMIT …`, plus `UNION ALL` between any two peelable subqueries.
 
@@ -68,7 +68,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 194 C++ tests + 49 JVM tests (2 EngineEndToEnd + 1 Delta + 46 strategy / agg / predicate / join / source-shape).
+**Tests** — 195 C++ tests + 49 JVM tests (2 EngineEndToEnd + 1 Delta + 46 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -79,7 +79,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 194 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 195 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -152,7 +152,7 @@ Key invariants the codebase enforces:
 | 5 | Arrow IPC for cross-JVM batch transport (replaces per-column JNA marshalling) | planned |
 | 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
 | 5 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
-| 5 | Dict-merge in HashJoin `concatDense` (preserve dict layout through joins) | planned |
+| **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
 
 ## License

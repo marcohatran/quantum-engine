@@ -207,6 +207,77 @@ TEST(DictE2E, HashJoinWithDictBuildValueColumn) {
     EXPECT_EQ(got[3], (std::pair<std::string,int64_t>{"carol", 30}));
 }
 
+TEST(DictE2E, HashJoinMergesBuildDictAcrossBatches) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    // Two build batches with overlapping dictionaries ("bob" in both) and
+    // a null name. concatDense must merge the dictionaries (dedup) and
+    // remap each batch's codes — the build column stays dict-encoded all
+    // the way through the join's gather.
+    auto buildBatch = [&](const std::vector<int64_t>& ids,
+                          const std::vector<const char*>& names) {
+        const size_t n = ids.size();
+        auto idCol = ColumnVector::make(Int64, n, &mm);
+        for (size_t i = 0; i < n; ++i) idCol.typed<int64_t>()[i] = ids[i];
+        DictStringBuilder sb(&mm);
+        for (const char* s : names) {
+            if (s) sb.append(s);
+            else   sb.appendNull();
+        }
+        std::vector<ColumnVector> cols;
+        cols.push_back(std::move(idCol));
+        cols.push_back(sb.build());
+        return ColumnBatch(std::move(cols), PositionList::identity(n));
+    };
+
+    std::vector<ColumnBatch> buildSrc;
+    buildSrc.push_back(buildBatch({1, 2, 3}, {"alice", "bob", nullptr}));
+    buildSrc.push_back(buildBatch({4, 5},    {"bob", "carol"}));
+
+    std::vector<ColumnBatch> probeSrc;
+    {
+        auto idCol = ColumnVector::make(Int64, 5, &mm);
+        for (size_t i = 0; i < 5; ++i) idCol.typed<int64_t>()[i] = static_cast<int64_t>(i + 1);
+        std::vector<ColumnVector> cols;
+        cols.push_back(std::move(idCol));
+        probeSrc.push_back(ColumnBatch(std::move(cols), PositionList::identity(5)));
+    }
+
+    auto bScan = std::make_unique<ScanOperator>(
+        &mm,
+        Schema({{"id", Int64}, {"name", DataType{TypeId::STRING}}}),
+        std::move(buildSrc));
+    auto pScan = std::make_unique<ScanOperator>(
+        &mm, Schema({{"id", Int64}}), std::move(probeSrc));
+
+    HashJoinOperator op(&mm, std::move(bScan), std::move(pScan),
+                        keyOn(0), keyOn(0),
+                        {"id", "name", "pid"});
+
+    std::map<int64_t, std::string> got;
+    size_t nullNames = 0;
+    op.open();
+    while (auto b = op.getNext()) {
+        if (b->numRows() == 0) continue;
+        // The build name column must still be dict-encoded, with the two
+        // batch dictionaries merged and deduped: alice, bob, carol.
+        EXPECT_TRUE(b->column(1).isDictEncoded());
+        EXPECT_EQ(b->column(1).dictSize(), 3u);
+        for (size_t i = 0; i < b->numRows(); ++i) {
+            const int64_t id = b->column(0).typed<int64_t>()[i];
+            if (!b->column(1).validity().isValid(i)) { ++nullNames; continue; }
+            got[id] = std::string(b->column(1).stringAt(i));
+        }
+    }
+    op.close();
+
+    EXPECT_EQ(nullNames, 1u);  // id=3 had a null name
+    std::map<int64_t, std::string> want = {
+        {1, "alice"}, {2, "bob"}, {4, "bob"}, {5, "carol"},
+    };
+    EXPECT_EQ(got, want);
+}
+
 TEST(DictE2E, HashJoinWithDictEncodedProbeKey) {
     MemoryManager mm(64 * 1024 * 1024);
 

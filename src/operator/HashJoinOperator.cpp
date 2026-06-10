@@ -1,6 +1,9 @@
 #include "operator/HashJoinOperator.hpp"
 
 #include <cstring>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "common/Bits.hpp"
 #include "common/Status.hpp"
@@ -57,15 +60,93 @@ ColumnVector concatFixedWidthColumn(
     return out;
 }
 
+// Concatenate a column that is dict-encoded in EVERY input batch, merging
+// the per-batch dictionaries into one deduped dictionary and remapping each
+// batch's codes through a dictCode -> mergedCode table. Hashing is
+// O(total dict entries), not O(rows).
+ColumnVector concatDictColumn(
+        const std::vector<ColumnBatch>& batches, size_t col,
+        size_t total, DataType type, MemoryManager* mm) {
+    std::vector<int32_t> mergedOffsets{0};
+    std::vector<char>    mergedBytes;
+    std::unordered_map<std::string, int32_t> codeOf;
+    std::vector<std::vector<int32_t>> remaps;
+    remaps.reserve(batches.size());
+    for (const auto& b : batches) {
+        const auto&    src  = b.column(col);
+        const int32_t* doff = src.dictOffsets().as<int32_t>();
+        const char*    dval = src.dictValues().as<char>();
+        std::vector<int32_t> remap(src.dictSize());
+        for (size_t e = 0; e < src.dictSize(); ++e) {
+            std::string entry(dval + doff[e],
+                              static_cast<size_t>(doff[e + 1] - doff[e]));
+            auto [it, inserted] = codeOf.emplace(
+                std::move(entry), static_cast<int32_t>(mergedOffsets.size() - 1));
+            if (inserted) {
+                const std::string& s = it->first;
+                mergedBytes.insert(mergedBytes.end(), s.begin(), s.end());
+                mergedOffsets.push_back(static_cast<int32_t>(mergedBytes.size()));
+            }
+            remap[e] = it->second;
+        }
+        remaps.push_back(std::move(remap));
+    }
+
+    Buffer   codes    = mm->allocate(roundUp(total * sizeof(int32_t), kCacheLineBytes));
+    int32_t* outCodes = codes.as<int32_t>();
+    size_t   row      = 0;
+    for (size_t bi = 0; bi < batches.size(); ++bi) {
+        const auto&    src      = batches[bi].column(col);
+        const int32_t* srcCodes = src.values().as<int32_t>();
+        const auto&    remap    = remaps[bi];
+        for (size_t i = 0; i < src.numRows(); ++i) {
+            // Null rows carry placeholder code 0, which may be out of range
+            // for an all-null batch's empty dictionary — write 0 directly.
+            outCodes[row + i] = src.validity().isValid(i)
+                ? remap[static_cast<size_t>(srcCodes[i])] : 0;
+        }
+        row += src.numRows();
+    }
+
+    const size_t dictN   = mergedOffsets.size() - 1;
+    Buffer       dictOff = mm->allocate(
+        roundUp(mergedOffsets.size() * sizeof(int32_t), kCacheLineBytes));
+    Buffer       dictVal = mm->allocate(roundUp(mergedBytes.size(), kCacheLineBytes));
+    std::memcpy(dictOff.data(), mergedOffsets.data(),
+                mergedOffsets.size() * sizeof(int32_t));
+    if (!mergedBytes.empty()) {
+        std::memcpy(dictVal.data(), mergedBytes.data(), mergedBytes.size());
+    }
+
+    ColumnVector out = ColumnVector::makeDictEncoded(
+        type, total, dictN, std::move(codes),
+        std::move(dictOff), std::move(dictVal), mm);
+    out.validity().setAllValid();
+    row = 0;
+    for (const auto& b : batches) {
+        const auto& src = b.column(col);
+        for (size_t i = 0; i < src.numRows(); ++i) {
+            out.validity().setValid(row + i, src.validity().isValid(i));
+        }
+        row += src.numRows();
+    }
+    return out;
+}
+
 ColumnVector concatVariableWidthColumn(
         const std::vector<ColumnBatch>& batches, size_t col,
         size_t total, DataType type, MemoryManager* mm) {
-    // If any input batch carries this column dict-encoded, fall back to
-    // decoding everything into a regular STRING via StringBuilder. Merging
-    // dictionaries across batches would preserve encoding but is a follow-up.
-    bool anyDict = false;
+    // All batches dict-encoded: merge dictionaries, preserving the dict
+    // layout through the join (gather on the row store is dict-aware).
+    // Mixed dict/plain batches fall back to decoding into a regular STRING
+    // via StringBuilder.
+    bool anyDict = false, allDict = true;
     for (const auto& b : batches) {
-        if (b.column(col).isDictEncoded()) { anyDict = true; break; }
+        if (b.column(col).isDictEncoded()) anyDict = true;
+        else                               allDict = false;
+    }
+    if (anyDict && allDict) {
+        return concatDictColumn(batches, col, total, type, mm);
     }
     if (anyDict) {
         StringBuilder sb(mm);
