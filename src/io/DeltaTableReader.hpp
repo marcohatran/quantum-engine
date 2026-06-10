@@ -15,17 +15,22 @@ class ParquetReader;
 
 // Minimum-viable Delta Lake table reader.
 //
-// Replays the JSON commit log in `<root>/_delta_log/*.json` to build the
-// active file set, then streams batches from each surviving Parquet file
-// in turn via the existing ParquetReader. The schema is derived from the
-// first surviving file (Delta records the schema in the metaData action,
-// but reading it from the parquet footer is just as accurate for this
-// MVP and avoids parsing Spark's nested struct-schema JSON).
+// Builds the active file set from the Delta log: if
+// `<root>/_delta_log/_last_checkpoint` exists, the live set is seeded from
+// the checkpoint parquet's `add` entries (single- and multi-part
+// checkpoints), then only JSON commits newer than the checkpoint version
+// are replayed — older commits may already be deleted by Delta's log
+// cleanup. Batches stream from each surviving Parquet file in turn via the
+// existing ParquetReader. The schema is derived from the first surviving
+// file (Delta records the schema in the metaData action, but reading it
+// from the parquet footer is just as accurate for this MVP and avoids
+// parsing Spark's nested struct-schema JSON).
 //
-// Limitations (Phase 5.4):
-//  - JSON commit log only (no checkpoint .parquet parsing yet)
+// Limitations:
 //  - No partition pruning, no schema evolution, no column mapping
 //  - All data files are read in full; no row-group skipping
+//  - `_last_checkpoint` is trusted; no fallback scan for newer complete
+//    checkpoints if it's stale (readers are allowed to do better)
 //
 // The table root is a URI accepted by io::openReadable: local path,
 // `file://...`, `s3://...`, `gs://...`, `abfs[s]://...`.
