@@ -43,31 +43,32 @@ See [`quantum-engine-architecture.md`](./quantum-engine-architecture.md) for the
 - **JVM bridge (`java/`)** — Maven module with JNA bindings to the C ABI and Java protobuf classes generated from the same `.proto`. `QuantumEngine` class wraps the opaque handles and exposes a fluent Java API. `quantum_core` is built SHARED so JNA can `dlopen` it.
 - **Spark extension + plan rewriter (`quantum.spark.QuantumExtension`)** — Scala `SparkSessionExtensions` hook + `QuantumStrategy` planner. `QuantumStrategy.tryTranslateLongAggregate` recognises `Aggregate([k:Long], [Alias(k), Alias(Sum(v:Long))], LocalRelation(long, long))` (peeling through `SubqueryAlias` / column-renaming `Project`) and replaces it with a `QuantumExec` LeafExecNode. `QuantumExec.doExecute` extracts column-major Long data, builds a protobuf PlanNode, calls `QuantumEngine.execute`, and yields the native results as Spark `InternalRow`s. The headline test runs `spark.sql("SELECT k, SUM(v) FROM kv GROUP BY k")` through this path and verifies per-group sums match.
 
-**Phase 5 — Complete** (33 slices)
+**Phase 5 — Complete** (35 slices)
 
-A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … GROUP BY … HAVING … ORDER BY … LIMIT …`.
+A Spark Catalyst plan now translates end-to-end to a native protobuf IR that runs on the C++ engine and returns rows back to Spark. The covered SQL surface is `SELECT … FROM A [JOIN B [JOIN C …]] WHERE … GROUP BY … HAVING … ORDER BY … LIMIT …`, plus `UNION ALL` between any two peelable subqueries.
 
 *Storage I/O.* Pluggable `FileFormatReader` interface (`open`/`nextBatch`/`close`/`schema`) covers CSV, Parquet (single + multi-file via `ConcatFileReader`), Hive-style partitioned directories (`PartitionedFileReader` synthesizes partition columns from the path), and Delta tables (`DeltaTableReader` replays `_delta_log/*.json`, streams the surviving Parquet files). `io::FileSystem` URI dispatch — `file://`, `s3://`, `gs://`, `abfs[s]://` — via Arrow's `FileSystemFromUri`, with S3 lazily-initialised on first use. New plan IR `FileScanNode { paths, format, partition_columns, partition_values }` lets the native engine open files itself (no JNA row marshalling for file sources).
 
-*Plan IR + bridges.* `PlanNode` variant grew `FileScanNode`, `LimitNode`, `SortNode`; proto adds the matching messages + `oneof` cases. `PlanBuilder` dispatches each new node to the right operator. C ABI grew `q_column_float64` (mirror of `q_column_int64`); `q_result_next` now densely materializes any non-identity `PositionList` at the JVM boundary (so a FilterNode at the plan root — HAVING, post-join filter — can't silently leak filtered-out rows through `numRows`). JNA Java bindings added `columnFloat64` + `columnString`; Java proto regenerated with the new nodes/enums.
+*Plan IR + bridges.* `PlanNode` variant grew `FileScanNode`, `LimitNode`, `SortNode`, `UnionAllNode`; proto adds the matching messages + `oneof` cases. `PlanBuilder` dispatches each new node to the right operator. C ABI grew `q_column_float64` (mirror of `q_column_int64`); `q_result_next` now densely materializes any non-identity `PositionList` at the JVM boundary (so a FilterNode at the plan root — HAVING, post-join filter — can't silently leak filtered-out rows through `numRows`). JNA Java bindings added `columnFloat64` + `columnString`; Java proto regenerated with the new nodes/enums.
 
 *Spark strategy (`quantum.spark.QuantumStrategy`).* The strategy was refactored mid-phase from a `DataSource`-returning `peel` to a `PeelResult { plan, idMap, output, sources, filterCount }` that builds the proto plan tree bottom-up. Each `LocalRelation` gets its own `sourceId`; `QuantumExec` registers `Seq[(String, Array[InputColumn])]` before executing, so a plan with N joined LocalRelations registers N sources. Recognised plan shapes (recursive — they compose freely):
 - **Sources**: `LocalRelation`, `LogicalRelation(HadoopFsRelation(ParquetFileFormat))` — both single-file and multi-file (the strategy passes all `inputFiles` in sorted order). Delta-spark tables surface as Parquet HadoopFsRelations and route through the same path; partition columns from Hive-style dirs are extracted via `location.listFiles(Nil, Nil)` and emitted into the proto with per-file values.
 - **Filters / projections**: `Filter`, `Project` (rename-only via Alias / bare AttributeReference; column-pruning Projects collapse into an idMap rebind without shrinking `peel.output`), `SubqueryAlias`.
 - **Joins**: `Join(L, R, joinType, condition)` for `Inner` / `LeftOuter` / `RightOuter` / `FullOuter`. Equi-keys extracted from AND-chained `EqualTo(leftAttr, rightAttr)` (mirror tolerated); composite keys via `KeyCodec`. N-way joins work via recursive peel.
-- **Aggregates**: `Aggregate(groupingExprs, aggregateExprs, child)` with multi-column `GROUP BY` over any mix of Long/Int/String/Double keys. Supported aggregates: `SUM(long|double)`, `MIN/MAX(long|double|string)`, `AVG(long|double)`, `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long_col)`. The `isDistinct` flag on `AggregateExpression` routes through a distinct classifier.
+- **Aggregates**: `Aggregate(groupingExprs, aggregateExprs, child)` with multi-column `GROUP BY` over any mix of Long/Int/String/Double keys. Supported aggregates: `SUM(long|double)`, `MIN/MAX(long|double|string)`, `AVG(long|double)`, `COUNT(*)`, `COUNT(col)`, `COUNT(DISTINCT long|double|string)`. The `isDistinct` flag on `AggregateExpression` routes through a distinct classifier.
 - **HAVING**: `Filter(having, Aggregate(...))` pushes the HAVING condition as `FilterNode`s above the `HashAggregateNode`, translated against the post-aggregate exprId-to-engine-column map.
 - **LIMIT / ORDER BY**: outer `GlobalLimit / LocalLimit` wrappers strip via `stripOuterLimits` (tightest combined); `Sort(order, _, child)` translates each SortOrder's inner key through the child's idMap. Both emit native nodes (`LimitNode` / `SortNode`); Spark's physical planner sometimes claims these via `CollectLimitExec` / `SortExec` before our strategy sees them, in which case the inner Aggregate still routes through us.
+- **Set ops**: `Union(children, …)` (UNION ALL) — each child is peeled recursively, their `sources` maps are merged, and a `UnionAllNode` wraps the per-child plans (the Union's idMap canonicalizes to the first child's exprIds). UNION DISTINCT surfaces as `Aggregate(Union(…))` and routes through the Aggregate path naturally when every child peels.
 
 *Predicates.* The translator covers `=` `<` `<=` `>` `>=` over any combination of `AttributeReference`s and Long / Int / Double / Boolean / String / `UTF8String` literals; boolean `AND` (top-level flattened to chained FilterNodes), `OR` and nested `And` (Kleene three-valued logic — `T OR NULL = T`, `F AND NULL = F`); unary `NOT` and `IS NULL` (always-valid output); `IS NOT NULL` translated as `NOT(IsNull)` (or stripped when null-propagation makes it redundant); `IN (list)` rewritten to OR-chains; `LIKE` plus Catalyst's `StartsWith`/`EndsWith`/`Contains` simplifications, all routed through the engine's `LikeOp`. The `stripRedundantIsNotNull` rule treats all comparison and string-predicate ops as null-propagating, so Spark's auto-added `isnotnull(col)` doesn't surface as an extra Filter.
 
-*Native operators added in Phase 5.* `FileScanOperator`, `ConcatFileReader`, `PartitionedFileReader` (constant column broadcast), `LimitOperator` (PositionList truncation), `SortOperator` (materialize + permutation sort over any of INT32/INT64/FLOAT64/BOOL/STRING). Aggregate functions added: `SumF64`, `MinF64`, `MaxF64`, `AvgF64`, `CountColumn`, `CountDistinctI64`. New expression machinery: `UnaryExpr` (Not, IsNull), `kernels::LogicalKernels` (Kleene And/Or), comparison kernels gained `Gte/Lte`. Plan IR added `BinaryOp::And/Or/Lte/Gte`, `UnaryOp::Not/IsNull`, `AggregateKind::Count/CountDistinct`.
+*Native operators added in Phase 5.* `FileScanOperator`, `ConcatFileReader`, `PartitionedFileReader` (constant column broadcast), `LimitOperator` (PositionList truncation), `SortOperator` (materialize + permutation sort over any of INT32/INT64/FLOAT64/BOOL/STRING), `UnionAllOperator` (N-ary; drains one child at a time, output schema = first child's). Aggregate functions added: `SumF64`, `MinF64`, `MaxF64`, `AvgF64`, `CountColumn`, `CountDistinctI64`, plus Double/String COUNT(DISTINCT) variants. New expression machinery: `UnaryExpr` (Not, IsNull), `kernels::LogicalKernels` (Kleene And/Or), comparison kernels gained `Gte/Lte`. Plan IR added `BinaryOp::And/Or/Lte/Gte`, `UnaryOp::Not/IsNull`, `AggregateKind::Count/CountDistinct`.
 
-*Caveats & known follow-ups.* Spark's `CollectLimitExec` / `SortExec` can claim outer `Limit`/`Sort` before our strategy sees them — the native operators are exercised via C++ tests but end-to-end Spark routing for those two cases would need an `injectOptimizerRule` or more aggressive strategy registration. `COUNT(DISTINCT)` is INT64-only (set spill not implemented). `LogicalQueryStage` peeling (for shuffle-bearing AQE plans), Iceberg, NVMe disk cache, Arrow IPC cross-JVM transport, and an exchange operator for intra-operator parallelism remain on the roadmap.
+*Caveats & known follow-ups.* Spark's `CollectLimitExec` / `SortExec` can claim outer `Limit`/`Sort` before our strategy sees them — the native operators are exercised via C++ tests but end-to-end Spark routing for those two cases would need an `injectOptimizerRule` or more aggressive strategy registration. `COUNT(DISTINCT)` covers Long/Double/String but is in-memory only (distinct-set spill not implemented). `LogicalQueryStage` peeling (for shuffle-bearing AQE plans), Iceberg, NVMe disk cache, Arrow IPC cross-JVM transport, and an exchange operator for intra-operator parallelism remain on the roadmap.
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 190 C++ tests + 43 JVM tests (1 EngineEndToEnd + 1 Delta + 41 strategy / agg / predicate / join / source-shape).
+**Tests** — 194 C++ tests + 46 JVM tests (1 EngineEndToEnd + 1 Delta + 44 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -78,13 +79,13 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 190 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 194 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5 + Delta 3.2)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 43 tests (JNA + Spark + Delta)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 46 tests (JNA + Spark + Delta)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -95,7 +96,7 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
 plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
 io/          → FileFormat + CsvReader + ParquetReader + DeltaTableReader + FileSystem (file:// / s3:// / gs:// / abfs://)
-operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin + AggregateFunction
+operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin, Limit, Sort, UnionAll + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
 hash/        → HashTable (int64), BytesHashTable (fixed composite), VarBytesHashTable (variable), KeyCodec
 spill/       → SpillFile (HashAggregate v1)
