@@ -96,3 +96,98 @@ TEST(FileSystem, S3SchemeIsRecognized) {
             << "Expected an S3-shaped error, got: " << msg;
     }
 }
+
+// --- Disk cache (Phase 5.44) ---
+
+namespace {
+
+std::string mkTempFile(const std::string& hint, const std::string& contents) {
+    auto p = std::filesystem::temp_directory_path() /
+             (hint + std::to_string(std::random_device{}()) + ".bin");
+    std::ofstream(p, std::ios::binary) << contents;
+    return p.string();
+}
+
+std::string slurpFile(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in),
+                       std::istreambuf_iterator<char>());
+}
+
+// RAII: enable the cache for one test, restore disabled state after.
+struct CacheGuard {
+    explicit CacheGuard(const std::string& dir) {
+        io::setDiskCacheDir(dir);
+        io::resetDiskCacheStats();
+    }
+    ~CacheGuard() { io::setDiskCacheDir(""); }
+};
+
+} // namespace
+
+TEST(FileSystem, DiskCacheMissThenHit) {
+    const std::string payload = "quantum disk cache payload 0123456789";
+    const std::string src     = mkTempFile("qcache_src_", payload);
+    const auto cacheDir       = (std::filesystem::temp_directory_path() /
+        ("qcache_dir_" + std::to_string(std::random_device{}()))).string();
+    CacheGuard guard(cacheDir);
+
+    // file:// stands in for an object store — diskCachePath is
+    // scheme-agnostic; only openReadable gates on remoteness.
+    const std::string uri = "file://" + src;
+
+    const std::string local1 = io::diskCachePath(uri);
+    EXPECT_EQ(io::diskCacheStats().misses, 1u);
+    EXPECT_EQ(io::diskCacheStats().hits,   0u);
+    EXPECT_EQ(slurpFile(local1), payload);
+
+    const std::string local2 = io::diskCachePath(uri);
+    EXPECT_EQ(local2, local1);
+    EXPECT_EQ(io::diskCacheStats().misses, 1u);
+    EXPECT_EQ(io::diskCacheStats().hits,   1u);
+
+    // Hit survives source deletion — reads are served from the cache.
+    std::filesystem::remove(src);
+    const std::string local3 = io::diskCachePath(uri);
+    EXPECT_EQ(slurpFile(local3), payload);
+    EXPECT_EQ(io::diskCacheStats().hits, 2u);
+
+    std::filesystem::remove_all(cacheDir);
+}
+
+TEST(FileSystem, DiskCacheDistinctUrisDistinctEntries) {
+    const std::string a = mkTempFile("qcache_a_", "aaaa");
+    const std::string b = mkTempFile("qcache_b_", "bbbb");
+    const auto cacheDir = (std::filesystem::temp_directory_path() /
+        ("qcache_dir2_" + std::to_string(std::random_device{}()))).string();
+    CacheGuard guard(cacheDir);
+
+    const auto pa = io::diskCachePath("file://" + a);
+    const auto pb = io::diskCachePath("file://" + b);
+    EXPECT_NE(pa, pb);
+    EXPECT_EQ(slurpFile(pa), "aaaa");
+    EXPECT_EQ(slurpFile(pb), "bbbb");
+    EXPECT_EQ(io::diskCacheStats().misses, 2u);
+
+    std::filesystem::remove(a);
+    std::filesystem::remove(b);
+    std::filesystem::remove_all(cacheDir);
+}
+
+TEST(FileSystem, LocalUrisBypassDiskCache) {
+    const std::string src = mkTempFile("qcache_local_", "local bytes");
+    const auto cacheDir   = (std::filesystem::temp_directory_path() /
+        ("qcache_dir3_" + std::to_string(std::random_device{}()))).string();
+    CacheGuard guard(cacheDir);
+
+    // openReadable on local paths / file:// must not populate the cache.
+    auto f = io::openReadable("file://" + src);
+    auto size_r = f->GetSize();
+    ASSERT_TRUE(size_r.ok());
+    EXPECT_EQ(static_cast<size_t>(size_r.ValueOrDie()), std::string("local bytes").size());
+    EXPECT_EQ(io::diskCacheStats().misses, 0u);
+    EXPECT_EQ(io::diskCacheStats().hits,   0u);
+
+    std::filesystem::remove(src);
+    std::filesystem::remove_all(cacheDir);
+}
