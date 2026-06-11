@@ -154,8 +154,11 @@ result checksums identical):
 
 | Scale | Quantum | Vanilla Spark | |
 |---|---|---|---|
-| 2M rows / 200 groups | **121 ms** | 146 ms | Quantum 1.2× faster |
-| 10M rows / 1000 groups | 495 ms | **432 ms** | Spark 1.15× faster |
+| 2M rows / 200 groups | **91 ms** | 151 ms | Quantum 1.67× faster |
+| 10M rows / 1000 groups | **324 ms** | 392 ms | Quantum 1.21× faster |
+
+(Before the P0/P1 optimizations below: 121/146 ms at 2M, 495/432 ms at 10M —
+Spark led at scale.)
 
 Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
 ~125 ms Parquet decode at plan-build + JNA/Spark overhead, ~61 ms scan batch
@@ -179,13 +182,15 @@ After P0 (10M rows / 1000 groups): quantum 484 ms vs vanilla 400 ms. The gap
 now lives almost entirely in the aggregate per-row hash path (~252 ms) and
 Arrow snappy decode (~171 ms) — P1 is the lever.
 
-**P1 — specialize the aggregate hot path** (~200 ms of the 268)
-3. Int64 single-key fast path in `HashAggregateOperator` (mirror of the
-   existing `StringFastPath`): skip `KeyCodec` + `BytesHashTable` for one
-   `INT64`/`INT32` group key — what Spark's codegen generates.
-4. Pass base slot array + state offset into `AggregateFunction::update`
-   instead of rebuilding an offset-shifted `slots` vector per aggregate per
-   batch.
+**P1 — specialize the aggregate hot path** ✅ done
+3. ~~Int64 single-key fast path~~ — open addressing straight on the key,
+   slot-indexed state slab (rehash never moves state), null-group slab;
+   gated to spill-free configs. Aggregate self-time 252 → 96 ms at 10M.
+4. ~~Per-aggregate slots rebuild~~ — reused scratch, pointers shifted in
+   place.
+
+After P0+P1, Quantum leads at both scales (table above) — the plan's
+250–300 ms estimate for the 10M case landed at 324 ms.
 
 **P2 — parallelism and fusion** (wins beyond parity)
 5. Row-group-parallel decode within a single file on the `TaskScheduler`
