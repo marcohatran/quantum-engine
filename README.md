@@ -166,13 +166,18 @@ two extra full-data copies and a generic byte-key hash path per row.
 
 ### Optimization plan
 
-**P0 — eliminate the copies** (~150 ms of 495)
-1. Zero-copy `ColumnRef`: give `ColumnVector` a non-owning view so
-   `ColumnRef::eval` stops `clone(mm)`-ing the key + aggregate input columns
-   on every batch.
-2. Streaming Parquet reader: replace the eager `ReadTable` + re-slicing with
-   `parquet::arrow::FileReader::GetRecordBatchReader` — decode each batch once,
-   on demand; peak memory drops from O(file) to O(batch).
+**P0 — eliminate the copies** ✅ done
+1. ~~Zero-copy `ColumnRef`~~ — `ColumnVector::view` over non-owning `Buffer`s;
+   `ColumnRef::eval` no longer clones; `ProjectOperator` materializes views
+   via `ensureOwned`. Trace: filter −27 ms / aggregate −34 ms at 10M, wall
+   roughly flat (the clones were cheaper than estimated).
+2. ~~Streaming Parquet reader~~ — `GetRecordBatchReader(4096)` + shared
+   `io/ArrowConvert` with memcpy fast paths; footer-only construction; peak
+   memory O(batch). 10M: 495 → 484 ms.
+
+After P0 (10M rows / 1000 groups): quantum 484 ms vs vanilla 400 ms. The gap
+now lives almost entirely in the aggregate per-row hash path (~252 ms) and
+Arrow snappy decode (~171 ms) — P1 is the lever.
 
 **P1 — specialize the aggregate hot path** (~200 ms of the 268)
 3. Int64 single-key fast path in `HashAggregateOperator` (mirror of the
