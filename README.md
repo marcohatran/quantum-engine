@@ -198,11 +198,15 @@ After P0+P1, Quantum leads at both scales (table above) — the plan's
    exception propagation, all file formats; `QUANTUM_PREFETCH=0` disables).
    10M: 324 → 197 ms. Arrow's `use_threads`/`pre_buffer` measured flat here
    and was not kept; row-group-parallel decode remains available headroom.
-6. Wire `HashAggregateNode.parallelism` from the Spark strategy
-   (config-gated) so the 6.4 exchange + parallel aggregation engages on
-   large inputs.
-7. Fuse the filter into the scan: evaluate predicates straight into the
-   position list without materializing the intermediate bool column.
+6. ~~`spark.quantum.agg.parallelism`~~ ✅ — config-gated wiring from the
+   Spark strategy into `HashAggregateNode.parallelism` (exchange +
+   merge-free parallel aggregation). Off by default; targets large group
+   counts.
+7. ~~Fused comparison filter~~ ✅ — `ColumnRef <cmp> Literal(int64)`
+   predicates compute positions straight from column values, skipping the
+   intermediate BOOL column.
+
+**P2 complete.**
 
 **P3 — SIMD on arm64**
 8. The SIMD kernels are AVX2-only and dormant on Apple Silicon; add NEON
