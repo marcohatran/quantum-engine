@@ -89,6 +89,7 @@ case class QuantumExec(
         while ({ bytes = QuantumEngine.resultNextIpc(result); bytes != null }) {
           readIpcBatch(bytes, allocator, collected)
         }
+        QuantumExec.lastTraceJson.set(QuantumEngine.resultTraceJson(result))
         collected.toSeq
       } finally {
         QuantumEngine.destroyResult(result)
@@ -207,4 +208,9 @@ case class QuantumExec(
       reader.close()
     }
   }
+}
+
+object QuantumExec {
+  /** Most recent native query trace (JSON), for tests and diagnostics. */
+  val lastTraceJson = new java.util.concurrent.atomic.AtomicReference[String]()
 }

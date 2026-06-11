@@ -83,6 +83,10 @@ public final class QuantumEngine {
         int        q_result_next_ipc(Result result, PointerByReference out_data,
                                      LongByReference out_len);
         void       q_ipc_free(Pointer buf);
+
+        // Observability.
+        String     q_result_trace_json(Result result);
+        String     q_metrics_prometheus();
     }
 
     public static final Native_ NATIVE =
@@ -275,6 +279,19 @@ public final class QuantumEngine {
         if (len == 0) return "";
         return new String(ref.getValue().getByteArray(0, (int) len),
                           java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Structured JSON query trace (per-operator rows/batches/timings).
+     * Call after consuming the result; valid until destroyResult.
+     */
+    public static String resultTraceJson(Result r) {
+        return NATIVE.q_result_trace_json(r);
+    }
+
+    /** Prometheus text exposition of the engine's cumulative counters. */
+    public static String metricsPrometheus() {
+        return NATIVE.q_metrics_prometheus();
     }
 
     private QuantumEngine() {}

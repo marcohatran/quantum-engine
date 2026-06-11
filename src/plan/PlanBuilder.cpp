@@ -5,6 +5,9 @@
 
 #include <fmt/format.h>
 
+#include <cxxabi.h>
+
+#include "common/Metrics.hpp"
 #include "common/Status.hpp"
 #include "expression/BinaryExpr.hpp"
 #include "expression/ColumnRef.hpp"
@@ -22,6 +25,7 @@
 #include "operator/HashAggregateOperator.hpp"
 #include "operator/HashJoinOperator.hpp"
 #include "operator/LimitOperator.hpp"
+#include "operator/MetricsOperator.hpp"
 #include "operator/ProjectOperator.hpp"
 #include "operator/ScanOperator.hpp"
 #include "operator/SortOperator.hpp"
@@ -140,7 +144,33 @@ ExpressionPtr PlanBuilder::buildExpr(const ScalarExpr& expr) {
     }, expr);
 }
 
+namespace {
+
+// Demangled class name of the built operator, without the namespace —
+// e.g. "HashAggregateOperator". Used as the metrics label.
+std::string operatorName(const Operator& op) {
+    int status = 0;
+    char* demangled =
+        abi::__cxa_demangle(typeid(op).name(), nullptr, nullptr, &status);
+    std::string name = (status == 0 && demangled) ? demangled : typeid(op).name();
+    std::free(demangled);
+    const auto pos = name.rfind("::");
+    if (pos != std::string::npos) name = name.substr(pos + 2);
+    return name;
+}
+
+} // namespace
+
 OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
+    OperatorPtr op = buildImpl(node, catalog);
+    if (metrics_ != nullptr) {
+        OperatorMetrics* m = metrics_->add(operatorName(*op));
+        op = std::make_unique<MetricsOperator>(std::move(op), m);
+    }
+    return op;
+}
+
+OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog) {
     return std::visit([&](const auto& n) -> OperatorPtr {
         using T = std::decay_t<decltype(n)>;
         if constexpr (std::is_same_v<T, ScanNode>) {

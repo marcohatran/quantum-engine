@@ -169,3 +169,39 @@ TEST(QuantumC, BadPlanReturnsNullWithErrorMessage) {
 
     q_destroy_engine(eng);
 }
+
+TEST(QuantumC, TraceJsonAndPrometheusCounters) {
+    QEngine* eng = q_create_engine(64 * 1024 * 1024);
+    ASSERT_NE(eng, nullptr);
+
+    const std::vector<int64_t> ks = {1, 2, 3};
+    QColumn* kCol = q_column_int64(eng, ks.data(), nullptr, ks.size());
+    QColumn* cols1[1] = {kCol};
+    QBatch* batch = q_batch_new(eng, cols1, 1);
+    QBatch* batches[1] = {batch};
+    q_register_source(eng, "src", batches, 1);
+
+    PlanNode root{ScanNode{"src", Schema({{"k", Int64}})}};
+    auto bytes = planToProtoBytes(root);
+    QResult* res = q_execute(eng,
+                             reinterpret_cast<const uint8_t*>(bytes.data()),
+                             bytes.size());
+    ASSERT_NE(res, nullptr) << q_last_error();
+    while (q_result_next(res) != nullptr) {}
+
+    const char* trace = q_result_trace_json(res);
+    ASSERT_NE(trace, nullptr) << q_last_error();
+    const std::string t(trace);
+    EXPECT_NE(t.find("\"operators\""),   std::string::npos) << t;
+    EXPECT_NE(t.find("ScanOperator"),    std::string::npos) << t;
+    EXPECT_NE(t.find("\"rows\":3"),      std::string::npos) << t;
+
+    q_destroy_result(res);  // folds the query into the global counters
+    const char* prom = q_metrics_prometheus();
+    ASSERT_NE(prom, nullptr);
+    const std::string p(prom);
+    EXPECT_NE(p.find("quantum_queries_total"),      std::string::npos) << p;
+    EXPECT_NE(p.find("quantum_rows_emitted_total"), std::string::npos) << p;
+
+    q_destroy_engine(eng);
+}

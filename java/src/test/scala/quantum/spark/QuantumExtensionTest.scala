@@ -1,6 +1,7 @@
 package quantum.spark
 
 import org.apache.spark.sql.SparkSession
+import quantum.QuantumEngine
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
@@ -1501,6 +1502,31 @@ class QuantumExtensionTest {
         t.startsWith("Plain(") && t.contains("2 sources")),
       "plain join root should route natively; translations = " +
         QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 6.1: the native engine reports a per-operator query trace.
+   */
+  @Test
+  def nativeQueryTraceIsCaptured(): Unit = {
+    val s = spark
+    import s.implicits._
+    QuantumExec.lastTraceJson.set(null)
+    Seq((1L, 10L), (2L, 20L), (1L, 30L)).toDF("k", "v")
+      .createOrReplaceTempView("kv_trace")
+
+    val rows = spark.sql(
+      "SELECT k, SUM(v) AS sv FROM kv_trace GROUP BY k")
+      .collect().map(r => (r.getLong(0), r.getLong(1))).toSeq.sortBy(_._1)
+
+    assertEquals(Seq((1L, 40L), (2L, 20L)), rows)
+    val trace = QuantumExec.lastTraceJson.get()
+    assertTrue(trace != null && trace.contains("\"operators\""),
+      s"expected a trace; got $trace")
+    assertTrue(trace.contains("HashAggregateOperator"),
+      s"trace should name the aggregate operator; got $trace")
+    assertTrue(QuantumEngine.metricsPrometheus().contains("quantum_queries_total"),
+      "prometheus text should expose cumulative counters")
   }
 
 }

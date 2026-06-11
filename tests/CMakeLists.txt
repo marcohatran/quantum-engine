@@ -1,5 +1,6 @@
 add_executable(quantum_tests
     common/test_data_type.cpp
+    common/test_metrics.cpp
     memory/test_buffer.cpp
     memory/test_arena.cpp
     memory/test_memory_manager.cpp

@@ -7,7 +7,9 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
+#include "common/Metrics.hpp"
 #include "memory/MemoryManager.hpp"
 #include "operator/Operator.hpp"
 #include "plan/PlanBuilder.hpp"
@@ -32,4 +34,6 @@ struct QResult {
     quantum::MemoryManager*             mm = nullptr;  // borrowed from QEngine
     std::optional<quantum::ColumnBatch> current;
     QBatch                              viewHandle;  // reused across q_result_next calls
+    std::unique_ptr<quantum::QueryMetrics> metrics;  // per-operator counters
+    std::string                            traceJson;  // q_result_trace_json storage
 };

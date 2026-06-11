@@ -69,7 +69,11 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Tests** — 220 C++ tests + 54 JVM tests (3 EngineEndToEnd + 1 Delta + 50 strategy / agg / predicate / join / source-shape).
+**Phase 6 — In progress**
+
+*Observability (6.1).* `PlanBuilder` wraps every operator it builds in a `MetricsOperator` decorator (operators untouched; two `steady_clock` reads per batch) recording rows / batches / open-next-close timings into a per-query `QueryMetrics`. `q_result_trace_json` returns the structured trace (operators in build order, plan root last); `q_metrics_prometheus` exposes process-wide cumulative counters in Prometheus text format (`quantum_queries_total`, `quantum_rows_emitted_total`, `quantum_spills_total` — fed by the HashAggregate and Sort spill sites — and `quantum_exec_nanos_total`). `QuantumExec` captures the trace per query (`QuantumExec.lastTraceJson`); JNA surfaces both calls.
+
+**Tests** — 225 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -80,13 +84,13 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 220 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 225 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5 + Delta 3.2)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 54 tests (JNA + Spark + Delta)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 55 tests (JNA + Spark + Delta)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -157,7 +161,8 @@ Key invariants the codebase enforces:
 | 6 | Exchange operator, intra-operator parallelism (needs the Phase 6 task scheduler) | planned |
 | 6 | AVX2 kernels measured on x86 hardware (hardware-dependent; arm64 dev box) | planned |
 | **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
-| 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
+| **6** | Observability v1 — per-operator metrics (`MetricsOperator`), JSON query trace (`q_result_trace_json`), Prometheus counters (`q_metrics_prometheus`) | done |
+| 6 | Substrait plugin API (third-party native operators) | planned |
 
 ## License
 

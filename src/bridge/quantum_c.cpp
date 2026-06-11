@@ -209,12 +209,14 @@ extern "C" QResult* q_execute(QEngine*       engine,
         }
         auto node = planFromProtoBytes(std::string_view(
             reinterpret_cast<const char*>(plan_bytes), plan_len));
-        PlanBuilder pb(engine->mm.get());
+        auto metrics = std::make_unique<QueryMetrics>();
+        PlanBuilder pb(engine->mm.get(), metrics.get());
         auto op = pb.build(node, engine->catalog);
         op->open();
         auto* out = new QResult();
-        out->op = std::move(op);
-        out->mm = engine->mm.get();
+        out->op      = std::move(op);
+        out->mm      = engine->mm.get();
+        out->metrics = std::move(metrics);
         return out;
     }, nullptr);
 }
@@ -223,7 +225,35 @@ extern "C" void q_destroy_result(QResult* result) {
     if (result && result->op) {
         try { result->op->close(); } catch (...) {}
     }
+    // Fold this query into the process-wide counters: the plan root is
+    // the last metrics entry (build order is bottom-up).
+    if (result && result->metrics) {
+        if (const auto* root = result->metrics->root()) {
+            metrics::recordQuery(
+                root->rows,
+                root->openNanos + root->nextNanos + root->closeNanos);
+        }
+    }
     delete result;
+}
+
+extern "C" const char* q_result_trace_json(QResult* result) {
+    return guarded([&]() -> const char* {
+        if (!result || !result->metrics) {
+            raise(ErrorCode::InvalidArgument,
+                  "q_result_trace_json: null result or no metrics");
+        }
+        result->traceJson = result->metrics->toJson();
+        return result->traceJson.c_str();
+    }, nullptr);
+}
+
+extern "C" const char* q_metrics_prometheus(void) {
+    return guarded([&]() -> const char* {
+        thread_local std::string text;
+        text = metrics::prometheusText();
+        return text.c_str();
+    }, nullptr);
 }
 
 extern "C" const QBatch* q_result_next(QResult* result) {

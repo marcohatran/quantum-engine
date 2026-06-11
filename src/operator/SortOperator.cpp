@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "common/Metrics.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 #include "vector/StringBuilder.hpp"
@@ -297,6 +298,7 @@ void SortOperator::spillRun() {
     }
     run.finishWriting();
     runs_.push_back(std::move(run));
+    metrics::recordSpill();
 }
 
 void SortOperator::build() {

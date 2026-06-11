@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "common/Metrics.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 #include "vector/StringBuilder.hpp"
@@ -159,6 +160,7 @@ void HashAggregateOperator::spillStringFastPath() {
     }
     file.finishWriting();
     spillFiles_.push_back(std::move(file));
+    metrics::recordSpill();
 
     // Reset in-memory state. Every group was spilled, so out-of-line
     // aggregate state (strings, distinct sets) can be released too.
@@ -207,6 +209,7 @@ void HashAggregateOperator::spillFixed() {
     }
     file.finishWriting();
     spillFiles_.push_back(std::move(file));
+    metrics::recordSpill();
     tableFixed_ = std::make_unique<BytesHashTable>(codec_->keyBytes(), stateBytes_, mm_);
     for (auto& a : aggs_) a->clearOutOfLineState();
 }
@@ -222,6 +225,7 @@ void HashAggregateOperator::spillVar() {
     }
     file.finishWriting();
     spillFiles_.push_back(std::move(file));
+    metrics::recordSpill();
     tableVar_ = std::make_unique<VarBytesHashTable>(stateBytes_, mm_);
     for (auto& a : aggs_) a->clearOutOfLineState();
 }

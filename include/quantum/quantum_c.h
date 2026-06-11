@@ -115,6 +115,22 @@ void q_destroy_result(QResult* result);
 const QBatch* q_result_next(QResult* result);
 
 // ---------------------------------------------------------------------------
+// Observability
+// ---------------------------------------------------------------------------
+
+// Structured JSON query trace: per-operator rows / batches / timings,
+// operators in plan-build order (children before parents; the plan root is
+// last). Call after consuming the result for final numbers. The returned
+// string is owned by the QResult and freed by q_destroy_result.
+const char* q_result_trace_json(QResult* result);
+
+// Prometheus text exposition of the process-wide cumulative counters
+// (quantum_queries_total, quantum_rows_emitted_total, quantum_spills_total,
+// quantum_exec_nanos_total). Thread-local storage; valid until the next
+// call on this thread.
+const char* q_metrics_prometheus(void);
+
+// ---------------------------------------------------------------------------
 // Batch / column inspection
 // ---------------------------------------------------------------------------
 

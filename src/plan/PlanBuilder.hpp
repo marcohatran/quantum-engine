@@ -13,6 +13,7 @@ namespace quantum {
 
 class MemoryManager;
 class ColumnBatch;
+class QueryMetrics;
 
 namespace plan {
 
@@ -26,7 +27,11 @@ using SourceCatalog = std::unordered_map<std::string, std::vector<ColumnBatch>>;
 // are translated to ExpressionPtr; aggregates to AggregateFunctionPtr.
 class PlanBuilder {
 public:
-    explicit PlanBuilder(MemoryManager* mm) : mm_(mm) {}
+    // With a `metrics` sink, every built operator is wrapped in a
+    // MetricsOperator that records rows/batches/timings into it
+    // (operators land in build order: children before parents).
+    explicit PlanBuilder(MemoryManager* mm, QueryMetrics* metrics = nullptr)
+        : mm_(mm), metrics_(metrics) {}
 
     // Builds the operator tree. The returned operator owns its sub-tree.
     // After this call, `catalog` may have been partially drained.
@@ -36,7 +41,10 @@ public:
     ExpressionPtr buildExpr(const ScalarExpr& expr);
 
 private:
+    OperatorPtr buildImpl(const PlanNode& node, SourceCatalog& catalog);
+
     MemoryManager* mm_;
+    QueryMetrics*  metrics_;
 };
 
 } // namespace plan
