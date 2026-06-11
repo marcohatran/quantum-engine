@@ -12,7 +12,11 @@ ColumnVector ColumnRef::eval(const ColumnBatch& batch, MemoryManager* mm) const 
               "ColumnRef: index {} out of range (numColumns={})",
               index_, batch.numColumns());
     }
-    return batch.column(index_).clone(mm);
+    (void)mm;
+    // Zero-copy: the caller consumes the result within the lifetime of
+    // `batch` (the expression-eval contract); cloning here cost a full
+    // column copy per batch on every filter/aggregate input.
+    return ColumnVector::view(batch.column(index_));
 }
 
 std::string ColumnRef::toString() const {

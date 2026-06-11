@@ -36,7 +36,10 @@ std::optional<ColumnBatch> ProjectOperator::getNext() {
     std::vector<ColumnVector> outCols;
     outCols.reserve(exprs_.size());
     for (const auto& e : exprs_) {
-        outCols.push_back(e->eval(*in, mm_));
+        // The output batch outlives `in`, so views (bare ColumnRef
+        // projections) must be materialized; computed columns are
+        // already owned and move through.
+        outCols.push_back(e->eval(*in, mm_).ensureOwned(mm_));
     }
 
     PositionList outPos = in->positions().isIdentity()

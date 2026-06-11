@@ -33,6 +33,12 @@ public:
         return *this;
     }
 
+    // Non-owning view over another buffer's bytes: destruction releases
+    // nothing (no owner). The viewed Buffer must outlive the view.
+    static Buffer view(const Buffer& src) noexcept {
+        return Buffer(const_cast<uint8_t*>(src.data()), src.size(), nullptr);
+    }
+
     uint8_t*       data()       noexcept { return data_; }
     const uint8_t* data() const noexcept { return data_; }
     size_t         size() const noexcept { return size_; }

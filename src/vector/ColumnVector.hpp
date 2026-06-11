@@ -81,6 +81,34 @@ public:
         return std::string_view(values_.as<char>() + beg, end - beg);
     }
 
+    // Non-owning view aliasing src's buffers (validity included). The
+    // source must outlive the view; mutating through a view mutates the
+    // source. ColumnRef::eval returns views to avoid per-batch column
+    // clones — operators that retain eval results beyond the input batch
+    // (ProjectOperator) must call ensureOwned first.
+    static ColumnVector view(const ColumnVector& src) noexcept {
+        ColumnVector v;
+        v.type_        = src.type_;
+        v.numRows_     = src.numRows_;
+        v.values_      = Buffer::view(src.values_);
+        v.offsets_     = Buffer::view(src.offsets_);
+        v.dictOffsets_ = Buffer::view(src.dictOffsets_);
+        v.dictValues_  = Buffer::view(src.dictValues_);
+        v.dictSize_    = src.dictSize_;
+        v.validity_    = ValidityBitmask::view(src.validity_);
+        v.isView_      = true;
+        return v;
+    }
+
+    bool isView() const noexcept { return isView_; }
+
+    // An owning column: *this moved out when already owned, a deep clone
+    // when this is a view.
+    ColumnVector ensureOwned(MemoryManager* mm) && {
+        if (!isView_) return std::move(*this);
+        return clone(mm);
+    }
+
     // Fixed-width factory.
     static ColumnVector make(DataType type, size_t numRows, MemoryManager* mm);
 
@@ -115,6 +143,7 @@ private:
     Buffer          dictOffsets_;  // empty unless dict-encoded
     Buffer          dictValues_;   // empty unless dict-encoded
     size_t          dictSize_ = 0; // logical dict entries (0 when not dict)
+    bool            isView_   = false;
     ValidityBitmask validity_;
 };
 

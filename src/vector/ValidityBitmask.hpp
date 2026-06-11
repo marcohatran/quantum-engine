@@ -23,6 +23,14 @@ public:
 
     static size_t bytesFor(size_t numRows) noexcept;
 
+    // Non-owning view aliasing src's bits; src must outlive the view.
+    static ValidityBitmask view(const ValidityBitmask& src) noexcept {
+        ValidityBitmask v;
+        v.buf_     = Buffer::view(src.buf_);
+        v.numRows_ = src.numRows_;
+        return v;
+    }
+
     size_t         numRows() const noexcept { return numRows_; }
     uint8_t*       data()         noexcept { return buf_.data(); }
     const uint8_t* data() const   noexcept { return buf_.data(); }
