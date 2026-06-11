@@ -1,5 +1,16 @@
 package quantum.spark
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.nio.channels.Channels
+import java.nio.charset.StandardCharsets
+
+import scala.jdk.CollectionConverters._
+
+import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.{BigIntVector, Float8Vector, VarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
+import org.apache.arrow.vector.types.FloatingPointPrecision
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema => ArrowSchema}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeProjection}
@@ -59,86 +70,141 @@ case class QuantumExec(
   }
 
   private def runNative(): Seq[InternalRow] = {
-    val eng = QuantumEngine.createEngine(64L * 1024 * 1024)
+    val eng       = QuantumEngine.createEngine(64L * 1024 * 1024)
+    val allocator = new RootAllocator()
     try {
-      // Each registered source (one per LocalRelation in the plan) becomes
-      // a single Batch of column-major data. File-source plans (Parquet /
-      // Delta / partitioned) have an empty `sources` list — the
-      // FileScanNode in the plan handles its own I/O.
+      // Each registered source (one per LocalRelation in the plan) is
+      // serialized as one Arrow IPC stream — a single JNA crossing per
+      // source instead of per column. File-source plans (Parquet / Delta /
+      // partitioned) have an empty `sources` list — the FileScanNode in
+      // the plan handles its own I/O.
       sources.foreach { case (sourceId, cols) =>
-        val builtCols: Array[QuantumEngine.Column] = cols.map {
-          case LongColumn(v, va)   => QuantumEngine.columnInt64(eng, v, va)
-          case DoubleColumn(v, va) => QuantumEngine.columnFloat64(eng, v, va)
-          case StringColumn(v)     => QuantumEngine.columnString(eng, v)
-        }
-        val batch = QuantumEngine.batchNew(eng, builtCols)
-        QuantumEngine.registerSource(eng, sourceId, Array(batch))
+        QuantumEngine.registerSourceIpc(eng, sourceId, ipcBytesFor(cols, allocator))
       }
 
       val result = QuantumEngine.execute(eng, planBytes)
       try {
         val collected = scala.collection.mutable.ArrayBuffer.empty[InternalRow]
-        val nOut      = output.size
-        var out: QuantumEngine.Batch = null
-        while ({ out = QuantumEngine.resultNext(result); out != null }) {
-          val nRows = QuantumEngine.batchNumRows(out)
-
-          // Pre-fetch column data once per batch where it's a contiguous
-          // primitive array. For STRING we read row-by-row inside the loop
-          // (no contiguous representation across the JNA boundary).
-          val colData = new Array[AnyRef](nOut)
-          var c = 0
-          while (c < nOut) {
-            val physCol = physicalIndex(c).toLong
-            colData(c) = output(c).dataType match {
-              case LongType    => QuantumEngine.batchColInt64(out, physCol, nRows)
-              // Int outputs are stored as INT64 natively; narrow at row time.
-              case IntegerType => QuantumEngine.batchColInt64(out, physCol, nRows)
-              case DoubleType  => QuantumEngine.batchColFloat64(out, physCol, nRows)
-              case StringType  => null  // sentinel: read per-row via batchColStringAt
-              case other       =>
-                throw new RuntimeException(
-                  s"QuantumExec: unsupported output type $other for column ${output(c).name}")
-            }
-            c += 1
-          }
-
-          var r = 0
-          while (r < nRows) {
-            val values = new Array[Any](nOut)
-            var ci = 0
-            while (ci < nOut) {
-              val physCol = physicalIndex(ci).toLong
-              val isValid = QuantumEngine.batchColValid(out, physCol, r.toLong)
-              if (output(ci).nullable && !isValid) {
-                values(ci) = null
-              } else {
-                values(ci) = output(ci).dataType match {
-                  case LongType =>
-                    (colData(ci).asInstanceOf[Array[Long]](r.toInt): java.lang.Long)
-                  case IntegerType =>
-                    (colData(ci).asInstanceOf[Array[Long]](r.toInt).toInt: java.lang.Integer)
-                  case DoubleType =>
-                    (colData(ci).asInstanceOf[Array[Double]](r.toInt): java.lang.Double)
-                  case StringType =>
-                    val s = QuantumEngine.batchColStringAt(out, physCol, r.toLong)
-                    if (s == null) null else UTF8String.fromString(s)
-                  case other =>
-                    throw new RuntimeException(s"QuantumExec: bad output type $other")
-                }
-              }
-              ci += 1
-            }
-            collected += new GenericInternalRow(values)
-            r += 1
-          }
+        var bytes: Array[Byte] = null
+        while ({ bytes = QuantumEngine.resultNextIpc(result); bytes != null }) {
+          readIpcBatch(bytes, allocator, collected)
         }
         collected.toSeq
       } finally {
         QuantumEngine.destroyResult(result)
       }
     } finally {
+      allocator.close()
       QuantumEngine.destroyEngine(eng)
+    }
+  }
+
+  /** Serialize one source's columns as an Arrow IPC stream. */
+  private def ipcBytesFor(cols: Array[InputColumn],
+                          allocator: RootAllocator): Array[Byte] = {
+    val fields: Seq[Field] = cols.zipWithIndex.map { case (c, i) =>
+      val at: ArrowType = c match {
+        case _: LongColumn   => new ArrowType.Int(64, true)
+        case _: DoubleColumn => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
+        case _: StringColumn => ArrowType.Utf8.INSTANCE
+      }
+      new Field(s"c$i", FieldType.nullable(at),
+                java.util.Collections.emptyList[Field]())
+    }.toSeq
+    val nRows = cols.headOption.map {
+      case LongColumn(v, _)   => v.length
+      case DoubleColumn(v, _) => v.length
+      case StringColumn(v)    => v.length
+    }.getOrElse(0)
+
+    val root = VectorSchemaRoot.create(new ArrowSchema(fields.asJava), allocator)
+    try {
+      root.allocateNew()
+      cols.zipWithIndex.foreach { case (c, i) =>
+        c match {
+          case LongColumn(values, validity) =>
+            val v = root.getVector(i).asInstanceOf[BigIntVector]
+            var r = 0
+            while (r < values.length) {
+              if (validity == null || validity(r) != 0) v.setSafe(r, values(r))
+              else                                      v.setNull(r)
+              r += 1
+            }
+          case DoubleColumn(values, validity) =>
+            val v = root.getVector(i).asInstanceOf[Float8Vector]
+            var r = 0
+            while (r < values.length) {
+              if (validity == null || validity(r) != 0) v.setSafe(r, values(r))
+              else                                      v.setNull(r)
+              r += 1
+            }
+          case StringColumn(values) =>
+            val v = root.getVector(i).asInstanceOf[VarCharVector]
+            var r = 0
+            while (r < values.length) {
+              if (values(r) == null) v.setNull(r)
+              else v.setSafe(r, values(r).getBytes(StandardCharsets.UTF_8))
+              r += 1
+            }
+        }
+      }
+      root.setRowCount(nRows)
+
+      val bos    = new ByteArrayOutputStream()
+      val writer = new ArrowStreamWriter(root, null, Channels.newChannel(bos))
+      writer.start()
+      writer.writeBatch()
+      writer.end()
+      writer.close()
+      bos.toByteArray
+    } finally {
+      root.close()
+    }
+  }
+
+  /** Parse one IPC result batch and append its rows (reordered through
+   *  physicalIndex) to `out`. Engine columns come back named c0..cN. */
+  private def readIpcBatch(bytes: Array[Byte],
+                           allocator: RootAllocator,
+                           out: scala.collection.mutable.ArrayBuffer[InternalRow]): Unit = {
+    val reader = new ArrowStreamReader(new ByteArrayInputStream(bytes), allocator)
+    try {
+      val root = reader.getVectorSchemaRoot
+      val nOut = output.size
+      while (reader.loadNextBatch()) {
+        val nRows = root.getRowCount
+        var r = 0
+        while (r < nRows) {
+          val values = new Array[Any](nOut)
+          var ci = 0
+          while (ci < nOut) {
+            val vec = root.getVector(physicalIndex(ci))
+            if (vec.isNull(r)) {
+              values(ci) = null
+            } else {
+              values(ci) = output(ci).dataType match {
+                case LongType =>
+                  (vec.asInstanceOf[BigIntVector].get(r): java.lang.Long)
+                // Int outputs are widened to INT64 natively; narrow here.
+                case IntegerType =>
+                  (vec.asInstanceOf[BigIntVector].get(r).toInt: java.lang.Integer)
+                case DoubleType =>
+                  (vec.asInstanceOf[Float8Vector].get(r): java.lang.Double)
+                case StringType =>
+                  UTF8String.fromBytes(vec.asInstanceOf[VarCharVector].get(r))
+                case other =>
+                  throw new RuntimeException(
+                    s"QuantumExec: unsupported output type $other for column ${output(ci).name}")
+              }
+            }
+            ci += 1
+          }
+          out += new GenericInternalRow(values)
+          r += 1
+        }
+      }
+    } finally {
+      reader.close()
     }
   }
 }

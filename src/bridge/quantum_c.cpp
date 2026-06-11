@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "bridge/BridgeError.hpp"
+#include "bridge/Handles.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 #include "operator/Operator.hpp"
@@ -25,30 +26,6 @@
 
 using namespace quantum;
 using namespace quantum::plan;
-
-// ---------------------------------------------------------------------------
-// Opaque handle types
-// ---------------------------------------------------------------------------
-
-struct QEngine {
-    std::unique_ptr<MemoryManager> mm;
-    SourceCatalog                  catalog;
-};
-
-struct QColumn {
-    ColumnVector vec;
-};
-
-struct QBatch {
-    ColumnBatch batch;
-};
-
-struct QResult {
-    OperatorPtr                op;
-    MemoryManager*             mm = nullptr;  // borrowed from QEngine
-    std::optional<ColumnBatch> current;
-    QBatch                     viewHandle;  // reused across q_result_next calls
-};
 
 namespace {
 

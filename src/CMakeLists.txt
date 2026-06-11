@@ -47,6 +47,7 @@ add_library(quantum_core SHARED
     plan/PlanProto.cpp
     bridge/quantum_c.cpp
     bridge/quantum_arrow.cpp
+    bridge/quantum_ipc.cpp
     ${QUANTUM_PROTO_SRCS}
 )
 

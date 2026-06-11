@@ -37,6 +37,7 @@ add_executable(quantum_tests
     plan/test_plan_proto.cpp
     bridge/test_quantum_c.cpp
     bridge/test_quantum_arrow.cpp
+    bridge/test_quantum_ipc.cpp
     io/test_csv_reader.cpp
     io/test_delta_table_reader.cpp
     io/test_filesystem.cpp

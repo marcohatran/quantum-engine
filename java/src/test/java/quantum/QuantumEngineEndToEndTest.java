@@ -1,6 +1,16 @@
 package quantum;
 
 import com.google.protobuf.ByteString;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.BigIntVector;
+import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ArrowStreamReader;
+import org.apache.arrow.vector.ipc.ArrowStreamWriter;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.vector.types.pojo.FieldType;
+import org.apache.arrow.vector.types.pojo.Schema;
 import org.junit.jupiter.api.Test;
 import quantum.plan.proto.QuantumPlan;
 
@@ -108,6 +118,75 @@ class QuantumEngineEndToEndTest {
                 () -> QuantumEngine.execute(eng, garbage));
             assertTrue(ex.getMessage().contains("PlanProto"),
                        "expected error mentioning PlanProto, got: " + ex.getMessage());
+        } finally {
+            QuantumEngine.destroyEngine(eng);
+        }
+    }
+
+    /**
+     * Phase 5.45: the Arrow IPC transport — register a source from IPC
+     * bytes, run a plan, fetch results as IPC bytes. One JNA crossing per
+     * direction instead of per-column / per-row calls.
+     */
+    @Test
+    void arrowIpcTransportRoundTrip() throws Exception {
+        QuantumEngine.Engine eng = QuantumEngine.createEngine(64L * 1024 * 1024);
+        try (RootAllocator allocator = new RootAllocator()) {
+            // Source (k INT64, name UTF8 with a null) as an IPC stream.
+            Schema schema = new Schema(java.util.List.of(
+                new Field("k", FieldType.nullable(new ArrowType.Int(64, true)), null),
+                new Field("name", FieldType.nullable(ArrowType.Utf8.INSTANCE), null)));
+            byte[] ipc;
+            try (VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator)) {
+                root.allocateNew();
+                BigIntVector  k = (BigIntVector)  root.getVector(0);
+                VarCharVector n = (VarCharVector) root.getVector(1);
+                k.setSafe(0, 1); n.setSafe(0, "alice".getBytes());
+                k.setSafe(1, 2); n.setNull(1);
+                k.setSafe(2, 3); n.setSafe(2, "carol".getBytes());
+                root.setRowCount(3);
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                try (ArrowStreamWriter w = new ArrowStreamWriter(
+                        root, null, java.nio.channels.Channels.newChannel(bos))) {
+                    w.start(); w.writeBatch(); w.end();
+                }
+                ipc = bos.toByteArray();
+            }
+            QuantumEngine.registerSourceIpc(eng, "src", ipc);
+
+            // Bare scan plan over (k, name).
+            QuantumPlan.Schema planSchema = QuantumPlan.Schema.newBuilder()
+                .addFields(QuantumPlan.Field.newBuilder()
+                    .setName("k").setType(QuantumPlan.TypeId.TYPE_INT64))
+                .addFields(QuantumPlan.Field.newBuilder()
+                    .setName("name").setType(QuantumPlan.TypeId.TYPE_STRING))
+                .build();
+            QuantumPlan.PlanNode root = QuantumPlan.PlanNode.newBuilder()
+                .setScan(QuantumPlan.ScanNode.newBuilder()
+                    .setSourceId("src").setSchema(planSchema))
+                .build();
+
+            QuantumEngine.Result res =
+                QuantumEngine.execute(eng, root.toByteString().toByteArray());
+            try {
+                byte[] out = QuantumEngine.resultNextIpc(res);
+                assertNotNull(out);
+                try (ArrowStreamReader reader = new ArrowStreamReader(
+                        new java.io.ByteArrayInputStream(out), allocator)) {
+                    assertTrue(reader.loadNextBatch());
+                    VectorSchemaRoot r = reader.getVectorSchemaRoot();
+                    assertEquals(3, r.getRowCount());
+                    BigIntVector  k = (BigIntVector)  r.getVector(0);
+                    VarCharVector n = (VarCharVector) r.getVector(1);
+                    assertEquals(1, k.get(0));
+                    assertEquals("alice", new String(n.get(0)));
+                    assertTrue(n.isNull(1));
+                    assertEquals("carol", new String(n.get(2)));
+                }
+                assertNull(QuantumEngine.resultNextIpc(res));  // EOS
+            } finally {
+                QuantumEngine.destroyResult(res);
+            }
         } finally {
             QuantumEngine.destroyEngine(eng);
         }

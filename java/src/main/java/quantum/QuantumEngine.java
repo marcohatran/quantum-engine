@@ -5,6 +5,7 @@ import com.sun.jna.Memory;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.PointerType;
+import com.sun.jna.ptr.LongByReference;
 import com.sun.jna.ptr.PointerByReference;
 
 /**
@@ -75,6 +76,13 @@ public final class QuantumEngine {
         int        q_batch_col_valid(Batch b, long col, long row);
         long       q_batch_col_string_at(Batch b, long col, long row,
                                          PointerByReference out_ptr);
+
+        // Arrow IPC transport — quantum_ipc.h.
+        int        q_register_source_ipc(Engine engine, String source_id,
+                                         Pointer data, long len);
+        int        q_result_next_ipc(Result result, PointerByReference out_data,
+                                     LongByReference out_len);
+        void       q_ipc_free(Pointer buf);
     }
 
     public static final Native_ NATIVE =
@@ -214,6 +222,37 @@ public final class QuantumEngine {
 
     public static Batch resultNext(Result r) { return NATIVE.q_result_next(r); }
     public static void  destroyResult(Result r) { NATIVE.q_destroy_result(r); }
+
+    /**
+     * Register a source from Arrow IPC stream bytes — one JNA crossing for
+     * the whole table instead of one call per column.
+     */
+    public static void registerSourceIpc(Engine e, String sourceId, byte[] ipc) {
+        Memory mem = new Memory(Math.max(1, ipc.length));
+        if (ipc.length > 0) mem.write(0, ipc, 0, ipc.length);
+        int rc = NATIVE.q_register_source_ipc(e, sourceId, mem, ipc.length);
+        if (rc != 0) {
+            throw new RuntimeException("q_register_source_ipc failed: " + lastError());
+        }
+    }
+
+    /**
+     * Next result batch as a self-contained Arrow IPC stream, or null at
+     * end-of-stream. The native buffer is copied into the returned array
+     * and freed before returning.
+     */
+    public static byte[] resultNextIpc(Result r) {
+        PointerByReference out = new PointerByReference();
+        LongByReference    len = new LongByReference();
+        int rc = NATIVE.q_result_next_ipc(r, out, len);
+        if (rc < 0) {
+            throw new RuntimeException("q_result_next_ipc failed: " + lastError());
+        }
+        if (rc == 0) return null;
+        byte[] bytes = out.getValue().getByteArray(0, (int) len.getValue());
+        NATIVE.q_ipc_free(out.getValue());
+        return bytes;
+    }
 
     public static long   batchNumRows(Batch b) { return NATIVE.q_batch_num_rows(b); }
     public static long   batchNumCols(Batch b) { return NATIVE.q_batch_num_cols(b); }

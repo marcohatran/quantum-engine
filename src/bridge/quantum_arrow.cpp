@@ -12,26 +12,13 @@
 #include <vector>
 
 #include "bridge/BridgeError.hpp"
+#include "bridge/Handles.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 #include "vector/ColumnVector.hpp"
 #include "vector/StringBuilder.hpp"
 
 using namespace quantum;
-
-// QEngine and QColumn are defined in quantum_c.cpp as friend-private types
-// of the C ABI. Forward-declare equivalent layouts so the Arrow bridge can
-// reach into them. (Keeping them as anonymous structs in quantum_c.cpp is
-// the right module discipline; sharing the definition here is acceptable
-// because both files together comprise the bridge layer.)
-struct QEngine {
-    std::unique_ptr<MemoryManager> mm;
-    // (other fields private to quantum_c.cpp are not used here)
-};
-
-struct QColumn {
-    ColumnVector vec;
-};
 
 namespace {
 
