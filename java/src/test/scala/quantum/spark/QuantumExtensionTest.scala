@@ -1529,4 +1529,65 @@ class QuantumExtensionTest {
       "prometheus text should expose cumulative counters")
   }
 
+  /**
+   * Phase 6.6: AQE LogicalQueryStage peeling. An explicit repartition
+   * forces a shuffle; once AQE materializes that stage, the re-optimized
+   * plan is Aggregate(LogicalQueryStage(RepartitionByExpression, stage)).
+   * Pure-reshuffle stages are safe sources: their rows are raw child rows,
+   * collected from the finished stage at execution time.
+   */
+  @Test
+  def aqeRepartitionStageFeedsNativeAggregate(): Unit = {
+    val s = spark
+    import s.implicits._
+    val df = Seq(
+      (1L, 10L), (2L, 20L), (1L, 30L), (3L, 40L), (2L, 50L), (1L, 2L)
+    ).toDF("k", "v")
+
+    val result = df.repartition(2, $"k")
+      .groupBy("k").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+    val rows = result.collect()
+      .map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    assertEquals(Seq((1L, 42L), (2L, 70L), (3L, 40L)), rows)
+    // The initial plan (two-phase HashAggregate over the exchange) is
+    // declined; only AQE re-planning over the materialized stage can
+    // produce a Quantum final plan — proving the LogicalQueryStage peel.
+    val planStr = result.queryExecution.executedPlan.toString
+    assertTrue(planStr.contains("AdaptiveSparkPlan"),
+      s"expected an adaptive plan; got\n$planStr")
+    assertTrue(planStr.contains("Quantum"),
+      s"expected QuantumExec as the AQE final plan; got\n$planStr")
+    assertTrue(QuantumStrategy.translations.exists(_.startsWith("HashAggregate(")),
+      "aggregate over the materialized stage should route natively; " +
+        "translations = " + QuantumStrategy.translations)
+  }
+
+  /**
+   * Phase 6.6 negative: a two-phase aggregate's shuffle stage contains
+   * PARTIAL aggregation — consuming its buffers under the original
+   * logical Aggregate would double-count, so the strategy must decline
+   * and Spark computes the final aggregate itself.
+   */
+  @Test
+  def aqePartialAggregateStageDeclines(): Unit = {
+    val s = spark
+    import s.implicits._
+    // Multi-partition source without an explicit repartition: groupBy
+    // plans partial agg -> shuffle -> final agg.
+    val rows = spark.range(0, 100, 1, 2)
+      .select(($"id" % 4).as("k"), $"id".as("v"))
+      .groupBy("k").agg(org.apache.spark.sql.functions.sum("v").as("s"))
+      .collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq
+
+    // 0..99 grouped by id%4: each group sums to 24*..., verify exactly.
+    val expect = (0 until 100).groupBy(_ % 4).map { case (k, vs) =>
+      (k.toLong, vs.map(_.toLong).sum)
+    }.toSeq.sortBy(_._1)
+    assertEquals(expect, rows)
+    assertTrue(QuantumStrategy.translations.forall(!_.startsWith("HashAggregate(")),
+      "partial-agg stages must not be claimed; translations = " +
+        QuantumStrategy.translations)
+  }
+
 }

@@ -5,8 +5,10 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Average, Count, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, ReturnAnswer, Sort, SubqueryAlias, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LocalRelation, LogicalPlan, Project, Repartition, RepartitionByExpression, ReturnAnswer, Sort, SubqueryAlias, Union}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, IntegerType, LongType, StringType}
@@ -135,7 +137,7 @@ object QuantumStrategy {
       plan:        QuantumPlan.PlanNode,
       idMap:       Map[ExprId, Int],
       output:      Seq[Attribute],
-      sources:     Seq[(String, Array[InputColumn])],
+      sources:     Seq[(String, () => Array[InputColumn])],
       filterCount: Int)
 
   /**
@@ -344,16 +346,17 @@ object QuantumStrategy {
         .setLike(QuantumPlan.LikeOp.newBuilder().setInput(input).setPattern(pattern))
         .build()
 
-    // Marshal a LocalRelation into column-major typed arrays for the JNA bridge.
-    def marshalLocalRelation(lr: LocalRelation): Array[InputColumn] = {
-      val data  = lr.data.toArray
-      val nCols = lr.output.size
+    // Marshal rows (LocalRelation data or a collected AQE stage) into
+    // column-major typed arrays for the bridge.
+    def marshalRows(output: Seq[Attribute], rows: Seq[InternalRow]): Array[InputColumn] = {
+      val data  = rows.toArray
+      val nCols = output.size
       Array.tabulate(nCols) { c =>
         def validityOrNull: Array[Byte] = {
           if (!data.exists(_.isNullAt(c))) null
           else data.map(r => if (r.isNullAt(c)) 0.toByte else 1.toByte)
         }
-        lr.output(c).dataType match {
+        output(c).dataType match {
           case LongType =>
             LongColumn(data.map(r => if (r.isNullAt(c)) 0L else r.getLong(c)),
                        validityOrNull)
@@ -366,7 +369,7 @@ object QuantumStrategy {
           case StringType =>
             StringColumn(data.map(r => if (r.isNullAt(c)) null else r.getString(c)))
           case other =>
-            throw new IllegalStateException(s"unsupported LR col type $other")
+            throw new IllegalStateException(s"unsupported source col type $other")
         }
       }
     }
@@ -503,8 +506,45 @@ object QuantumStrategy {
             .setScan(QuantumPlan.ScanNode.newBuilder().setSourceId(sid).setSchema(schemaB))
             .build()
           val idMap = lr.output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
-          val cols  = marshalLocalRelation(lr)
-          Some(PeelResult(scan, idMap, lr.output, Seq(sid -> cols), 0))
+          Some(PeelResult(scan, idMap, lr.output,
+                          Seq(sid -> (() => marshalRows(lr.output, lr.data))), 0))
+        }
+
+      case lqs: LogicalQueryStage =>
+        // AQE hands re-optimized plans a materialized shuffle stage. When
+        // the stage is a PURE reshuffle (an explicit repartition), its rows
+        // are raw child rows — safe to treat as a leaf source, collected
+        // from the already-finished stage at execution time. Stages that
+        // contain partial aggregation must decline: re-aggregating partial
+        // buffers (e.g. COUNT partials) under the original logical
+        // Aggregate would double-count.
+        lqs.logicalPlan match {
+          case _: Repartition | _: RepartitionByExpression =>
+            if (!lqs.output.forall(a => isSupportedColType(a.dataType))) {
+              lastTranslated.set("reject: LogicalQueryStage has unsupported column types")
+              None
+            } else {
+              val sid     = nextSourceId()
+              val schemaB = QuantumPlan.Schema.newBuilder()
+              lqs.output.zipWithIndex.foreach { case (a, i) =>
+                schemaB.addFields(QuantumPlan.Field.newBuilder()
+                  .setName(if (a.name.nonEmpty) a.name else s"c$i")
+                  .setType(protoTypeFor(a.dataType)))
+              }
+              val scan = QuantumPlan.PlanNode.newBuilder()
+                .setScan(QuantumPlan.ScanNode.newBuilder().setSourceId(sid).setSchema(schemaB))
+                .build()
+              val idMap = lqs.output.zipWithIndex.map { case (a, i) => a.exprId -> i }.toMap
+              val stagePlan = lqs.physicalPlan
+              Some(PeelResult(scan, idMap, lqs.output,
+                              Seq(sid -> (() => marshalRows(lqs.output,
+                                  stagePlan.executeCollect().toSeq))), 0))
+            }
+          case other =>
+            lastTranslated.set(
+              s"reject: LogicalQueryStage over ${other.getClass.getSimpleName} " +
+              "(only pure-reshuffle stages are safe to consume)")
+            None
         }
 
       case LogicalRelation(hr: HadoopFsRelation, output, _, _) =>

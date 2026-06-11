@@ -57,7 +57,7 @@ final case class StringColumn(values: Array[String])                            
  */
 case class QuantumExec(
     override val output: Seq[Attribute],
-    sources: Seq[(String, Array[InputColumn])],
+    sources: Seq[(String, () => Array[InputColumn])],
     planBytes: Array[Byte],
     physicalIndex: Array[Int])
   extends LeafExecNode {
@@ -79,7 +79,7 @@ case class QuantumExec(
       // partitioned) have an empty `sources` list — the FileScanNode in
       // the plan handles its own I/O.
       sources.foreach { case (sourceId, cols) =>
-        QuantumEngine.registerSourceIpc(eng, sourceId, ipcBytesFor(cols, allocator))
+        QuantumEngine.registerSourceIpc(eng, sourceId, ipcBytesFor(cols(), allocator))
       }
 
       val result = QuantumEngine.execute(eng, planBytes)

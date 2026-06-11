@@ -71,6 +71,8 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 **Phase 6 — In progress**
 
+*AQE `LogicalQueryStage` peeling (6.6).* When AQE re-optimizes after materializing a shuffle stage, the strategy now peels `LogicalQueryStage` as a leaf source — gated to PURE-reshuffle stages (`Repartition` / `RepartitionByExpression`), whose rows are raw child rows, collected from the already-finished stage at execution time (`PeelResult.sources` became lazy thunks for this). Stages containing partial aggregation decline: re-aggregating partial buffers (e.g. COUNT partials) under the original logical Aggregate would double-count. Net effect: `df.repartition(2, $"k").groupBy("k").sum("v")` ends with `Quantum` as the AQE *final* plan — the initial two-phase plan is declined, and re-planning over the materialized stage claims the whole aggregate.
+
 *Substrait decoder (6.5).* `plan/SubstraitDecoder` turns a serialized `substrait.Plan` (protos vendored at `third_party/substrait`, v0.42.1) into the engine's IR, so external producers — Ibis, Isthmus/Calcite, DuckDB — can target the engine directly via the new `q_execute_substrait` C ABI entry point (NamedTable reads resolve against registered sources). Covered: ReadRel/FilterRel/ProjectRel (incl. `emit` remaps)/AggregateRel (sum/min/max/avg/count + COUNT(DISTINCT) via the DISTINCT invocation)/FetchRel/SortRel; field references, bool/i32/i64/fp64/string literals, comparison + Kleene logic + `is_null` + arithmetic + `like` scalar functions resolved through the plan's extension declarations. Unsupported constructs raise `NotImplemented` naming the offender.
 
 *Exchange operator + parallel aggregation (6.4).* `ExchangeOperator` — the in-process hash repartition: drains its child once and routes every row to one of N partitions by the hash of its key expressions (per-type hashing incl. nulls-to-a-fixed-seed, so null keys cluster). As a plain pull operator its output is hash-clustered (each partition contiguous); parallel consumers call `takePartitions()` instead. First consumer: `HashAggregateNode.parallelism > 1` builds a `ParallelHashAggregateOperator` — exchange by the GROUP BY keys, then one independent `HashAggregateOperator` per partition fanned across the `TaskScheduler`. Groups are disjoint across hash partitions, so per-partition results concatenate into the global answer with no merge phase. Plan IR + proto grew `ExchangeNode` and the `parallelism` field.
@@ -81,7 +83,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Observability (6.1).* `PlanBuilder` wraps every operator it builds in a `MetricsOperator` decorator (operators untouched; two `steady_clock` reads per batch) recording rows / batches / open-next-close timings into a per-query `QueryMetrics`. `q_result_trace_json` returns the structured trace (operators in build order, plan root last); `q_metrics_prometheus` exposes process-wide cumulative counters in Prometheus text format (`quantum_queries_total`, `quantum_rows_emitted_total`, `quantum_spills_total` — fed by the HashAggregate and Sort spill sites — and `quantum_exec_nanos_total`). `QuantumExec` captures the trace per query (`QuantumExec.lastTraceJson`); JNA surfaces both calls.
 
-**Tests** — 244 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
+**Tests** — 244 C++ tests + 57 JVM tests (3 EngineEndToEnd + 1 Delta + 53 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -98,7 +100,7 @@ cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5 + Delta 3.2)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 55 tests (JNA + Spark + Delta)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 57 tests (JNA + Spark + Delta)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -159,7 +161,7 @@ Key invariants the codebase enforces:
 | **5** | Native LIMIT / ORDER BY routing end-to-end — strategy matches through `ReturnAnswer`, beating Spark's `SpecialLimits` (`CollectLimitExec` / `TakeOrderedAndProjectExec` / `SortExec`) | done |
 | **5** | ORDER BY non-selected aggregates — `Limit(Project(_, Sort(…)))` roots claimed; hidden ordering column computed/sorted natively, projected via `physicalIndex` remap | done |
 | **5** | Plain query roots — `SELECT … WHERE … ORDER BY … LIMIT` without GROUP BY (incl. joins, projection/rename) claimed at the `ReturnAnswer` root | done |
-| 6 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans (blocked on the exchange operator — shuffle stages have no native-readable source) | planned |
+| **6** | AQE `LogicalQueryStage` peeling — pure-reshuffle stages consumed as materialized sources (lazy collect); partial-agg stages decline | done |
 | **5** | Iceberg v1 table reader — metadata JSON / manifest-list / manifest Avro replay, deleted entries skipped, `FileScanNode format="iceberg"` | done |
 | **5** | Delta — checkpoint `.parquet` log support (`_last_checkpoint`, single- + multi-part; only post-checkpoint JSON commits replayed) | done |
 | **5** | Delta — column mapping (physical-name remap from `metaData.schemaString`) + add-column schema evolution (null-fill) | done |
