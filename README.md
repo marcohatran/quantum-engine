@@ -71,11 +71,13 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 **Phase 6 — In progress**
 
+*Task scheduler + parallel scan (6.3).* `exec/TaskScheduler` — a fixed worker pool with `submit` and an exception-propagating `parallelFor` (caller participates; first error rethrown). Sized by `QUANTUM_SCHEDULER_THREADS`, defaulting to half the hardware threads — Spark supplies task-level parallelism around the engine, so the pool deliberately undersubscribes. First consumer: multi-file Parquet scans fan per-file decode (the dominant cost on the benchmark headline path) across the pool — each file is one independent task touching only the thread-safe `MemoryManager`. This is the building block the exchange operator needs.
+
 *Plugin API (6.2).* The open-core seam: `plan/OperatorRegistry` maps an extension type (e.g. `vendor.geo_join`) to an `OperatorFactory`; plans reference plugins via a new `ExtensionNode { extension_type, payload, children }` (IR + proto). `PlanBuilder` builds the children (metrics-wrapped like everything else), then hands `(MemoryManager, children, payload)` to the factory. The payload is opaque to the engine — by convention a serialized Substrait relation the plugin decodes itself; decoding *standard* Substrait rels into built-in IR remains on the roadmap. Plugin operators flow through proto round-trips, the C ABI, and the metrics trace with zero engine changes.
 
 *Observability (6.1).* `PlanBuilder` wraps every operator it builds in a `MetricsOperator` decorator (operators untouched; two `steady_clock` reads per batch) recording rows / batches / open-next-close timings into a per-query `QueryMetrics`. `q_result_trace_json` returns the structured trace (operators in build order, plan root last); `q_metrics_prometheus` exposes process-wide cumulative counters in Prometheus text format (`quantum_queries_total`, `quantum_rows_emitted_total`, `quantum_spills_total` — fed by the HashAggregate and Sort spill sites — and `quantum_exec_nanos_total`). `QuantumExec` captures the trace per query (`QuantumExec.lastTraceJson`); JNA surfaces both calls.
 
-**Tests** — 230 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
+**Tests** — 235 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -86,7 +88,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 230 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 235 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -100,8 +102,9 @@ Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUA
 ## Architecture at a Glance
 
 ```
-bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow)
-plan/        → Plan IR + PlanBuilder (IR -> Operator) + PlanJson + PlanProto wire formats
+bridge/      → C ABI (quantum_c) + Arrow C Data Interface (quantum_arrow) + Arrow IPC (quantum_ipc)
+plan/        → Plan IR + PlanBuilder (IR -> Operator) + OperatorRegistry (plugins) + PlanJson + PlanProto wire formats
+exec/        → TaskScheduler (worker pool for intra-operator parallelism)
 io/          → FileFormat + CsvReader + ParquetReader + DeltaTableReader + FileSystem (file:// / s3:// / gs:// / abfs://)
 operator/    → Scan, FileScan, Filter, Project, HashAggregate, HashJoin, Limit, Sort, UnionAll + AggregateFunction
 expression/  → Expression, Literal, ColumnRef, BinaryExpr, LikeExpr + SIMD kernels
@@ -160,7 +163,8 @@ Key invariants the codebase enforces:
 | **5** | Sort spill — external merge sort in `SortOperator` (sorted runs on disk, k-way merge, streaming output batches) | done |
 | **5** | Local-disk (NVMe) cache for object-store reads — cache-through `openReadable`, URI-hash keys, atomic install, env/API config | done |
 | **5** | Arrow IPC cross-JVM batch transport — `q_register_source_ipc` / `q_result_next_ipc`, QuantumExec marshals whole batches in one JNA crossing per direction | done |
-| 6 | Exchange operator, intra-operator parallelism (needs the Phase 6 task scheduler) | planned |
+| **6** | Task scheduler (`exec/TaskScheduler`) + first intra-operator parallelism — multi-file Parquet decode fans out across the pool | done |
+| 6 | Exchange operator (hash repartition over the task scheduler) | planned |
 | 6 | AVX2 kernels measured on x86 hardware (hardware-dependent; arm64 dev box) | planned |
 | **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
 | **6** | Observability v1 — per-operator metrics (`MetricsOperator`), JSON query trace (`q_result_trace_json`), Prometheus counters (`q_metrics_prometheus`) | done |

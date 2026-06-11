@@ -10,6 +10,7 @@ add_executable(quantum_tests
     vector/test_column_batch.cpp
     vector/test_string_builder.cpp
     vector/test_dict_string_builder.cpp
+    exec/test_task_scheduler.cpp
     expression/test_literal.cpp
     expression/test_column_ref.cpp
     expression/test_binary_expr.cpp

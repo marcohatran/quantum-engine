@@ -10,6 +10,7 @@
 #include <cxxabi.h>
 
 #include "common/Metrics.hpp"
+#include "exec/TaskScheduler.hpp"
 #include "common/Status.hpp"
 #include "expression/BinaryExpr.hpp"
 #include "expression/ColumnRef.hpp"
@@ -226,12 +227,16 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                     auto wrapped = wrapPartitioned(std::move(reader), 0);
                     return std::make_unique<FileScanOperator>(mm_, std::move(wrapped));
                 }
-                std::vector<FileFormatReaderPtr> readers;
-                readers.reserve(n.paths.size());
-                for (size_t i = 0; i < n.paths.size(); ++i) {
-                    auto pr = std::make_unique<ParquetReader>(n.paths[i], mm_);
-                    readers.push_back(wrapPartitioned(std::move(pr), i));
-                }
+                // Per-file construction decodes the whole file (ParquetReader
+                // is eager), so multi-file scans fan the decode out across
+                // the scheduler — each file is one independent task touching
+                // only the thread-safe MemoryManager.
+                std::vector<FileFormatReaderPtr> readers(n.paths.size());
+                TaskScheduler::global().parallelFor(
+                    n.paths.size(), [&](size_t i) {
+                        auto pr = std::make_unique<ParquetReader>(n.paths[i], mm_);
+                        readers[i] = wrapPartitioned(std::move(pr), i);
+                    });
                 auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
                 return std::make_unique<FileScanOperator>(mm_, std::move(concat));
             }
