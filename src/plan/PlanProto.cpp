@@ -298,6 +298,7 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
             for (const auto& k : x->group_keys) encodeScalarExpr(k, m->add_group_keys());
             for (const auto& a : x->aggregates) encodeAggregate(a, m->add_aggregates());
             for (const auto& n : x->output_names) m->add_output_names(n);
+            m->set_parallelism(x->parallelism);
         } else if constexpr (std::is_same_v<T, std::unique_ptr<HashJoinNode>>) {
             auto* m = out->mutable_hash_join();
             encodePlan(x->build, m->mutable_build());
@@ -319,6 +320,11 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
         } else if constexpr (std::is_same_v<T, std::unique_ptr<UnionAllNode>>) {
             auto* m = out->mutable_union_all();
             for (const auto& c : x->children) encodePlan(c, m->add_children());
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<ExchangeNode>>) {
+            auto* m = out->mutable_exchange();
+            encodePlan(x->child, m->mutable_child());
+            for (const auto& k : x->keys) encodeScalarExpr(k, m->add_keys());
+            m->set_num_partitions(x->num_partitions);
         } else if constexpr (std::is_same_v<T, std::unique_ptr<ExtensionNode>>) {
             auto* m = out->mutable_extension();
             m->set_extension_type(x->extension_type);
@@ -381,6 +387,7 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
             for (const auto& k : msg.hash_agg().group_keys()) n->group_keys.push_back(decodeScalarExpr(k));
             for (const auto& a : msg.hash_agg().aggregates()) n->aggregates.push_back(decodeAggregate(a));
             for (const auto& s : msg.hash_agg().output_names()) n->output_names.push_back(s);
+            n->parallelism = msg.hash_agg().parallelism();
             return PlanNode{std::move(n)};
         }
         case proto::PlanNode::kHashJoin: {
@@ -410,6 +417,13 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
         case proto::PlanNode::kUnionAll: {
             auto n = std::make_unique<UnionAllNode>();
             for (const auto& c : msg.union_all().children()) n->children.push_back(decodePlan(c));
+            return PlanNode{std::move(n)};
+        }
+        case proto::PlanNode::kExchange: {
+            auto n = std::make_unique<ExchangeNode>();
+            n->child = decodePlan(msg.exchange().child());
+            for (const auto& k : msg.exchange().keys()) n->keys.push_back(decodeScalarExpr(k));
+            n->num_partitions = msg.exchange().num_partitions();
             return PlanNode{std::move(n)};
         }
         case proto::PlanNode::kExtension: {

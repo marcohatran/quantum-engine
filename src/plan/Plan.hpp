@@ -108,6 +108,7 @@ struct LimitNode;
 struct SortNode;
 struct UnionAllNode;
 struct ExtensionNode;
+struct ExchangeNode;
 
 using PlanNode = std::variant<
     ScanNode,
@@ -119,7 +120,8 @@ using PlanNode = std::variant<
     std::unique_ptr<LimitNode>,
     std::unique_ptr<SortNode>,
     std::unique_ptr<UnionAllNode>,
-    std::unique_ptr<ExtensionNode>
+    std::unique_ptr<ExtensionNode>,
+    std::unique_ptr<ExchangeNode>
 >;
 
 struct FilterNode {
@@ -138,6 +140,10 @@ struct HashAggregateNode {
     std::vector<ScalarExpr>     group_keys;
     std::vector<AggregateSpec>  aggregates;
     std::vector<std::string>    output_names;
+    // > 1: hash-partition the child by the group keys and aggregate the
+    // partitions in parallel on the TaskScheduler (groups are disjoint
+    // across partitions, so results concatenate). 0/1 = serial.
+    int32_t                     parallelism = 0;
 };
 
 struct LimitNode {
@@ -154,6 +160,15 @@ struct SortNode {
 
 struct UnionAllNode {
     std::vector<PlanNode> children;
+};
+
+// Hash repartition: route each row of `child` to one of `num_partitions`
+// partitions by the hash of `keys`. Streaming output is hash-clustered
+// (each partition's rows are contiguous).
+struct ExchangeNode {
+    PlanNode                child;
+    std::vector<ScalarExpr> keys;
+    int32_t                 num_partitions = 1;
 };
 
 // Plugin operator (open-core seam). `extension_type` selects a factory in

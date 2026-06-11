@@ -162,6 +162,8 @@ message HashAggregateNode {
   repeated ScalarExpr    group_keys   = 2;
   repeated AggregateSpec aggregates   = 3;
   repeated string        output_names = 4;
+  // > 1: partition by group keys and aggregate partitions in parallel.
+  int32                  parallelism  = 5;
 }
 
 enum JoinType {
@@ -196,6 +198,13 @@ message UnionAllNode {
   repeated PlanNode children = 1;
 }
 
+// Hash repartition by `keys` into `num_partitions` partitions.
+message ExchangeNode {
+  PlanNode            child          = 1;
+  repeated ScalarExpr keys           = 2;
+  int32               num_partitions = 3;
+}
+
 // Plugin operator: extension_type selects a registered OperatorFactory;
 // payload is an opaque fragment (by convention a Substrait relation).
 message ExtensionNode {
@@ -216,5 +225,6 @@ message PlanNode {
     SortNode          sort       = 8;
     UnionAllNode      union_all  = 9;
     ExtensionNode     extension  = 10;
+    ExchangeNode      exchange   = 11;
   }
 }

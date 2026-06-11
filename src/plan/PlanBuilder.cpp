@@ -23,12 +23,14 @@
 #include "io/ParquetReader.hpp"
 #include "io/PartitionedFileReader.hpp"
 #include "operator/AggregateFunction.hpp"
+#include "operator/ExchangeOperator.hpp"
 #include "operator/FileScanOperator.hpp"
 #include "operator/FilterOperator.hpp"
 #include "operator/HashAggregateOperator.hpp"
 #include "operator/HashJoinOperator.hpp"
 #include "operator/LimitOperator.hpp"
 #include "operator/MetricsOperator.hpp"
+#include "operator/ParallelHashAggregateOperator.hpp"
 #include "operator/ProjectOperator.hpp"
 #include "operator/ScanOperator.hpp"
 #include "operator/SortOperator.hpp"
@@ -272,6 +274,28 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 std::move(exprs),
                 n->output_names);
         } else if constexpr (std::is_same_v<T, std::unique_ptr<HashAggregateNode>>) {
+            if (n->parallelism > 1) {
+                // Parallel partitioned aggregation: hash-exchange the child
+                // by the group keys, then one HashAggregate per partition
+                // on the TaskScheduler. Each partition needs its own key
+                // expressions + aggregate instances (single-threaded
+                // operators; only MemoryManager is shared).
+                const auto P = static_cast<size_t>(n->parallelism);
+                std::vector<ExpressionPtr> exchangeKeys;
+                exchangeKeys.reserve(n->group_keys.size());
+                for (const auto& k : n->group_keys) exchangeKeys.push_back(buildExpr(k));
+                auto exchange = std::make_unique<ExchangeOperator>(
+                    mm_, build(n->child, catalog), std::move(exchangeKeys), P);
+
+                std::vector<ParallelHashAggregateOperator::PartitionAggSpec> specs(P);
+                for (size_t p = 0; p < P; ++p) {
+                    for (const auto& k : n->group_keys) specs[p].keys.push_back(buildExpr(k));
+                    for (const auto& a : n->aggregates) specs[p].aggs.push_back(buildAggregate(a, *this));
+                    specs[p].outputNames = n->output_names;
+                }
+                return std::make_unique<ParallelHashAggregateOperator>(
+                    mm_, std::move(exchange), std::move(specs));
+            }
             std::vector<ExpressionPtr> keys;
             keys.reserve(n->group_keys.size());
             for (const auto& k : n->group_keys) keys.push_back(buildExpr(k));
@@ -282,6 +306,13 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 mm_, build(n->child, catalog),
                 std::move(keys), std::move(aggs),
                 n->output_names);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<ExchangeNode>>) {
+            std::vector<ExpressionPtr> keys;
+            keys.reserve(n->keys.size());
+            for (const auto& k : n->keys) keys.push_back(buildExpr(k));
+            return std::make_unique<ExchangeOperator>(
+                mm_, build(n->child, catalog), std::move(keys),
+                static_cast<size_t>(n->num_partitions));
         } else if constexpr (std::is_same_v<T, std::unique_ptr<HashJoinNode>>) {
             std::vector<ExpressionPtr> bk;
             bk.reserve(n->build_keys.size());

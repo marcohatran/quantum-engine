@@ -28,7 +28,9 @@ add_library(quantum_core SHARED
     hash/VarBytesHashTable.cpp
     hash/KeyCodec.cpp
     operator/ScanOperator.cpp
+    operator/ExchangeOperator.cpp
     operator/FilterOperator.cpp
+    operator/ParallelHashAggregateOperator.cpp
     operator/ProjectOperator.cpp
     operator/AggregateFunction.cpp
     operator/HashAggregateOperator.cpp
