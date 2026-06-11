@@ -25,11 +25,21 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class QuantumExtension extends (SparkSessionExtensions => Unit) {
   override def apply(ext: SparkSessionExtensions): Unit = {
-    ext.injectPlannerStrategy(_ => new QuantumStrategy())
+    ext.injectPlannerStrategy(session => new QuantumStrategy(session))
   }
 }
 
-class QuantumStrategy extends SparkStrategy {
+class QuantumStrategy(session: org.apache.spark.sql.SparkSession = null)
+    extends SparkStrategy {
+
+  /** spark.quantum.agg.parallelism: > 1 hash-partitions GROUP BY input by
+   *  the group keys and aggregates partitions in parallel on the engine's
+   *  TaskScheduler (merge-free — groups are disjoint across partitions).
+   *  0 (default) keeps the serial aggregate. */
+  private def aggParallelism: Int = {
+    if (session == null) 0
+    else session.conf.get("spark.quantum.agg.parallelism", "0").toInt
+  }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     QuantumStrategy.lastSeen.set(plan)
@@ -68,13 +78,13 @@ class QuantumStrategy extends SparkStrategy {
       case Filter(having, agg: Aggregate) =>
         QuantumStrategy.tryTranslate(
             Some(agg), agg.child, postLimit.output, Some(having), limit, sortOrder,
-            projectList)
+            projectList, aggParallelism)
           .map(qe => Seq(qe))
           .getOrElse(Nil)
       case agg: Aggregate =>
         QuantumStrategy.tryTranslate(
             Some(agg), agg.child, postLimit.output, None, limit, sortOrder,
-            projectList)
+            projectList, aggParallelism)
           .map(quantumExec => Seq(quantumExec))
           .getOrElse(Nil)
       case other if isRoot =>
@@ -189,7 +199,8 @@ object QuantumStrategy {
       havingCondition: Option[Expression] = None,
       limit: Option[Long] = None,
       sortOrder: Option[Seq[SortOrder]] = None,
-      projectList: Option[Seq[NamedExpression]] = None): Option[SparkPlan] = {
+      projectList: Option[Seq[NamedExpression]] = None,
+      aggParallelism: Int = 0): Option[SparkPlan] = {
 
     // ------------------------------------------------------------------
     // Helpers
@@ -837,6 +848,7 @@ object QuantumStrategy {
     }
 
     val hashAggB = QuantumPlan.HashAggregateNode.newBuilder().setChild(peeled.plan)
+    if (aggParallelism > 1) hashAggB.setParallelism(aggParallelism)
     groupColIndices.foreach(idx => hashAggB.addGroupKeys(aggCol(idx)))
     val orderedAggs = outputItems.collect { case AggOut(spec, _) => spec }
     orderedAggs.foreach(hashAggB.addAggregates)

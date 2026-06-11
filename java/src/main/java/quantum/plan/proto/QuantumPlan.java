@@ -13430,6 +13430,16 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      */
     com.google.protobuf.ByteString
         getOutputNamesBytes(int index);
+
+    /**
+     * <pre>
+     * &gt; 1: partition by group keys and aggregate partitions in parallel.
+     * </pre>
+     *
+     * <code>int32 parallelism = 5;</code>
+     * @return The parallelism.
+     */
+    int getParallelism();
   }
   /**
    * Protobuf type {@code quantum.plan.proto.HashAggregateNode}
@@ -13618,6 +13628,21 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       return outputNames_.getByteString(index);
     }
 
+    public static final int PARALLELISM_FIELD_NUMBER = 5;
+    private int parallelism_ = 0;
+    /**
+     * <pre>
+     * &gt; 1: partition by group keys and aggregate partitions in parallel.
+     * </pre>
+     *
+     * <code>int32 parallelism = 5;</code>
+     * @return The parallelism.
+     */
+    @java.lang.Override
+    public int getParallelism() {
+      return parallelism_;
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -13643,6 +13668,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       }
       for (int i = 0; i < outputNames_.size(); i++) {
         com.google.protobuf.GeneratedMessage.writeString(output, 4, outputNames_.getRaw(i));
+      }
+      if (parallelism_ != 0) {
+        output.writeInt32(5, parallelism_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -13673,6 +13701,10 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         size += dataSize;
         size += 1 * getOutputNamesList().size();
       }
+      if (parallelism_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(5, parallelism_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -13699,6 +13731,8 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           .equals(other.getAggregatesList())) return false;
       if (!getOutputNamesList()
           .equals(other.getOutputNamesList())) return false;
+      if (getParallelism()
+          != other.getParallelism()) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -13726,6 +13760,8 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         hash = (37 * hash) + OUTPUT_NAMES_FIELD_NUMBER;
         hash = (53 * hash) + getOutputNamesList().hashCode();
       }
+      hash = (37 * hash) + PARALLELISM_FIELD_NUMBER;
+      hash = (53 * hash) + getParallelism();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -13886,6 +13922,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         bitField0_ = (bitField0_ & ~0x00000004);
         outputNames_ =
             com.google.protobuf.LazyStringArrayList.emptyList();
+        parallelism_ = 0;
         return this;
       }
 
@@ -13951,6 +13988,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (((from_bitField0_ & 0x00000008) != 0)) {
           outputNames_.makeImmutable();
           result.outputNames_ = outputNames_;
+        }
+        if (((from_bitField0_ & 0x00000010) != 0)) {
+          result.parallelism_ = parallelism_;
         }
         result.bitField0_ |= to_bitField0_;
       }
@@ -14032,6 +14072,9 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           }
           onChanged();
         }
+        if (other.getParallelism() != 0) {
+          setParallelism(other.getParallelism());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -14097,6 +14140,11 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
                 outputNames_.add(s);
                 break;
               } // case 34
+              case 40: {
+                parallelism_ = input.readInt32();
+                bitField0_ |= 0x00000010;
+                break;
+              } // case 40
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -14822,6 +14870,50 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         ensureOutputNamesIsMutable();
         outputNames_.add(value);
         bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+
+      private int parallelism_ ;
+      /**
+       * <pre>
+       * &gt; 1: partition by group keys and aggregate partitions in parallel.
+       * </pre>
+       *
+       * <code>int32 parallelism = 5;</code>
+       * @return The parallelism.
+       */
+      @java.lang.Override
+      public int getParallelism() {
+        return parallelism_;
+      }
+      /**
+       * <pre>
+       * &gt; 1: partition by group keys and aggregate partitions in parallel.
+       * </pre>
+       *
+       * <code>int32 parallelism = 5;</code>
+       * @param value The parallelism to set.
+       * @return This builder for chaining.
+       */
+      public Builder setParallelism(int value) {
+
+        parallelism_ = value;
+        bitField0_ |= 0x00000010;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * &gt; 1: partition by group keys and aggregate partitions in parallel.
+       * </pre>
+       *
+       * <code>int32 parallelism = 5;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearParallelism() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        parallelism_ = 0;
         onChanged();
         return this;
       }
@@ -19441,6 +19533,2006 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
 
   }
 
+  public interface ExchangeNodeOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:quantum.plan.proto.ExchangeNode)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return Whether the child field is set.
+     */
+    boolean hasChild();
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return The child.
+     */
+    quantum.plan.proto.QuantumPlan.PlanNode getChild();
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     */
+    quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildOrBuilder();
+
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    java.util.List<quantum.plan.proto.QuantumPlan.ScalarExpr> 
+        getKeysList();
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    quantum.plan.proto.QuantumPlan.ScalarExpr getKeys(int index);
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    int getKeysCount();
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    java.util.List<? extends quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> 
+        getKeysOrBuilderList();
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder getKeysOrBuilder(
+        int index);
+
+    /**
+     * <code>int32 num_partitions = 3;</code>
+     * @return The numPartitions.
+     */
+    int getNumPartitions();
+  }
+  /**
+   * <pre>
+   * Hash repartition by `keys` into `num_partitions` partitions.
+   * </pre>
+   *
+   * Protobuf type {@code quantum.plan.proto.ExchangeNode}
+   */
+  public static final class ExchangeNode extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:quantum.plan.proto.ExchangeNode)
+      ExchangeNodeOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "ExchangeNode");
+    }
+    // Use ExchangeNode.newBuilder() to construct.
+    private ExchangeNode(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private ExchangeNode() {
+      keys_ = java.util.Collections.emptyList();
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExchangeNode_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExchangeNode_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              quantum.plan.proto.QuantumPlan.ExchangeNode.class, quantum.plan.proto.QuantumPlan.ExchangeNode.Builder.class);
+    }
+
+    private int bitField0_;
+    public static final int CHILD_FIELD_NUMBER = 1;
+    private quantum.plan.proto.QuantumPlan.PlanNode child_;
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return Whether the child field is set.
+     */
+    @java.lang.Override
+    public boolean hasChild() {
+      return ((bitField0_ & 0x00000001) != 0);
+    }
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     * @return The child.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PlanNode getChild() {
+      return child_ == null ? quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+    }
+    /**
+     * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildOrBuilder() {
+      return child_ == null ? quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+    }
+
+    public static final int KEYS_FIELD_NUMBER = 2;
+    @SuppressWarnings("serial")
+    private java.util.List<quantum.plan.proto.QuantumPlan.ScalarExpr> keys_;
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    @java.lang.Override
+    public java.util.List<quantum.plan.proto.QuantumPlan.ScalarExpr> getKeysList() {
+      return keys_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    @java.lang.Override
+    public java.util.List<? extends quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> 
+        getKeysOrBuilderList() {
+      return keys_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    @java.lang.Override
+    public int getKeysCount() {
+      return keys_.size();
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ScalarExpr getKeys(int index) {
+      return keys_.get(index);
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder getKeysOrBuilder(
+        int index) {
+      return keys_.get(index);
+    }
+
+    public static final int NUM_PARTITIONS_FIELD_NUMBER = 3;
+    private int numPartitions_ = 0;
+    /**
+     * <code>int32 num_partitions = 3;</code>
+     * @return The numPartitions.
+     */
+    @java.lang.Override
+    public int getNumPartitions() {
+      return numPartitions_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (((bitField0_ & 0x00000001) != 0)) {
+        output.writeMessage(1, getChild());
+      }
+      for (int i = 0; i < keys_.size(); i++) {
+        output.writeMessage(2, keys_.get(i));
+      }
+      if (numPartitions_ != 0) {
+        output.writeInt32(3, numPartitions_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, getChild());
+      }
+      for (int i = 0; i < keys_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, keys_.get(i));
+      }
+      if (numPartitions_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(3, numPartitions_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof quantum.plan.proto.QuantumPlan.ExchangeNode)) {
+        return super.equals(obj);
+      }
+      quantum.plan.proto.QuantumPlan.ExchangeNode other = (quantum.plan.proto.QuantumPlan.ExchangeNode) obj;
+
+      if (hasChild() != other.hasChild()) return false;
+      if (hasChild()) {
+        if (!getChild()
+            .equals(other.getChild())) return false;
+      }
+      if (!getKeysList()
+          .equals(other.getKeysList())) return false;
+      if (getNumPartitions()
+          != other.getNumPartitions()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      if (hasChild()) {
+        hash = (37 * hash) + CHILD_FIELD_NUMBER;
+        hash = (53 * hash) + getChild().hashCode();
+      }
+      if (getKeysCount() > 0) {
+        hash = (37 * hash) + KEYS_FIELD_NUMBER;
+        hash = (53 * hash) + getKeysList().hashCode();
+      }
+      hash = (37 * hash) + NUM_PARTITIONS_FIELD_NUMBER;
+      hash = (53 * hash) + getNumPartitions();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(quantum.plan.proto.QuantumPlan.ExchangeNode prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * <pre>
+     * Hash repartition by `keys` into `num_partitions` partitions.
+     * </pre>
+     *
+     * Protobuf type {@code quantum.plan.proto.ExchangeNode}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:quantum.plan.proto.ExchangeNode)
+        quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExchangeNode_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExchangeNode_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                quantum.plan.proto.QuantumPlan.ExchangeNode.class, quantum.plan.proto.QuantumPlan.ExchangeNode.Builder.class);
+      }
+
+      // Construct using quantum.plan.proto.QuantumPlan.ExchangeNode.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage
+                .alwaysUseFieldBuilders) {
+          internalGetChildFieldBuilder();
+          internalGetKeysFieldBuilder();
+        }
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        child_ = null;
+        if (childBuilder_ != null) {
+          childBuilder_.dispose();
+          childBuilder_ = null;
+        }
+        if (keysBuilder_ == null) {
+          keys_ = java.util.Collections.emptyList();
+        } else {
+          keys_ = null;
+          keysBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000002);
+        numPartitions_ = 0;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExchangeNode_descriptor;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExchangeNode getDefaultInstanceForType() {
+        return quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExchangeNode build() {
+        quantum.plan.proto.QuantumPlan.ExchangeNode result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExchangeNode buildPartial() {
+        quantum.plan.proto.QuantumPlan.ExchangeNode result = new quantum.plan.proto.QuantumPlan.ExchangeNode(this);
+        buildPartialRepeatedFields(result);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartialRepeatedFields(quantum.plan.proto.QuantumPlan.ExchangeNode result) {
+        if (keysBuilder_ == null) {
+          if (((bitField0_ & 0x00000002) != 0)) {
+            keys_ = java.util.Collections.unmodifiableList(keys_);
+            bitField0_ = (bitField0_ & ~0x00000002);
+          }
+          result.keys_ = keys_;
+        } else {
+          result.keys_ = keysBuilder_.build();
+        }
+      }
+
+      private void buildPartial0(quantum.plan.proto.QuantumPlan.ExchangeNode result) {
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.child_ = childBuilder_ == null
+              ? child_
+              : childBuilder_.build();
+          to_bitField0_ |= 0x00000001;
+        }
+        if (((from_bitField0_ & 0x00000004) != 0)) {
+          result.numPartitions_ = numPartitions_;
+        }
+        result.bitField0_ |= to_bitField0_;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof quantum.plan.proto.QuantumPlan.ExchangeNode) {
+          return mergeFrom((quantum.plan.proto.QuantumPlan.ExchangeNode)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(quantum.plan.proto.QuantumPlan.ExchangeNode other) {
+        if (other == quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance()) return this;
+        if (other.hasChild()) {
+          mergeChild(other.getChild());
+        }
+        if (keysBuilder_ == null) {
+          if (!other.keys_.isEmpty()) {
+            if (keys_.isEmpty()) {
+              keys_ = other.keys_;
+              bitField0_ = (bitField0_ & ~0x00000002);
+            } else {
+              ensureKeysIsMutable();
+              keys_.addAll(other.keys_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.keys_.isEmpty()) {
+            if (keysBuilder_.isEmpty()) {
+              keysBuilder_.dispose();
+              keysBuilder_ = null;
+              keys_ = other.keys_;
+              bitField0_ = (bitField0_ & ~0x00000002);
+              keysBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   internalGetKeysFieldBuilder() : null;
+            } else {
+              keysBuilder_.addAllMessages(other.keys_);
+            }
+          }
+        }
+        if (other.getNumPartitions() != 0) {
+          setNumPartitions(other.getNumPartitions());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                input.readMessage(
+                    internalGetChildFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 10
+              case 18: {
+                quantum.plan.proto.QuantumPlan.ScalarExpr m =
+                    input.readMessage(
+                        quantum.plan.proto.QuantumPlan.ScalarExpr.parser(),
+                        extensionRegistry);
+                if (keysBuilder_ == null) {
+                  ensureKeysIsMutable();
+                  keys_.add(m);
+                } else {
+                  keysBuilder_.addMessage(m);
+                }
+                break;
+              } // case 18
+              case 24: {
+                numPartitions_ = input.readInt32();
+                bitField0_ |= 0x00000004;
+                break;
+              } // case 24
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private quantum.plan.proto.QuantumPlan.PlanNode child_;
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> childBuilder_;
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       * @return Whether the child field is set.
+       */
+      public boolean hasChild() {
+        return ((bitField0_ & 0x00000001) != 0);
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       * @return The child.
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode getChild() {
+        if (childBuilder_ == null) {
+          return child_ == null ? quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+        } else {
+          return childBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder setChild(quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          child_ = value;
+        } else {
+          childBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder setChild(
+          quantum.plan.proto.QuantumPlan.PlanNode.Builder builderForValue) {
+        if (childBuilder_ == null) {
+          child_ = builderForValue.build();
+        } else {
+          childBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder mergeChild(quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childBuilder_ == null) {
+          if (((bitField0_ & 0x00000001) != 0) &&
+            child_ != null &&
+            child_ != quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance()) {
+            getChildBuilder().mergeFrom(value);
+          } else {
+            child_ = value;
+          }
+        } else {
+          childBuilder_.mergeFrom(value);
+        }
+        if (child_ != null) {
+          bitField0_ |= 0x00000001;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public Builder clearChild() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        child_ = null;
+        if (childBuilder_ != null) {
+          childBuilder_.dispose();
+          childBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode.Builder getChildBuilder() {
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return internalGetChildFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildOrBuilder() {
+        if (childBuilder_ != null) {
+          return childBuilder_.getMessageOrBuilder();
+        } else {
+          return child_ == null ?
+              quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance() : child_;
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.PlanNode child = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> 
+          internalGetChildFieldBuilder() {
+        if (childBuilder_ == null) {
+          childBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder>(
+                  getChild(),
+                  getParentForChildren(),
+                  isClean());
+          child_ = null;
+        }
+        return childBuilder_;
+      }
+
+      private java.util.List<quantum.plan.proto.QuantumPlan.ScalarExpr> keys_ =
+        java.util.Collections.emptyList();
+      private void ensureKeysIsMutable() {
+        if (!((bitField0_ & 0x00000002) != 0)) {
+          keys_ = new java.util.ArrayList<quantum.plan.proto.QuantumPlan.ScalarExpr>(keys_);
+          bitField0_ |= 0x00000002;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ScalarExpr, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder, quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> keysBuilder_;
+
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.ScalarExpr> getKeysList() {
+        if (keysBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(keys_);
+        } else {
+          return keysBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public int getKeysCount() {
+        if (keysBuilder_ == null) {
+          return keys_.size();
+        } else {
+          return keysBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExpr getKeys(int index) {
+        if (keysBuilder_ == null) {
+          return keys_.get(index);
+        } else {
+          return keysBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder setKeys(
+          int index, quantum.plan.proto.QuantumPlan.ScalarExpr value) {
+        if (keysBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureKeysIsMutable();
+          keys_.set(index, value);
+          onChanged();
+        } else {
+          keysBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder setKeys(
+          int index, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder builderForValue) {
+        if (keysBuilder_ == null) {
+          ensureKeysIsMutable();
+          keys_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          keysBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder addKeys(quantum.plan.proto.QuantumPlan.ScalarExpr value) {
+        if (keysBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureKeysIsMutable();
+          keys_.add(value);
+          onChanged();
+        } else {
+          keysBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder addKeys(
+          int index, quantum.plan.proto.QuantumPlan.ScalarExpr value) {
+        if (keysBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureKeysIsMutable();
+          keys_.add(index, value);
+          onChanged();
+        } else {
+          keysBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder addKeys(
+          quantum.plan.proto.QuantumPlan.ScalarExpr.Builder builderForValue) {
+        if (keysBuilder_ == null) {
+          ensureKeysIsMutable();
+          keys_.add(builderForValue.build());
+          onChanged();
+        } else {
+          keysBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder addKeys(
+          int index, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder builderForValue) {
+        if (keysBuilder_ == null) {
+          ensureKeysIsMutable();
+          keys_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          keysBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder addAllKeys(
+          java.lang.Iterable<? extends quantum.plan.proto.QuantumPlan.ScalarExpr> values) {
+        if (keysBuilder_ == null) {
+          ensureKeysIsMutable();
+          com.google.protobuf.AbstractMessageLite.Builder.addAll(
+              values, keys_);
+          onChanged();
+        } else {
+          keysBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder clearKeys() {
+        if (keysBuilder_ == null) {
+          keys_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000002);
+          onChanged();
+        } else {
+          keysBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public Builder removeKeys(int index) {
+        if (keysBuilder_ == null) {
+          ensureKeysIsMutable();
+          keys_.remove(index);
+          onChanged();
+        } else {
+          keysBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExpr.Builder getKeysBuilder(
+          int index) {
+        return internalGetKeysFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder getKeysOrBuilder(
+          int index) {
+        if (keysBuilder_ == null) {
+          return keys_.get(index);  } else {
+          return keysBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public java.util.List<? extends quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> 
+           getKeysOrBuilderList() {
+        if (keysBuilder_ != null) {
+          return keysBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(keys_);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExpr.Builder addKeysBuilder() {
+        return internalGetKeysFieldBuilder().addBuilder(
+            quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ScalarExpr.Builder addKeysBuilder(
+          int index) {
+        return internalGetKeysFieldBuilder().addBuilder(
+            index, quantum.plan.proto.QuantumPlan.ScalarExpr.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.ScalarExpr keys = 2;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.ScalarExpr.Builder> 
+           getKeysBuilderList() {
+        return internalGetKeysFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ScalarExpr, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder, quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder> 
+          internalGetKeysFieldBuilder() {
+        if (keysBuilder_ == null) {
+          keysBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              quantum.plan.proto.QuantumPlan.ScalarExpr, quantum.plan.proto.QuantumPlan.ScalarExpr.Builder, quantum.plan.proto.QuantumPlan.ScalarExprOrBuilder>(
+                  keys_,
+                  ((bitField0_ & 0x00000002) != 0),
+                  getParentForChildren(),
+                  isClean());
+          keys_ = null;
+        }
+        return keysBuilder_;
+      }
+
+      private int numPartitions_ ;
+      /**
+       * <code>int32 num_partitions = 3;</code>
+       * @return The numPartitions.
+       */
+      @java.lang.Override
+      public int getNumPartitions() {
+        return numPartitions_;
+      }
+      /**
+       * <code>int32 num_partitions = 3;</code>
+       * @param value The numPartitions to set.
+       * @return This builder for chaining.
+       */
+      public Builder setNumPartitions(int value) {
+
+        numPartitions_ = value;
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int32 num_partitions = 3;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearNumPartitions() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        numPartitions_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:quantum.plan.proto.ExchangeNode)
+    }
+
+    // @@protoc_insertion_point(class_scope:quantum.plan.proto.ExchangeNode)
+    private static final quantum.plan.proto.QuantumPlan.ExchangeNode DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new quantum.plan.proto.QuantumPlan.ExchangeNode();
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExchangeNode getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<ExchangeNode>
+        PARSER = new com.google.protobuf.AbstractParser<ExchangeNode>() {
+      @java.lang.Override
+      public ExchangeNode parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<ExchangeNode> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ExchangeNode> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ExchangeNode getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface ExtensionNodeOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:quantum.plan.proto.ExtensionNode)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string extension_type = 1;</code>
+     * @return The extensionType.
+     */
+    java.lang.String getExtensionType();
+    /**
+     * <code>string extension_type = 1;</code>
+     * @return The bytes for extensionType.
+     */
+    com.google.protobuf.ByteString
+        getExtensionTypeBytes();
+
+    /**
+     * <code>bytes payload = 2;</code>
+     * @return The payload.
+     */
+    com.google.protobuf.ByteString getPayload();
+
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    java.util.List<quantum.plan.proto.QuantumPlan.PlanNode> 
+        getChildrenList();
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    quantum.plan.proto.QuantumPlan.PlanNode getChildren(int index);
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    int getChildrenCount();
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    java.util.List<? extends quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> 
+        getChildrenOrBuilderList();
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildrenOrBuilder(
+        int index);
+  }
+  /**
+   * <pre>
+   * Plugin operator: extension_type selects a registered OperatorFactory;
+   * payload is an opaque fragment (by convention a Substrait relation).
+   * </pre>
+   *
+   * Protobuf type {@code quantum.plan.proto.ExtensionNode}
+   */
+  public static final class ExtensionNode extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:quantum.plan.proto.ExtensionNode)
+      ExtensionNodeOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 33,
+        /* patch= */ 4,
+        /* suffix= */ "",
+        "ExtensionNode");
+    }
+    // Use ExtensionNode.newBuilder() to construct.
+    private ExtensionNode(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private ExtensionNode() {
+      extensionType_ = "";
+      payload_ = com.google.protobuf.ByteString.EMPTY;
+      children_ = java.util.Collections.emptyList();
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExtensionNode_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExtensionNode_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              quantum.plan.proto.QuantumPlan.ExtensionNode.class, quantum.plan.proto.QuantumPlan.ExtensionNode.Builder.class);
+    }
+
+    public static final int EXTENSION_TYPE_FIELD_NUMBER = 1;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object extensionType_ = "";
+    /**
+     * <code>string extension_type = 1;</code>
+     * @return The extensionType.
+     */
+    @java.lang.Override
+    public java.lang.String getExtensionType() {
+      java.lang.Object ref = extensionType_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        extensionType_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string extension_type = 1;</code>
+     * @return The bytes for extensionType.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getExtensionTypeBytes() {
+      java.lang.Object ref = extensionType_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        extensionType_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int PAYLOAD_FIELD_NUMBER = 2;
+    private com.google.protobuf.ByteString payload_ = com.google.protobuf.ByteString.EMPTY;
+    /**
+     * <code>bytes payload = 2;</code>
+     * @return The payload.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString getPayload() {
+      return payload_;
+    }
+
+    public static final int CHILDREN_FIELD_NUMBER = 3;
+    @SuppressWarnings("serial")
+    private java.util.List<quantum.plan.proto.QuantumPlan.PlanNode> children_;
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    @java.lang.Override
+    public java.util.List<quantum.plan.proto.QuantumPlan.PlanNode> getChildrenList() {
+      return children_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    @java.lang.Override
+    public java.util.List<? extends quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> 
+        getChildrenOrBuilderList() {
+      return children_;
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    @java.lang.Override
+    public int getChildrenCount() {
+      return children_.size();
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PlanNode getChildren(int index) {
+      return children_.get(index);
+    }
+    /**
+     * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildrenOrBuilder(
+        int index) {
+      return children_.get(index);
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(extensionType_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, extensionType_);
+      }
+      if (!payload_.isEmpty()) {
+        output.writeBytes(2, payload_);
+      }
+      for (int i = 0; i < children_.size(); i++) {
+        output.writeMessage(3, children_.get(i));
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(extensionType_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, extensionType_);
+      }
+      if (!payload_.isEmpty()) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(2, payload_);
+      }
+      for (int i = 0; i < children_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(3, children_.get(i));
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof quantum.plan.proto.QuantumPlan.ExtensionNode)) {
+        return super.equals(obj);
+      }
+      quantum.plan.proto.QuantumPlan.ExtensionNode other = (quantum.plan.proto.QuantumPlan.ExtensionNode) obj;
+
+      if (!getExtensionType()
+          .equals(other.getExtensionType())) return false;
+      if (!getPayload()
+          .equals(other.getPayload())) return false;
+      if (!getChildrenList()
+          .equals(other.getChildrenList())) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + EXTENSION_TYPE_FIELD_NUMBER;
+      hash = (53 * hash) + getExtensionType().hashCode();
+      hash = (37 * hash) + PAYLOAD_FIELD_NUMBER;
+      hash = (53 * hash) + getPayload().hashCode();
+      if (getChildrenCount() > 0) {
+        hash = (37 * hash) + CHILDREN_FIELD_NUMBER;
+        hash = (53 * hash) + getChildrenList().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(quantum.plan.proto.QuantumPlan.ExtensionNode prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * <pre>
+     * Plugin operator: extension_type selects a registered OperatorFactory;
+     * payload is an opaque fragment (by convention a Substrait relation).
+     * </pre>
+     *
+     * Protobuf type {@code quantum.plan.proto.ExtensionNode}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:quantum.plan.proto.ExtensionNode)
+        quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExtensionNode_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExtensionNode_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                quantum.plan.proto.QuantumPlan.ExtensionNode.class, quantum.plan.proto.QuantumPlan.ExtensionNode.Builder.class);
+      }
+
+      // Construct using quantum.plan.proto.QuantumPlan.ExtensionNode.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        extensionType_ = "";
+        payload_ = com.google.protobuf.ByteString.EMPTY;
+        if (childrenBuilder_ == null) {
+          children_ = java.util.Collections.emptyList();
+        } else {
+          children_ = null;
+          childrenBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000004);
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return quantum.plan.proto.QuantumPlan.internal_static_quantum_plan_proto_ExtensionNode_descriptor;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExtensionNode getDefaultInstanceForType() {
+        return quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExtensionNode build() {
+        quantum.plan.proto.QuantumPlan.ExtensionNode result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExtensionNode buildPartial() {
+        quantum.plan.proto.QuantumPlan.ExtensionNode result = new quantum.plan.proto.QuantumPlan.ExtensionNode(this);
+        buildPartialRepeatedFields(result);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartialRepeatedFields(quantum.plan.proto.QuantumPlan.ExtensionNode result) {
+        if (childrenBuilder_ == null) {
+          if (((bitField0_ & 0x00000004) != 0)) {
+            children_ = java.util.Collections.unmodifiableList(children_);
+            bitField0_ = (bitField0_ & ~0x00000004);
+          }
+          result.children_ = children_;
+        } else {
+          result.children_ = childrenBuilder_.build();
+        }
+      }
+
+      private void buildPartial0(quantum.plan.proto.QuantumPlan.ExtensionNode result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.extensionType_ = extensionType_;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.payload_ = payload_;
+        }
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof quantum.plan.proto.QuantumPlan.ExtensionNode) {
+          return mergeFrom((quantum.plan.proto.QuantumPlan.ExtensionNode)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(quantum.plan.proto.QuantumPlan.ExtensionNode other) {
+        if (other == quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance()) return this;
+        if (!other.getExtensionType().isEmpty()) {
+          extensionType_ = other.extensionType_;
+          bitField0_ |= 0x00000001;
+          onChanged();
+        }
+        if (!other.getPayload().isEmpty()) {
+          setPayload(other.getPayload());
+        }
+        if (childrenBuilder_ == null) {
+          if (!other.children_.isEmpty()) {
+            if (children_.isEmpty()) {
+              children_ = other.children_;
+              bitField0_ = (bitField0_ & ~0x00000004);
+            } else {
+              ensureChildrenIsMutable();
+              children_.addAll(other.children_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.children_.isEmpty()) {
+            if (childrenBuilder_.isEmpty()) {
+              childrenBuilder_.dispose();
+              childrenBuilder_ = null;
+              children_ = other.children_;
+              bitField0_ = (bitField0_ & ~0x00000004);
+              childrenBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   internalGetChildrenFieldBuilder() : null;
+            } else {
+              childrenBuilder_.addAllMessages(other.children_);
+            }
+          }
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                extensionType_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 10
+              case 18: {
+                payload_ = input.readBytes();
+                bitField0_ |= 0x00000002;
+                break;
+              } // case 18
+              case 26: {
+                quantum.plan.proto.QuantumPlan.PlanNode m =
+                    input.readMessage(
+                        quantum.plan.proto.QuantumPlan.PlanNode.parser(),
+                        extensionRegistry);
+                if (childrenBuilder_ == null) {
+                  ensureChildrenIsMutable();
+                  children_.add(m);
+                } else {
+                  childrenBuilder_.addMessage(m);
+                }
+                break;
+              } // case 26
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private java.lang.Object extensionType_ = "";
+      /**
+       * <code>string extension_type = 1;</code>
+       * @return The extensionType.
+       */
+      public java.lang.String getExtensionType() {
+        java.lang.Object ref = extensionType_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          extensionType_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string extension_type = 1;</code>
+       * @return The bytes for extensionType.
+       */
+      public com.google.protobuf.ByteString
+          getExtensionTypeBytes() {
+        java.lang.Object ref = extensionType_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          extensionType_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string extension_type = 1;</code>
+       * @param value The extensionType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExtensionType(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        extensionType_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string extension_type = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearExtensionType() {
+        extensionType_ = getDefaultInstance().getExtensionType();
+        bitField0_ = (bitField0_ & ~0x00000001);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string extension_type = 1;</code>
+       * @param value The bytes for extensionType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExtensionTypeBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        extensionType_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+
+      private com.google.protobuf.ByteString payload_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>bytes payload = 2;</code>
+       * @return The payload.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString getPayload() {
+        return payload_;
+      }
+      /**
+       * <code>bytes payload = 2;</code>
+       * @param value The payload to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPayload(com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        payload_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bytes payload = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearPayload() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        payload_ = getDefaultInstance().getPayload();
+        onChanged();
+        return this;
+      }
+
+      private java.util.List<quantum.plan.proto.QuantumPlan.PlanNode> children_ =
+        java.util.Collections.emptyList();
+      private void ensureChildrenIsMutable() {
+        if (!((bitField0_ & 0x00000004) != 0)) {
+          children_ = new java.util.ArrayList<quantum.plan.proto.QuantumPlan.PlanNode>(children_);
+          bitField0_ |= 0x00000004;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> childrenBuilder_;
+
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.PlanNode> getChildrenList() {
+        if (childrenBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(children_);
+        } else {
+          return childrenBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public int getChildrenCount() {
+        if (childrenBuilder_ == null) {
+          return children_.size();
+        } else {
+          return childrenBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode getChildren(int index) {
+        if (childrenBuilder_ == null) {
+          return children_.get(index);
+        } else {
+          return childrenBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder setChildren(
+          int index, quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childrenBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureChildrenIsMutable();
+          children_.set(index, value);
+          onChanged();
+        } else {
+          childrenBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder setChildren(
+          int index, quantum.plan.proto.QuantumPlan.PlanNode.Builder builderForValue) {
+        if (childrenBuilder_ == null) {
+          ensureChildrenIsMutable();
+          children_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          childrenBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder addChildren(quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childrenBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureChildrenIsMutable();
+          children_.add(value);
+          onChanged();
+        } else {
+          childrenBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder addChildren(
+          int index, quantum.plan.proto.QuantumPlan.PlanNode value) {
+        if (childrenBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureChildrenIsMutable();
+          children_.add(index, value);
+          onChanged();
+        } else {
+          childrenBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder addChildren(
+          quantum.plan.proto.QuantumPlan.PlanNode.Builder builderForValue) {
+        if (childrenBuilder_ == null) {
+          ensureChildrenIsMutable();
+          children_.add(builderForValue.build());
+          onChanged();
+        } else {
+          childrenBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder addChildren(
+          int index, quantum.plan.proto.QuantumPlan.PlanNode.Builder builderForValue) {
+        if (childrenBuilder_ == null) {
+          ensureChildrenIsMutable();
+          children_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          childrenBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder addAllChildren(
+          java.lang.Iterable<? extends quantum.plan.proto.QuantumPlan.PlanNode> values) {
+        if (childrenBuilder_ == null) {
+          ensureChildrenIsMutable();
+          com.google.protobuf.AbstractMessageLite.Builder.addAll(
+              values, children_);
+          onChanged();
+        } else {
+          childrenBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder clearChildren() {
+        if (childrenBuilder_ == null) {
+          children_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000004);
+          onChanged();
+        } else {
+          childrenBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public Builder removeChildren(int index) {
+        if (childrenBuilder_ == null) {
+          ensureChildrenIsMutable();
+          children_.remove(index);
+          onChanged();
+        } else {
+          childrenBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode.Builder getChildrenBuilder(
+          int index) {
+        return internalGetChildrenFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder getChildrenOrBuilder(
+          int index) {
+        if (childrenBuilder_ == null) {
+          return children_.get(index);  } else {
+          return childrenBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public java.util.List<? extends quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> 
+           getChildrenOrBuilderList() {
+        if (childrenBuilder_ != null) {
+          return childrenBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(children_);
+        }
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode.Builder addChildrenBuilder() {
+        return internalGetChildrenFieldBuilder().addBuilder(
+            quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.PlanNode.Builder addChildrenBuilder(
+          int index) {
+        return internalGetChildrenFieldBuilder().addBuilder(
+            index, quantum.plan.proto.QuantumPlan.PlanNode.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .quantum.plan.proto.PlanNode children = 3;</code>
+       */
+      public java.util.List<quantum.plan.proto.QuantumPlan.PlanNode.Builder> 
+           getChildrenBuilderList() {
+        return internalGetChildrenFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder> 
+          internalGetChildrenFieldBuilder() {
+        if (childrenBuilder_ == null) {
+          childrenBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              quantum.plan.proto.QuantumPlan.PlanNode, quantum.plan.proto.QuantumPlan.PlanNode.Builder, quantum.plan.proto.QuantumPlan.PlanNodeOrBuilder>(
+                  children_,
+                  ((bitField0_ & 0x00000004) != 0),
+                  getParentForChildren(),
+                  isClean());
+          children_ = null;
+        }
+        return childrenBuilder_;
+      }
+
+      // @@protoc_insertion_point(builder_scope:quantum.plan.proto.ExtensionNode)
+    }
+
+    // @@protoc_insertion_point(class_scope:quantum.plan.proto.ExtensionNode)
+    private static final quantum.plan.proto.QuantumPlan.ExtensionNode DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new quantum.plan.proto.QuantumPlan.ExtensionNode();
+    }
+
+    public static quantum.plan.proto.QuantumPlan.ExtensionNode getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<ExtensionNode>
+        PARSER = new com.google.protobuf.AbstractParser<ExtensionNode>() {
+      @java.lang.Override
+      public ExtensionNode parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<ExtensionNode> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ExtensionNode> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ExtensionNode getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface PlanNodeOrBuilder extends
       // @@protoc_insertion_point(interface_extends:quantum.plan.proto.PlanNode)
       com.google.protobuf.MessageOrBuilder {
@@ -19580,6 +21672,36 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
      */
     quantum.plan.proto.QuantumPlan.UnionAllNodeOrBuilder getUnionAllOrBuilder();
 
+    /**
+     * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+     * @return Whether the extension field is set.
+     */
+    boolean hasExtension();
+    /**
+     * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+     * @return The extension.
+     */
+    quantum.plan.proto.QuantumPlan.ExtensionNode getExtension();
+    /**
+     * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+     */
+    quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder getExtensionOrBuilder();
+
+    /**
+     * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+     * @return Whether the exchange field is set.
+     */
+    boolean hasExchange();
+    /**
+     * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+     * @return The exchange.
+     */
+    quantum.plan.proto.QuantumPlan.ExchangeNode getExchange();
+    /**
+     * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+     */
+    quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder getExchangeOrBuilder();
+
     quantum.plan.proto.QuantumPlan.PlanNode.NodeCase getNodeCase();
   }
   /**
@@ -19634,6 +21756,8 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       LIMIT(7),
       SORT(8),
       UNION_ALL(9),
+      EXTENSION(10),
+      EXCHANGE(11),
       NODE_NOT_SET(0);
       private final int value;
       private NodeCase(int value) {
@@ -19660,6 +21784,8 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           case 7: return LIMIT;
           case 8: return SORT;
           case 9: return UNION_ALL;
+          case 10: return EXTENSION;
+          case 11: return EXCHANGE;
           case 0: return NODE_NOT_SET;
           default: return null;
         }
@@ -19954,6 +22080,68 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       return quantum.plan.proto.QuantumPlan.UnionAllNode.getDefaultInstance();
     }
 
+    public static final int EXTENSION_FIELD_NUMBER = 10;
+    /**
+     * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+     * @return Whether the extension field is set.
+     */
+    @java.lang.Override
+    public boolean hasExtension() {
+      return nodeCase_ == 10;
+    }
+    /**
+     * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+     * @return The extension.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ExtensionNode getExtension() {
+      if (nodeCase_ == 10) {
+         return (quantum.plan.proto.QuantumPlan.ExtensionNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+    }
+    /**
+     * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder getExtensionOrBuilder() {
+      if (nodeCase_ == 10) {
+         return (quantum.plan.proto.QuantumPlan.ExtensionNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+    }
+
+    public static final int EXCHANGE_FIELD_NUMBER = 11;
+    /**
+     * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+     * @return Whether the exchange field is set.
+     */
+    @java.lang.Override
+    public boolean hasExchange() {
+      return nodeCase_ == 11;
+    }
+    /**
+     * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+     * @return The exchange.
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ExchangeNode getExchange() {
+      if (nodeCase_ == 11) {
+         return (quantum.plan.proto.QuantumPlan.ExchangeNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+    }
+    /**
+     * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+     */
+    @java.lang.Override
+    public quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder getExchangeOrBuilder() {
+      if (nodeCase_ == 11) {
+         return (quantum.plan.proto.QuantumPlan.ExchangeNode) node_;
+      }
+      return quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -19994,6 +22182,12 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       }
       if (nodeCase_ == 9) {
         output.writeMessage(9, (quantum.plan.proto.QuantumPlan.UnionAllNode) node_);
+      }
+      if (nodeCase_ == 10) {
+        output.writeMessage(10, (quantum.plan.proto.QuantumPlan.ExtensionNode) node_);
+      }
+      if (nodeCase_ == 11) {
+        output.writeMessage(11, (quantum.plan.proto.QuantumPlan.ExchangeNode) node_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -20039,6 +22233,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       if (nodeCase_ == 9) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(9, (quantum.plan.proto.QuantumPlan.UnionAllNode) node_);
+      }
+      if (nodeCase_ == 10) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(10, (quantum.plan.proto.QuantumPlan.ExtensionNode) node_);
+      }
+      if (nodeCase_ == 11) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(11, (quantum.plan.proto.QuantumPlan.ExchangeNode) node_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -20093,6 +22295,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           if (!getUnionAll()
               .equals(other.getUnionAll())) return false;
           break;
+        case 10:
+          if (!getExtension()
+              .equals(other.getExtension())) return false;
+          break;
+        case 11:
+          if (!getExchange()
+              .equals(other.getExchange())) return false;
+          break;
         case 0:
         default:
       }
@@ -20143,6 +22353,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         case 9:
           hash = (37 * hash) + UNION_ALL_FIELD_NUMBER;
           hash = (53 * hash) + getUnionAll().hashCode();
+          break;
+        case 10:
+          hash = (37 * hash) + EXTENSION_FIELD_NUMBER;
+          hash = (53 * hash) + getExtension().hashCode();
+          break;
+        case 11:
+          hash = (37 * hash) + EXCHANGE_FIELD_NUMBER;
+          hash = (53 * hash) + getExchange().hashCode();
           break;
         case 0:
         default:
@@ -20305,6 +22523,12 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         if (unionAllBuilder_ != null) {
           unionAllBuilder_.clear();
         }
+        if (extensionBuilder_ != null) {
+          extensionBuilder_.clear();
+        }
+        if (exchangeBuilder_ != null) {
+          exchangeBuilder_.clear();
+        }
         nodeCase_ = 0;
         node_ = null;
         return this;
@@ -20382,6 +22606,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
             unionAllBuilder_ != null) {
           result.node_ = unionAllBuilder_.build();
         }
+        if (nodeCase_ == 10 &&
+            extensionBuilder_ != null) {
+          result.node_ = extensionBuilder_.build();
+        }
+        if (nodeCase_ == 11 &&
+            exchangeBuilder_ != null) {
+          result.node_ = exchangeBuilder_.build();
+        }
       }
 
       @java.lang.Override
@@ -20431,6 +22663,14 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
           }
           case UNION_ALL: {
             mergeUnionAll(other.getUnionAll());
+            break;
+          }
+          case EXTENSION: {
+            mergeExtension(other.getExtension());
+            break;
+          }
+          case EXCHANGE: {
+            mergeExchange(other.getExchange());
             break;
           }
           case NODE_NOT_SET: {
@@ -20526,6 +22766,20 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
                 nodeCase_ = 9;
                 break;
               } // case 74
+              case 82: {
+                input.readMessage(
+                    internalGetExtensionFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                nodeCase_ = 10;
+                break;
+              } // case 82
+              case 90: {
+                input.readMessage(
+                    internalGetExchangeFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                nodeCase_ = 11;
+                break;
+              } // case 90
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -21836,6 +24090,290 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
         return unionAllBuilder_;
       }
 
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ExtensionNode, quantum.plan.proto.QuantumPlan.ExtensionNode.Builder, quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder> extensionBuilder_;
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       * @return Whether the extension field is set.
+       */
+      @java.lang.Override
+      public boolean hasExtension() {
+        return nodeCase_ == 10;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       * @return The extension.
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExtensionNode getExtension() {
+        if (extensionBuilder_ == null) {
+          if (nodeCase_ == 10) {
+            return (quantum.plan.proto.QuantumPlan.ExtensionNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+        } else {
+          if (nodeCase_ == 10) {
+            return extensionBuilder_.getMessage();
+          }
+          return quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      public Builder setExtension(quantum.plan.proto.QuantumPlan.ExtensionNode value) {
+        if (extensionBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          node_ = value;
+          onChanged();
+        } else {
+          extensionBuilder_.setMessage(value);
+        }
+        nodeCase_ = 10;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      public Builder setExtension(
+          quantum.plan.proto.QuantumPlan.ExtensionNode.Builder builderForValue) {
+        if (extensionBuilder_ == null) {
+          node_ = builderForValue.build();
+          onChanged();
+        } else {
+          extensionBuilder_.setMessage(builderForValue.build());
+        }
+        nodeCase_ = 10;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      public Builder mergeExtension(quantum.plan.proto.QuantumPlan.ExtensionNode value) {
+        if (extensionBuilder_ == null) {
+          if (nodeCase_ == 10 &&
+              node_ != quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance()) {
+            node_ = quantum.plan.proto.QuantumPlan.ExtensionNode.newBuilder((quantum.plan.proto.QuantumPlan.ExtensionNode) node_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            node_ = value;
+          }
+          onChanged();
+        } else {
+          if (nodeCase_ == 10) {
+            extensionBuilder_.mergeFrom(value);
+          } else {
+            extensionBuilder_.setMessage(value);
+          }
+        }
+        nodeCase_ = 10;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      public Builder clearExtension() {
+        if (extensionBuilder_ == null) {
+          if (nodeCase_ == 10) {
+            nodeCase_ = 0;
+            node_ = null;
+            onChanged();
+          }
+        } else {
+          if (nodeCase_ == 10) {
+            nodeCase_ = 0;
+            node_ = null;
+          }
+          extensionBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ExtensionNode.Builder getExtensionBuilder() {
+        return internalGetExtensionFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder getExtensionOrBuilder() {
+        if ((nodeCase_ == 10) && (extensionBuilder_ != null)) {
+          return extensionBuilder_.getMessageOrBuilder();
+        } else {
+          if (nodeCase_ == 10) {
+            return (quantum.plan.proto.QuantumPlan.ExtensionNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.ExtensionNode extension = 10;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ExtensionNode, quantum.plan.proto.QuantumPlan.ExtensionNode.Builder, quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder> 
+          internalGetExtensionFieldBuilder() {
+        if (extensionBuilder_ == null) {
+          if (!(nodeCase_ == 10)) {
+            node_ = quantum.plan.proto.QuantumPlan.ExtensionNode.getDefaultInstance();
+          }
+          extensionBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.ExtensionNode, quantum.plan.proto.QuantumPlan.ExtensionNode.Builder, quantum.plan.proto.QuantumPlan.ExtensionNodeOrBuilder>(
+                  (quantum.plan.proto.QuantumPlan.ExtensionNode) node_,
+                  getParentForChildren(),
+                  isClean());
+          node_ = null;
+        }
+        nodeCase_ = 10;
+        onChanged();
+        return extensionBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ExchangeNode, quantum.plan.proto.QuantumPlan.ExchangeNode.Builder, quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder> exchangeBuilder_;
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       * @return Whether the exchange field is set.
+       */
+      @java.lang.Override
+      public boolean hasExchange() {
+        return nodeCase_ == 11;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       * @return The exchange.
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExchangeNode getExchange() {
+        if (exchangeBuilder_ == null) {
+          if (nodeCase_ == 11) {
+            return (quantum.plan.proto.QuantumPlan.ExchangeNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+        } else {
+          if (nodeCase_ == 11) {
+            return exchangeBuilder_.getMessage();
+          }
+          return quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      public Builder setExchange(quantum.plan.proto.QuantumPlan.ExchangeNode value) {
+        if (exchangeBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          node_ = value;
+          onChanged();
+        } else {
+          exchangeBuilder_.setMessage(value);
+        }
+        nodeCase_ = 11;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      public Builder setExchange(
+          quantum.plan.proto.QuantumPlan.ExchangeNode.Builder builderForValue) {
+        if (exchangeBuilder_ == null) {
+          node_ = builderForValue.build();
+          onChanged();
+        } else {
+          exchangeBuilder_.setMessage(builderForValue.build());
+        }
+        nodeCase_ = 11;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      public Builder mergeExchange(quantum.plan.proto.QuantumPlan.ExchangeNode value) {
+        if (exchangeBuilder_ == null) {
+          if (nodeCase_ == 11 &&
+              node_ != quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance()) {
+            node_ = quantum.plan.proto.QuantumPlan.ExchangeNode.newBuilder((quantum.plan.proto.QuantumPlan.ExchangeNode) node_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            node_ = value;
+          }
+          onChanged();
+        } else {
+          if (nodeCase_ == 11) {
+            exchangeBuilder_.mergeFrom(value);
+          } else {
+            exchangeBuilder_.setMessage(value);
+          }
+        }
+        nodeCase_ = 11;
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      public Builder clearExchange() {
+        if (exchangeBuilder_ == null) {
+          if (nodeCase_ == 11) {
+            nodeCase_ = 0;
+            node_ = null;
+            onChanged();
+          }
+        } else {
+          if (nodeCase_ == 11) {
+            nodeCase_ = 0;
+            node_ = null;
+          }
+          exchangeBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      public quantum.plan.proto.QuantumPlan.ExchangeNode.Builder getExchangeBuilder() {
+        return internalGetExchangeFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      @java.lang.Override
+      public quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder getExchangeOrBuilder() {
+        if ((nodeCase_ == 11) && (exchangeBuilder_ != null)) {
+          return exchangeBuilder_.getMessageOrBuilder();
+        } else {
+          if (nodeCase_ == 11) {
+            return (quantum.plan.proto.QuantumPlan.ExchangeNode) node_;
+          }
+          return quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.quantum.plan.proto.ExchangeNode exchange = 11;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          quantum.plan.proto.QuantumPlan.ExchangeNode, quantum.plan.proto.QuantumPlan.ExchangeNode.Builder, quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder> 
+          internalGetExchangeFieldBuilder() {
+        if (exchangeBuilder_ == null) {
+          if (!(nodeCase_ == 11)) {
+            node_ = quantum.plan.proto.QuantumPlan.ExchangeNode.getDefaultInstance();
+          }
+          exchangeBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              quantum.plan.proto.QuantumPlan.ExchangeNode, quantum.plan.proto.QuantumPlan.ExchangeNode.Builder, quantum.plan.proto.QuantumPlan.ExchangeNodeOrBuilder>(
+                  (quantum.plan.proto.QuantumPlan.ExchangeNode) node_,
+                  getParentForChildren(),
+                  isClean());
+          node_ = null;
+        }
+        nodeCase_ = 11;
+        onChanged();
+        return exchangeBuilder_;
+      }
+
       // @@protoc_insertion_point(builder_scope:quantum.plan.proto.PlanNode)
     }
 
@@ -21983,6 +24521,16 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_quantum_plan_proto_UnionAllNode_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_quantum_plan_proto_ExchangeNode_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_quantum_plan_proto_ExchangeNode_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_quantum_plan_proto_ExtensionNode_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_quantum_plan_proto_ExtensionNode_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_quantum_plan_proto_PlanNode_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -22037,51 +24585,60 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       "ectNode\022+\n\005child\030\001 \001(\0132\034.quantum.plan.pr" +
       "oto.PlanNode\022-\n\005exprs\030\002 \003(\0132\036.quantum.pl" +
       "an.proto.ScalarExpr\022\024\n\014output_names\030\003 \003(" +
-      "\t\"\301\001\n\021HashAggregateNode\022+\n\005child\030\001 \001(\0132\034" +
+      "\t\"\326\001\n\021HashAggregateNode\022+\n\005child\030\001 \001(\0132\034" +
       ".quantum.plan.proto.PlanNode\0222\n\ngroup_ke" +
       "ys\030\002 \003(\0132\036.quantum.plan.proto.ScalarExpr" +
       "\0225\n\naggregates\030\003 \003(\0132!.quantum.plan.prot" +
-      "o.AggregateSpec\022\024\n\014output_names\030\004 \003(\t\"\227\002" +
-      "\n\014HashJoinNode\022+\n\005build\030\001 \001(\0132\034.quantum." +
-      "plan.proto.PlanNode\022+\n\005probe\030\002 \001(\0132\034.qua" +
-      "ntum.plan.proto.PlanNode\0222\n\nbuild_keys\030\003" +
-      " \003(\0132\036.quantum.plan.proto.ScalarExpr\0222\n\n" +
-      "probe_keys\030\004 \003(\0132\036.quantum.plan.proto.Sc" +
-      "alarExpr\022/\n\tjoin_type\030\005 \001(\0162\034.quantum.pl" +
-      "an.proto.JoinType\022\024\n\014output_names\030\006 \003(\t\"" +
-      "G\n\tLimitNode\022+\n\005child\030\001 \001(\0132\034.quantum.pl" +
-      "an.proto.PlanNode\022\r\n\005limit\030\002 \001(\003\"\215\001\n\010Sor" +
-      "tNode\022+\n\005child\030\001 \001(\0132\034.quantum.plan.prot" +
-      "o.PlanNode\022,\n\004keys\030\002 \003(\0132\036.quantum.plan." +
-      "proto.ScalarExpr\022\021\n\tascending\030\003 \003(\010\022\023\n\013n" +
-      "ulls_first\030\004 \003(\010\">\n\014UnionAllNode\022.\n\010chil" +
-      "dren\030\001 \003(\0132\034.quantum.plan.proto.PlanNode" +
-      "\"\344\003\n\010PlanNode\022,\n\004scan\030\001 \001(\0132\034.quantum.pl" +
-      "an.proto.ScanNodeH\000\0220\n\006filter\030\002 \001(\0132\036.qu" +
-      "antum.plan.proto.FilterNodeH\000\0222\n\007project" +
-      "\030\003 \001(\0132\037.quantum.plan.proto.ProjectNodeH" +
-      "\000\0229\n\010hash_agg\030\004 \001(\0132%.quantum.plan.proto" +
-      ".HashAggregateNodeH\000\0225\n\thash_join\030\005 \001(\0132" +
-      " .quantum.plan.proto.HashJoinNodeH\000\0225\n\tf" +
-      "ile_scan\030\006 \001(\0132 .quantum.plan.proto.File" +
-      "ScanNodeH\000\022.\n\005limit\030\007 \001(\0132\035.quantum.plan" +
-      ".proto.LimitNodeH\000\022,\n\004sort\030\010 \001(\0132\034.quant" +
-      "um.plan.proto.SortNodeH\000\0225\n\tunion_all\030\t " +
-      "\001(\0132 .quantum.plan.proto.UnionAllNodeH\000B" +
-      "\006\n\004node*Z\n\006TypeId\022\r\n\tTYPE_BOOL\020\000\022\016\n\nTYPE" +
-      "_INT32\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TYPE_FLOAT64" +
-      "\020\003\022\017\n\013TYPE_STRING\020\004*\240\001\n\014BinaryOpType\022\r\n\t" +
-      "BINOP_ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\tBINOP_MUL\020" +
-      "\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022\014\n\010BINOP_G" +
-      "T\020\005\022\r\n\tBINOP_LTE\020\006\022\r\n\tBINOP_GTE\020\007\022\r\n\tBIN" +
-      "OP_AND\020\010\022\014\n\010BINOP_OR\020\t*-\n\013UnaryOpType\022\014\n" +
-      "\010UNOP_NOT\020\000\022\020\n\014UNOP_IS_NULL\020\001*~\n\rAggrega" +
-      "teKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_COUNT_STAR\020\001\022" +
-      "\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007AGG_AVG\020\004\022\r" +
-      "\n\tAGG_COUNT\020\005\022\026\n\022AGG_COUNT_DISTINCT\020\006*Z\n" +
-      "\010JoinType\022\016\n\nJOIN_INNER\020\000\022\023\n\017JOIN_LEFT_O" +
-      "UTER\020\001\022\024\n\020JOIN_RIGHT_OUTER\020\002\022\023\n\017JOIN_FUL" +
-      "L_OUTER\020\003b\006proto3"
+      "o.AggregateSpec\022\024\n\014output_names\030\004 \003(\t\022\023\n" +
+      "\013parallelism\030\005 \001(\005\"\227\002\n\014HashJoinNode\022+\n\005b" +
+      "uild\030\001 \001(\0132\034.quantum.plan.proto.PlanNode" +
+      "\022+\n\005probe\030\002 \001(\0132\034.quantum.plan.proto.Pla" +
+      "nNode\0222\n\nbuild_keys\030\003 \003(\0132\036.quantum.plan" +
+      ".proto.ScalarExpr\0222\n\nprobe_keys\030\004 \003(\0132\036." +
+      "quantum.plan.proto.ScalarExpr\022/\n\tjoin_ty" +
+      "pe\030\005 \001(\0162\034.quantum.plan.proto.JoinType\022\024" +
+      "\n\014output_names\030\006 \003(\t\"G\n\tLimitNode\022+\n\005chi" +
+      "ld\030\001 \001(\0132\034.quantum.plan.proto.PlanNode\022\r" +
+      "\n\005limit\030\002 \001(\003\"\215\001\n\010SortNode\022+\n\005child\030\001 \001(" +
+      "\0132\034.quantum.plan.proto.PlanNode\022,\n\004keys\030" +
+      "\002 \003(\0132\036.quantum.plan.proto.ScalarExpr\022\021\n" +
+      "\tascending\030\003 \003(\010\022\023\n\013nulls_first\030\004 \003(\010\">\n" +
+      "\014UnionAllNode\022.\n\010children\030\001 \003(\0132\034.quantu" +
+      "m.plan.proto.PlanNode\"\201\001\n\014ExchangeNode\022+" +
+      "\n\005child\030\001 \001(\0132\034.quantum.plan.proto.PlanN" +
+      "ode\022,\n\004keys\030\002 \003(\0132\036.quantum.plan.proto.S" +
+      "calarExpr\022\026\n\016num_partitions\030\003 \001(\005\"h\n\rExt" +
+      "ensionNode\022\026\n\016extension_type\030\001 \001(\t\022\017\n\007pa" +
+      "yload\030\002 \001(\014\022.\n\010children\030\003 \003(\0132\034.quantum." +
+      "plan.proto.PlanNode\"\322\004\n\010PlanNode\022,\n\004scan" +
+      "\030\001 \001(\0132\034.quantum.plan.proto.ScanNodeH\000\0220" +
+      "\n\006filter\030\002 \001(\0132\036.quantum.plan.proto.Filt" +
+      "erNodeH\000\0222\n\007project\030\003 \001(\0132\037.quantum.plan" +
+      ".proto.ProjectNodeH\000\0229\n\010hash_agg\030\004 \001(\0132%" +
+      ".quantum.plan.proto.HashAggregateNodeH\000\022" +
+      "5\n\thash_join\030\005 \001(\0132 .quantum.plan.proto." +
+      "HashJoinNodeH\000\0225\n\tfile_scan\030\006 \001(\0132 .quan" +
+      "tum.plan.proto.FileScanNodeH\000\022.\n\005limit\030\007" +
+      " \001(\0132\035.quantum.plan.proto.LimitNodeH\000\022,\n" +
+      "\004sort\030\010 \001(\0132\034.quantum.plan.proto.SortNod" +
+      "eH\000\0225\n\tunion_all\030\t \001(\0132 .quantum.plan.pr" +
+      "oto.UnionAllNodeH\000\0226\n\textension\030\n \001(\0132!." +
+      "quantum.plan.proto.ExtensionNodeH\000\0224\n\010ex" +
+      "change\030\013 \001(\0132 .quantum.plan.proto.Exchan" +
+      "geNodeH\000B\006\n\004node*Z\n\006TypeId\022\r\n\tTYPE_BOOL\020" +
+      "\000\022\016\n\nTYPE_INT32\020\001\022\016\n\nTYPE_INT64\020\002\022\020\n\014TYP" +
+      "E_FLOAT64\020\003\022\017\n\013TYPE_STRING\020\004*\240\001\n\014BinaryO" +
+      "pType\022\r\n\tBINOP_ADD\020\000\022\r\n\tBINOP_SUB\020\001\022\r\n\tB" +
+      "INOP_MUL\020\002\022\014\n\010BINOP_EQ\020\003\022\014\n\010BINOP_LT\020\004\022\014" +
+      "\n\010BINOP_GT\020\005\022\r\n\tBINOP_LTE\020\006\022\r\n\tBINOP_GTE" +
+      "\020\007\022\r\n\tBINOP_AND\020\010\022\014\n\010BINOP_OR\020\t*-\n\013Unary" +
+      "OpType\022\014\n\010UNOP_NOT\020\000\022\020\n\014UNOP_IS_NULL\020\001*~" +
+      "\n\rAggregateKind\022\013\n\007AGG_SUM\020\000\022\022\n\016AGG_COUN" +
+      "T_STAR\020\001\022\013\n\007AGG_MIN\020\002\022\013\n\007AGG_MAX\020\003\022\013\n\007AG" +
+      "G_AVG\020\004\022\r\n\tAGG_COUNT\020\005\022\026\n\022AGG_COUNT_DIST" +
+      "INCT\020\006*Z\n\010JoinType\022\016\n\nJOIN_INNER\020\000\022\023\n\017JO" +
+      "IN_LEFT_OUTER\020\001\022\024\n\020JOIN_RIGHT_OUTER\020\002\022\023\n" +
+      "\017JOIN_FULL_OUTER\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -22176,7 +24733,7 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
     internal_static_quantum_plan_proto_HashAggregateNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_HashAggregateNode_descriptor,
-        new java.lang.String[] { "Child", "GroupKeys", "Aggregates", "OutputNames", });
+        new java.lang.String[] { "Child", "GroupKeys", "Aggregates", "OutputNames", "Parallelism", });
     internal_static_quantum_plan_proto_HashJoinNode_descriptor =
       getDescriptor().getMessageType(15);
     internal_static_quantum_plan_proto_HashJoinNode_fieldAccessorTable = new
@@ -22201,12 +24758,24 @@ public final class QuantumPlan extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_UnionAllNode_descriptor,
         new java.lang.String[] { "Children", });
-    internal_static_quantum_plan_proto_PlanNode_descriptor =
+    internal_static_quantum_plan_proto_ExchangeNode_descriptor =
       getDescriptor().getMessageType(19);
+    internal_static_quantum_plan_proto_ExchangeNode_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_quantum_plan_proto_ExchangeNode_descriptor,
+        new java.lang.String[] { "Child", "Keys", "NumPartitions", });
+    internal_static_quantum_plan_proto_ExtensionNode_descriptor =
+      getDescriptor().getMessageType(20);
+    internal_static_quantum_plan_proto_ExtensionNode_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_quantum_plan_proto_ExtensionNode_descriptor,
+        new java.lang.String[] { "ExtensionType", "Payload", "Children", });
+    internal_static_quantum_plan_proto_PlanNode_descriptor =
+      getDescriptor().getMessageType(21);
     internal_static_quantum_plan_proto_PlanNode_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_quantum_plan_proto_PlanNode_descriptor,
-        new java.lang.String[] { "Scan", "Filter", "Project", "HashAgg", "HashJoin", "FileScan", "Limit", "Sort", "UnionAll", "Node", });
+        new java.lang.String[] { "Scan", "Filter", "Project", "HashAgg", "HashJoin", "FileScan", "Limit", "Sort", "UnionAll", "Extension", "Exchange", "Node", });
     descriptor.resolveAllFeaturesImmutable();
   }
 

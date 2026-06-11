@@ -1612,4 +1612,35 @@ class QuantumExtensionTest {
     assertTrue(quantum.get.metrics.contains("nativeTimeMs"))
   }
 
+  /**
+   * P2.6: spark.quantum.agg.parallelism > 1 routes the GROUP BY through
+   * the native exchange + parallel partitioned aggregation. Verified via
+   * the native trace naming ParallelHashAggregateOperator.
+   */
+  @Test
+  def aggParallelismConfigEngagesParallelAggregate(): Unit = {
+    val s = spark
+    import s.implicits._
+    spark.conf.set("spark.quantum.agg.parallelism", "4")
+    try {
+      (0 until 5000).map(i => ((i % 97).toLong, i.toLong)).toDF("k", "v")
+        .createOrReplaceTempView("kv_par")
+      val rows = spark.sql(
+        "SELECT k, SUM(v) AS s, COUNT(*) AS c FROM kv_par GROUP BY k")
+        .collect().map(r => (r.getLong(0), r.getLong(1), r.getLong(2))).toSeq
+
+      assertEquals(97, rows.size)
+      val expect = (0 until 5000).groupBy(_ % 97).map { case (k, vs) =>
+        (k.toLong, vs.map(_.toLong).sum, vs.size.toLong)
+      }.toSet
+      assertEquals(expect, rows.toSet)
+
+      val trace = QuantumExec.lastTraceJson.get()
+      assertTrue(trace != null && trace.contains("ParallelHashAggregateOperator"),
+        s"expected the parallel aggregate in the trace; got $trace")
+    } finally {
+      spark.conf.set("spark.quantum.agg.parallelism", "0")
+    }
+  }
+
 }
