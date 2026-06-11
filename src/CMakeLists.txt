@@ -44,6 +44,7 @@ add_library(quantum_core SHARED
     io/ParquetReader.cpp
     io/PartitionedFileReader.cpp
     plan/Plan.cpp
+    plan/OperatorRegistry.cpp
     plan/PlanBuilder.cpp
     plan/PlanJson.cpp
     plan/PlanProto.cpp

@@ -319,6 +319,11 @@ void encodePlan(const PlanNode& node, proto::PlanNode* out) {
         } else if constexpr (std::is_same_v<T, std::unique_ptr<UnionAllNode>>) {
             auto* m = out->mutable_union_all();
             for (const auto& c : x->children) encodePlan(c, m->add_children());
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<ExtensionNode>>) {
+            auto* m = out->mutable_extension();
+            m->set_extension_type(x->extension_type);
+            m->set_payload(x->payload);
+            for (const auto& c : x->children) encodePlan(c, m->add_children());
         }
     }, node);
 }
@@ -405,6 +410,13 @@ PlanNode decodePlan(const proto::PlanNode& msg) {
         case proto::PlanNode::kUnionAll: {
             auto n = std::make_unique<UnionAllNode>();
             for (const auto& c : msg.union_all().children()) n->children.push_back(decodePlan(c));
+            return PlanNode{std::move(n)};
+        }
+        case proto::PlanNode::kExtension: {
+            auto n = std::make_unique<ExtensionNode>();
+            n->extension_type = msg.extension().extension_type();
+            n->payload        = msg.extension().payload();
+            for (const auto& c : msg.extension().children()) n->children.push_back(decodePlan(c));
             return PlanNode{std::move(n)};
         }
         case proto::PlanNode::NODE_NOT_SET:

@@ -71,9 +71,11 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 **Phase 6 — In progress**
 
+*Plugin API (6.2).* The open-core seam: `plan/OperatorRegistry` maps an extension type (e.g. `vendor.geo_join`) to an `OperatorFactory`; plans reference plugins via a new `ExtensionNode { extension_type, payload, children }` (IR + proto). `PlanBuilder` builds the children (metrics-wrapped like everything else), then hands `(MemoryManager, children, payload)` to the factory. The payload is opaque to the engine — by convention a serialized Substrait relation the plugin decodes itself; decoding *standard* Substrait rels into built-in IR remains on the roadmap. Plugin operators flow through proto round-trips, the C ABI, and the metrics trace with zero engine changes.
+
 *Observability (6.1).* `PlanBuilder` wraps every operator it builds in a `MetricsOperator` decorator (operators untouched; two `steady_clock` reads per batch) recording rows / batches / open-next-close timings into a per-query `QueryMetrics`. `q_result_trace_json` returns the structured trace (operators in build order, plan root last); `q_metrics_prometheus` exposes process-wide cumulative counters in Prometheus text format (`quantum_queries_total`, `quantum_rows_emitted_total`, `quantum_spills_total` — fed by the HashAggregate and Sort spill sites — and `quantum_exec_nanos_total`). `QuantumExec` captures the trace per query (`QuantumExec.lastTraceJson`); JNA surfaces both calls.
 
-**Tests** — 225 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
+**Tests** — 230 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -84,7 +86,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 225 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 230 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -162,7 +164,8 @@ Key invariants the codebase enforces:
 | 6 | AVX2 kernels measured on x86 hardware (hardware-dependent; arm64 dev box) | planned |
 | **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
 | **6** | Observability v1 — per-operator metrics (`MetricsOperator`), JSON query trace (`q_result_trace_json`), Prometheus counters (`q_metrics_prometheus`) | done |
-| 6 | Substrait plugin API (third-party native operators) | planned |
+| **6** | Plugin API — `OperatorRegistry` + `ExtensionNode` (opaque fragment payload, Substrait by convention); plugins compose with metrics/proto/C ABI | done |
+| 6 | Substrait schema integration — decode standard Substrait rels into built-in IR | planned |
 
 ## License
 

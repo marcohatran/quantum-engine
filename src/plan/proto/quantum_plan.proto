@@ -196,6 +196,14 @@ message UnionAllNode {
   repeated PlanNode children = 1;
 }
 
+// Plugin operator: extension_type selects a registered OperatorFactory;
+// payload is an opaque fragment (by convention a Substrait relation).
+message ExtensionNode {
+  string            extension_type = 1;
+  bytes             payload        = 2;
+  repeated PlanNode children       = 3;
+}
+
 message PlanNode {
   oneof node {
     ScanNode          scan       = 1;
@@ -207,5 +215,6 @@ message PlanNode {
     LimitNode         limit      = 7;
     SortNode          sort       = 8;
     UnionAllNode      union_all  = 9;
+    ExtensionNode     extension  = 10;
   }
 }

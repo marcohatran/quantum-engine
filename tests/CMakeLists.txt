@@ -34,6 +34,7 @@ add_executable(quantum_tests
     hash/test_hash_table.cpp
     spill/test_spill_file.cpp
     plan/test_file_scan_plan.cpp
+    plan/test_operator_registry.cpp
     plan/test_plan_builder.cpp
     plan/test_plan_proto.cpp
     bridge/test_quantum_c.cpp

@@ -1,5 +1,7 @@
 #include "plan/PlanBuilder.hpp"
 
+#include "plan/OperatorRegistry.hpp"
+
 #include <stdexcept>
 #include <utility>
 
@@ -296,6 +298,15 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
             return std::make_unique<SortOperator>(
                 mm_, build(n->child, catalog),
                 std::move(keys), n->ascending, n->nulls_first);
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<ExtensionNode>>) {
+            ExtensionContext ctx;
+            ctx.mm      = mm_;
+            ctx.payload = n->payload;
+            for (const auto& c : n->children) {
+                ctx.children.push_back(build(c, catalog));
+            }
+            return OperatorRegistry::instance().build(n->extension_type,
+                                                      std::move(ctx));
         } else if constexpr (std::is_same_v<T, std::unique_ptr<UnionAllNode>>) {
             std::vector<OperatorPtr> ops;
             ops.reserve(n->children.size());

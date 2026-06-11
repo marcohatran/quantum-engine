@@ -107,6 +107,7 @@ struct HashJoinNode;
 struct LimitNode;
 struct SortNode;
 struct UnionAllNode;
+struct ExtensionNode;
 
 using PlanNode = std::variant<
     ScanNode,
@@ -117,7 +118,8 @@ using PlanNode = std::variant<
     std::unique_ptr<HashJoinNode>,
     std::unique_ptr<LimitNode>,
     std::unique_ptr<SortNode>,
-    std::unique_ptr<UnionAllNode>
+    std::unique_ptr<UnionAllNode>,
+    std::unique_ptr<ExtensionNode>
 >;
 
 struct FilterNode {
@@ -151,6 +153,15 @@ struct SortNode {
 };
 
 struct UnionAllNode {
+    std::vector<PlanNode> children;
+};
+
+// Plugin operator (open-core seam). `extension_type` selects a factory in
+// the OperatorRegistry; `payload` is an opaque plan fragment the plugin
+// decodes itself — by convention a serialized Substrait relation.
+struct ExtensionNode {
+    std::string           extension_type;
+    std::string           payload;
     std::vector<PlanNode> children;
 };
 
