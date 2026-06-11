@@ -107,7 +107,19 @@ cmake --build --preset=release       # release build (benchmarks)
 cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 58 tests (JNA + Spark + Delta)
 ```
 
-Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
+Other presets: `release`, `relwithdebinfo`, `asan`.
+
+### Run the demo job
+
+```bash
+./scripts/run-demo.sh
+```
+
+Builds the JVM module and runs `quantum.demo.QuantumDemo`: a Spark SQL
+aggregation (`WHERE` → `GROUP BY` → `ORDER BY`) whose physical plan root is
+the native `Quantum` node. Prints the results, the translation label, the
+native per-operator trace, and the engine's Prometheus counters. Requires
+the debug native build and a JDK 17+ (auto-detects Homebrew openjdk@21). Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
 
 ## Architecture at a Glance
 
