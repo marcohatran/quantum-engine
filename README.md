@@ -145,6 +145,111 @@ PyPI's `pyspark` ships Scala **2.12** binaries, hence the cross-built jar
 go through Parquet (as the example does), which routes via the native
 `FileScanNode`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
 
+## Using the Engine
+
+### From Spark (Scala / Java)
+
+Attach the extension to a session — every query the strategy can translate
+executes on the C++ engine; everything else falls back to vanilla Spark with
+identical results:
+
+```scala
+val spark = SparkSession.builder()
+  .withExtensions(new quantum.spark.QuantumExtension())   // or:
+  // .config("spark.sql.extensions", "quantum.spark.QuantumExtension")
+  .getOrCreate()
+
+spark.read.parquet("/data/sales")
+  .createOrReplaceTempView("sales")
+spark.sql("""
+  SELECT region, COUNT(*) AS orders, SUM(amount) AS revenue
+  FROM sales WHERE amount > 100
+  GROUP BY region ORDER BY revenue DESC
+""").show()
+```
+
+Runtime requirements: the `quantum-engine-jvm` jar (plus `jna`,
+`protobuf-java`, and the arrow-java 15 jars on JDK 21) on the driver
+classpath, and `-Djna.library.path=<dir with libquantum_core>` in the driver
+JVM options. `scripts/run-demo.sh` is a working reference invocation.
+
+**What routes natively:** `SELECT … FROM A [JOIN B …] WHERE …
+[GROUP BY … HAVING …] ORDER BY … LIMIT …` plus `UNION ALL`, over
+LocalRelation, Parquet (single/multi-file/Hive-partitioned), Delta, and
+Iceberg sources — see *What's Implemented* for the exact predicate/aggregate
+surface. **How to check:** the physical plan's root is a `Quantum` node
+(`df.queryExecution.executedPlan`), `QuantumStrategy.lastTranslation`
+describes the claim (or names the reject reason), and
+`QuantumExec.lastTraceJson` carries the native per-operator trace.
+
+### From PySpark
+
+See the *PySpark* section under Build & Test — same extension, no Python
+bindings, jar must be the Scala 2.12 cross-build, file-based sources route
+natively (`./scripts/run-pyspark-demo.sh`).
+
+### Embedding via the C ABI
+
+`include/quantum/quantum_c.h` (+ `quantum_ipc.h`, `quantum_arrow.h`) is the
+stable surface for any host language:
+
+```c
+QEngine* eng = q_create_engine(64 * 1024 * 1024);          // memory budget
+q_register_source_ipc(eng, "kv", ipc_bytes, ipc_len);      // Arrow IPC stream
+QResult* res = q_execute(eng, plan_pb, plan_len);          // protobuf PlanNode
+// ... or q_execute_substrait(eng, plan, len) for a substrait.Plan
+uint8_t* out; size_t out_len;
+while (q_result_next_ipc(res, &out, &out_len) == 1) {      // one IPC buffer per batch
+    /* parse with any Arrow library, then */ q_ipc_free(out);
+}
+puts(q_result_trace_json(res));                            // per-operator trace
+q_destroy_result(res);                                     // folds global counters
+puts(q_metrics_prometheus());                              // cumulative counters
+q_destroy_engine(eng);
+```
+
+Plans are protobuf `PlanNode`s (`src/plan/proto/quantum_plan.proto`) or
+standard Substrait plans (`ReadRel(NamedTable)` resolves against registered
+sources). File-based plans (`FileScanNode { paths, format: parquet|delta|iceberg }`)
+need no registered sources — the engine does its own I/O.
+
+### Extending with plugin operators
+
+Register an `OperatorFactory` at startup and reference it from plans via
+`ExtensionNode { extension_type, payload, children }` — the payload is opaque
+to the engine (a serialized Substrait relation by convention):
+
+```cpp
+quantum::plan::OperatorRegistry::instance().registerFactory(
+    "vendor.geo_join", [](quantum::plan::ExtensionContext ctx) {
+        return std::make_unique<GeoJoinOperator>(
+            ctx.mm, std::move(ctx.children[0]), decodeFragment(ctx.payload));
+    });
+```
+
+Plugin operators inherit metrics, tracing, proto round-trips, and C-ABI
+execution with no engine changes.
+
+### Configuration
+
+| Setting | Where | Effect |
+|---|---|---|
+| `spark.quantum.agg.parallelism` | Spark conf | > 1 hash-partitions GROUP BY input and aggregates partitions in parallel on the engine scheduler (merge-free). Default 0 (serial; the int64 fast path usually wins below very large group counts). |
+| `QUANTUM_SCHEDULER_THREADS` | env | Worker-pool size for intra-operator parallelism. Default: half the hardware threads (Spark supplies task-level parallelism around the engine). |
+| `QUANTUM_PREFETCH` | env | `0` disables decode-ahead file prefetch (on by default). |
+| `QUANTUM_DISK_CACHE_DIR` | env (or `io::setDiskCacheDir`) | Local cache directory for object-store reads (`s3://`, `gs://`, `abfs://`): objects download once, immutable thereafter. Empty/unset disables. |
+
+### Observability
+
+- **Per-query trace** — `q_result_trace_json` / `QuantumExec.lastTraceJson`:
+  rows, batches, and open/next/close nanos per operator, plan root last.
+- **Prometheus** — `q_metrics_prometheus` /
+  `QuantumEngine.metricsPrometheus()`: `quantum_queries_total`,
+  `quantum_rows_emitted_total`, `quantum_spills_total`,
+  `quantum_exec_nanos_total` in text exposition format.
+- **Spark UI** — `QuantumExec` reports `numOutputRows` and `nativeTimeMs`
+  SQLMetrics in the SQL tab's plan graph.
+
 ## Architecture at a Glance
 
 ```
