@@ -8,7 +8,7 @@
 
 // Forward-declare Apache Arrow types so callers don't pull arrow headers.
 namespace arrow {
-class Table;
+class RecordBatchReader;
 namespace io { class RandomAccessFile; }
 }
 namespace parquet { namespace arrow { class FileReader; } }
@@ -17,11 +17,13 @@ namespace quantum {
 
 class MemoryManager;
 
-// Parquet reader on top of Apache Arrow's parquet-arrow API. Reads the
-// entire file into an Arrow Table at open() time, then yields each row
-// group / batch as a quantum ColumnBatch.
+// Streaming Parquet reader on top of Apache Arrow's parquet-arrow API.
+// Construction reads only the file footer (schema available immediately,
+// no data decoded); open() starts a RecordBatchReader that decodes
+// batchSize-row batches on demand, each converted once into engine
+// ColumnVectors. Peak memory is O(batch), not O(file).
 //
-// Phase 5.2 supports BOOL / INT32 / INT64 / FLOAT64 / STRING columns.
+// Supports BOOL / INT32 / INT64 / FLOAT64 / STRING columns.
 // Dictionary-encoded STRING columns are read back as plain STRING for now
 // (re-dict-encoding into the engine's DictStringBuilder layout is a
 // follow-up).
@@ -47,9 +49,9 @@ private:
     Schema            schema_;
 
     // Arrow handles. Held as pointers to keep the header light.
-    std::shared_ptr<arrow::Table>                table_;
-    size_t                                       cursor_ = 0;   // row offset
-    bool                                         open_   = false;
+    std::unique_ptr<parquet::arrow::FileReader> reader_;
+    std::shared_ptr<arrow::RecordBatchReader>   batchReader_;
+    bool                                        open_ = false;
 };
 
 } // namespace quantum

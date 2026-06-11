@@ -16,6 +16,7 @@
 
 #include "bridge/BridgeError.hpp"
 #include "bridge/Handles.hpp"
+#include "io/ArrowConvert.hpp"
 #include "common/Status.hpp"
 #include "memory/MemoryManager.hpp"
 #include "vector/ColumnVector.hpp"
@@ -38,85 +39,6 @@ auto guardedIpc(F&& f, decltype(f()) onError) noexcept -> decltype(f()) {
         bridge::setLastError("unknown C++ exception");
     }
     return onError;
-}
-
-// ---------------------------------------------------------------------------
-// Arrow array -> ColumnVector (deep copy into engine memory)
-// ---------------------------------------------------------------------------
-
-ColumnVector fromArrow(const arrow::Array& arr, MemoryManager* mm) {
-    const auto n = static_cast<size_t>(arr.length());
-    switch (arr.type_id()) {
-        case arrow::Type::INT64: {
-            const auto& a = static_cast<const arrow::Int64Array&>(arr);
-            ColumnVector out = ColumnVector::make(Int64, n, mm);
-            out.validity().setAllValid();
-            for (size_t i = 0; i < n; ++i) {
-                const auto j = static_cast<int64_t>(i);
-                out.typed<int64_t>()[i] = a.IsNull(j) ? 0 : a.Value(j);
-                out.validity().setValid(i, !a.IsNull(j));
-            }
-            return out;
-        }
-        case arrow::Type::INT32: {
-            const auto& a = static_cast<const arrow::Int32Array&>(arr);
-            ColumnVector out = ColumnVector::make(Int32, n, mm);
-            out.validity().setAllValid();
-            for (size_t i = 0; i < n; ++i) {
-                const auto j = static_cast<int64_t>(i);
-                out.typed<int32_t>()[i] = a.IsNull(j) ? 0 : a.Value(j);
-                out.validity().setValid(i, !a.IsNull(j));
-            }
-            return out;
-        }
-        case arrow::Type::DOUBLE: {
-            const auto& a = static_cast<const arrow::DoubleArray&>(arr);
-            ColumnVector out = ColumnVector::make(Float64, n, mm);
-            out.validity().setAllValid();
-            for (size_t i = 0; i < n; ++i) {
-                const auto j = static_cast<int64_t>(i);
-                out.typed<double>()[i] = a.IsNull(j) ? 0.0 : a.Value(j);
-                out.validity().setValid(i, !a.IsNull(j));
-            }
-            return out;
-        }
-        case arrow::Type::BOOL: {
-            const auto& a = static_cast<const arrow::BooleanArray&>(arr);
-            ColumnVector out = ColumnVector::make(Bool, n, mm);
-            out.validity().setAllValid();
-            for (size_t i = 0; i < n; ++i) {
-                const auto j = static_cast<int64_t>(i);
-                out.typed<uint8_t>()[i] =
-                    (!a.IsNull(j) && a.Value(j)) ? 1 : 0;
-                out.validity().setValid(i, !a.IsNull(j));
-            }
-            return out;
-        }
-        case arrow::Type::STRING: {
-            const auto& a = static_cast<const arrow::StringArray&>(arr);
-            StringBuilder sb(mm);
-            for (size_t i = 0; i < n; ++i) {
-                const auto j = static_cast<int64_t>(i);
-                if (a.IsNull(j)) sb.appendNull();
-                else             sb.append(a.GetView(j));
-            }
-            return sb.build();
-        }
-        case arrow::Type::LARGE_STRING: {
-            const auto& a = static_cast<const arrow::LargeStringArray&>(arr);
-            StringBuilder sb(mm);
-            for (size_t i = 0; i < n; ++i) {
-                const auto j = static_cast<int64_t>(i);
-                if (a.IsNull(j)) sb.appendNull();
-                else             sb.append(a.GetView(j));
-            }
-            return sb.build();
-        }
-        default:
-            raise(ErrorCode::NotImplemented,
-                  "q_register_source_ipc: unsupported Arrow type {}",
-                  arr.type()->ToString());
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +169,7 @@ extern "C" int q_register_source_ipc(QEngine*       engine,
             std::vector<ColumnVector> cols;
             cols.reserve(static_cast<size_t>(rb->num_columns()));
             for (int c = 0; c < rb->num_columns(); ++c) {
-                cols.push_back(fromArrow(*rb->column(c), engine->mm.get()));
+                cols.push_back(io::columnFromArrow(*rb->column(c), engine->mm.get()));
             }
             sink.emplace_back(std::move(cols),
                               PositionList::identity(

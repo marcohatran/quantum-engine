@@ -64,6 +64,7 @@ add_library(quantum_core SHARED
     operator/UnionAllOperator.cpp
     spill/SpillFile.cpp
     exec/TaskScheduler.cpp
+    io/ArrowConvert.cpp
     io/CsvReader.cpp
     io/DeltaTableReader.cpp
     io/IcebergTableReader.cpp
