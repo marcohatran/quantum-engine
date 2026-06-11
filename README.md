@@ -146,6 +146,60 @@ Key invariants the codebase enforces:
 - `FilterOperator` updates the position list only; no column data is copied or compacted. This is the engine's core performance invariant.
 - The pull-based operator interface uses `std::optional<ColumnBatch>` from `getNext()` (`nullopt` = end of stream).
 
+## Performance
+
+Measured with `scripts/run-perf-compare.sh` (Apple M-class, `local[1]`, snappy
+Parquet, `SELECT k, SUM(v), COUNT(*) … WHERE v > … GROUP BY k`, release build,
+result checksums identical):
+
+| Scale | Quantum | Vanilla Spark | |
+|---|---|---|---|
+| 2M rows / 200 groups | **121 ms** | 146 ms | Quantum 1.2× faster |
+| 10M rows / 1000 groups | 495 ms | **432 ms** | Spark 1.15× faster |
+
+Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
+~125 ms Parquet decode at plan-build + JNA/Spark overhead, ~61 ms scan batch
+slicing (a second copy of all data), ~42 ms filter, **~268 ms hash aggregation**.
+Spark wins at scale because whole-stage codegen fuses filter + aggregation into
+one JIT'd pass with a specialized long-key hash map, while Quantum still pays
+two extra full-data copies and a generic byte-key hash path per row.
+
+### Optimization plan
+
+**P0 — eliminate the copies** (~150 ms of 495)
+1. Zero-copy `ColumnRef`: give `ColumnVector` a non-owning view so
+   `ColumnRef::eval` stops `clone(mm)`-ing the key + aggregate input columns
+   on every batch.
+2. Streaming Parquet reader: replace the eager `ReadTable` + re-slicing with
+   `parquet::arrow::FileReader::GetRecordBatchReader` — decode each batch once,
+   on demand; peak memory drops from O(file) to O(batch).
+
+**P1 — specialize the aggregate hot path** (~200 ms of the 268)
+3. Int64 single-key fast path in `HashAggregateOperator` (mirror of the
+   existing `StringFastPath`): skip `KeyCodec` + `BytesHashTable` for one
+   `INT64`/`INT32` group key — what Spark's codegen generates.
+4. Pass base slot array + state offset into `AggregateFunction::update`
+   instead of rebuilding an offset-shifted `slots` vector per aggregate per
+   batch.
+
+**P2 — parallelism and fusion** (wins beyond parity)
+5. Row-group-parallel decode within a single file on the `TaskScheduler`
+   (the 6.3 multi-file fan-out, applied to row groups).
+6. Wire `HashAggregateNode.parallelism` from the Spark strategy
+   (config-gated) so the 6.4 exchange + parallel aggregation engages on
+   large inputs.
+7. Fuse the filter into the scan: evaluate predicates straight into the
+   position list without materializing the intermediate bool column.
+
+**P3 — SIMD on arm64**
+8. The SIMD kernels are AVX2-only and dormant on Apple Silicon; add NEON
+   variants (or verify autovectorization) for comparison + sum kernels,
+   then measure.
+
+Estimate: P0+P1 puts the 10M case around 250–300 ms — ahead of Spark — with
+P2 as headroom. Each step is independently measurable with the perf-compare
+tool and the per-operator trace.
+
 ## Roadmap
 
 | Phase | Deliverable | Status |
