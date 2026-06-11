@@ -40,6 +40,7 @@ add_executable(quantum_tests
     bridge/test_quantum_ipc.cpp
     io/test_csv_reader.cpp
     io/test_delta_table_reader.cpp
+    io/test_iceberg_table_reader.cpp
     io/test_filesystem.cpp
     io/test_parquet_reader.cpp
     e2e/test_pipeline_smoke.cpp
@@ -50,6 +51,7 @@ target_link_libraries(quantum_tests
         quantum_core
         GTest::gtest
         GTest::gtest_main
+        avro-cpp::avrocpp
 )
 
 target_include_directories(quantum_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)

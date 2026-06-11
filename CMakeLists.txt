@@ -35,6 +35,10 @@ list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/apache-arrow")
 find_package(Arrow CONFIG REQUIRED)
 find_package(Parquet CONFIG REQUIRED)
 
+# Avro (Iceberg manifest files), also from Homebrew.
+list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/avro-cpp")
+find_package(avro-cpp CONFIG REQUIRED)
+
 enable_testing()
 add_subdirectory(src)
 

@@ -38,6 +38,7 @@ add_library(quantum_core SHARED
     spill/SpillFile.cpp
     io/CsvReader.cpp
     io/DeltaTableReader.cpp
+    io/IcebergTableReader.cpp
     io/FileSystem.cpp
     io/ParquetReader.cpp
     io/PartitionedFileReader.cpp
@@ -70,6 +71,7 @@ target_link_libraries(quantum_core
         protobuf::libprotobuf
         Arrow::arrow_shared
         Parquet::parquet_shared
+        avro-cpp::avrocpp
 )
 
 target_compile_features(quantum_core PUBLIC cxx_std_20)

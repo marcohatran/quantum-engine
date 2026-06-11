@@ -13,6 +13,7 @@
 #include "expression/UnaryExpr.hpp"
 #include "io/ConcatFileReader.hpp"
 #include "io/DeltaTableReader.hpp"
+#include "io/IcebergTableReader.hpp"
 #include "io/ParquetReader.hpp"
 #include "io/PartitionedFileReader.hpp"
 #include "operator/AggregateFunction.hpp"
@@ -209,6 +210,15 @@ OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
                           "(got {})", n.paths.size());
                 }
                 auto reader = std::make_unique<DeltaTableReader>(n.paths.front(), mm_);
+                return std::make_unique<FileScanOperator>(mm_, std::move(reader));
+            }
+            if (n.format == "iceberg") {
+                if (n.paths.size() != 1) {
+                    raise(ErrorCode::InvalidArgument,
+                          "PlanBuilder: iceberg FileScanNode expects 1 table-root path "
+                          "(got {})", n.paths.size());
+                }
+                auto reader = std::make_unique<IcebergTableReader>(n.paths.front(), mm_);
                 return std::make_unique<FileScanOperator>(mm_, std::move(reader));
             }
             raise(ErrorCode::NotImplemented,
