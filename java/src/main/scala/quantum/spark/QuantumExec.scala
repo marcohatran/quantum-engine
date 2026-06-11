@@ -15,6 +15,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import quantum.QuantumEngine
@@ -62,8 +63,16 @@ case class QuantumExec(
     physicalIndex: Array[Int])
   extends LeafExecNode {
 
+  // Spark UI integration: these surface in the SQL tab's plan graph.
+  override lazy val metrics: Map[String, SQLMetric] = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "nativeTimeMs"  -> SQLMetrics.createTimingMetric(sparkContext, "native execution time"))
+
   override protected def doExecute(): RDD[InternalRow] = {
+    val t0   = System.nanoTime()
     val rows = runNative()
+    metrics("nativeTimeMs") += (System.nanoTime() - t0) / 1000000L
+    metrics("numOutputRows") += rows.size
     val proj = UnsafeProjection.create(output, output)
     val unsafe = rows.map(r => proj(r).copy())
     sparkContext.parallelize(unsafe, 1)

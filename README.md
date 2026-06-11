@@ -69,7 +69,11 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
-**Phase 6 — In progress**
+**Phase 6 — Complete** (7 slices; AVX2 measurement deferred — needs x86 hardware)
+
+The L6 observability & extension layer plus the parallelism groundwork: per-operator metrics with a JSON query trace and Prometheus counters, Spark UI `SQLMetrics` on `QuantumExec`, the open-core plugin registry, a task scheduler driving parallel multi-file Parquet decode, the in-process exchange operator with merge-free parallel partitioned aggregation, a Substrait decoder so external producers can target the engine, and AQE `LogicalQueryStage` peeling.
+
+*Spark UI metrics (6.7).* `QuantumExec` reports `SQLMetrics` (`numOutputRows`, `nativeTimeMs`), so native execution is visible in the Spark UI's SQL plan graph alongside the native-side trace from 6.1.
 
 *AQE `LogicalQueryStage` peeling (6.6).* When AQE re-optimizes after materializing a shuffle stage, the strategy now peels `LogicalQueryStage` as a leaf source — gated to PURE-reshuffle stages (`Repartition` / `RepartitionByExpression`), whose rows are raw child rows, collected from the already-finished stage at execution time (`PeelResult.sources` became lazy thunks for this). Stages containing partial aggregation decline: re-aggregating partial buffers (e.g. COUNT partials) under the original logical Aggregate would double-count. Net effect: `df.repartition(2, $"k").groupBy("k").sum("v")` ends with `Quantum` as the AQE *final* plan — the initial two-phase plan is declined, and re-planning over the materialized stage claims the whole aggregate.
 
@@ -83,7 +87,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Observability (6.1).* `PlanBuilder` wraps every operator it builds in a `MetricsOperator` decorator (operators untouched; two `steady_clock` reads per batch) recording rows / batches / open-next-close timings into a per-query `QueryMetrics`. `q_result_trace_json` returns the structured trace (operators in build order, plan root last); `q_metrics_prometheus` exposes process-wide cumulative counters in Prometheus text format (`quantum_queries_total`, `quantum_rows_emitted_total`, `quantum_spills_total` — fed by the HashAggregate and Sort spill sites — and `quantum_exec_nanos_total`). `QuantumExec` captures the trace per query (`QuantumExec.lastTraceJson`); JNA surfaces both calls.
 
-**Tests** — 244 C++ tests + 57 JVM tests (3 EngineEndToEnd + 1 Delta + 53 strategy / agg / predicate / join / source-shape).
+**Tests** — 244 C++ tests + 58 JVM tests (3 EngineEndToEnd + 1 Delta + 54 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -100,7 +104,7 @@ cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
 
 # JVM bridge (requires JDK 17+, Maven, Scala 2.13 + Spark 3.5 + Delta 3.2)
-cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 57 tests (JNA + Spark + Delta)
+cd java && JAVA_HOME=/path/to/jdk-21 mvn test    # 58 tests (JNA + Spark + Delta)
 ```
 
 Other presets: `release`, `relwithdebinfo`, `asan`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
@@ -173,7 +177,7 @@ Key invariants the codebase enforces:
 | **6** | Exchange operator — `ExchangeNode` hash repartition + `ParallelHashAggregateOperator` (per-partition aggregation across the scheduler, merge-free) | done |
 | 6 | AVX2 kernels measured on x86 hardware (hardware-dependent; arm64 dev box) | planned |
 | **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
-| **6** | Observability v1 — per-operator metrics (`MetricsOperator`), JSON query trace (`q_result_trace_json`), Prometheus counters (`q_metrics_prometheus`) | done |
+| **6** | Observability v1 — per-operator metrics (`MetricsOperator`), JSON query trace (`q_result_trace_json`), Prometheus counters (`q_metrics_prometheus`), Spark UI `SQLMetrics` | done |
 | **6** | Plugin API — `OperatorRegistry` + `ExtensionNode` (opaque fragment payload, Substrait by convention); plugins compose with metrics/proto/C ABI | done |
 | **6** | Substrait integration — vendored protos + `SubstraitDecoder` (Read/Filter/Project/Aggregate/Fetch/Sort) + `q_execute_substrait` | done |
 

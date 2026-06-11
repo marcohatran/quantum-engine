@@ -1590,4 +1590,26 @@ class QuantumExtensionTest {
         QuantumStrategy.translations)
   }
 
+  /**
+   * Phase 6 close-out: QuantumExec reports SQLMetrics, so native
+   * execution shows up in the Spark UI's SQL plan graph.
+   */
+  @Test
+  def sparkUiMetricsAreReported(): Unit = {
+    val s = spark
+    import s.implicits._
+    Seq((1L, 10L), (2L, 20L), (1L, 30L)).toDF("k", "v")
+      .createOrReplaceTempView("kv_uimetrics")
+
+    val result = spark.sql("SELECT k, SUM(v) AS s FROM kv_uimetrics GROUP BY k")
+    assertEquals(2, result.collect().length)
+
+    val quantum = result.queryExecution.executedPlan.collectFirst {
+      case q: QuantumExec => q
+    }
+    assertTrue(quantum.isDefined, "expected a QuantumExec in the executed plan")
+    assertEquals(2L, quantum.get.metrics("numOutputRows").value)
+    assertTrue(quantum.get.metrics.contains("nativeTimeMs"))
+  }
+
 }
