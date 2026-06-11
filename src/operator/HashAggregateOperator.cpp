@@ -70,6 +70,15 @@ HashAggregateOperator::HashAggregateOperator(
     if (groupKeys_.size() == 1 && keyTypes_[0].id == TypeId::STRING) {
         path_ = Path::StringFastPath;
         nullGroupState_.resize(stateBytes_);
+    } else if (groupKeys_.size() == 1 && keyTypes_[0].id == TypeId::INT64 &&
+               spillTriggerGroups == 0 && spillFraction == 0.0) {
+        // Spill for this path is a follow-up; spill-configured aggregates
+        // take the Fixed path below.
+        path_ = Path::Int64FastPath;
+        nullGroupState_.resize(stateBytes_);
+        i64BucketKeys_.assign(2048, 0);
+        i64BucketSlot_.assign(2048, -1);
+        i64Mask_ = 2047;
     } else {
         codec_ = std::make_unique<KeyCodec>(keyTypes_);
         path_  = codec_->isFixedWidth() ? Path::Fixed : Path::Var;
@@ -260,6 +269,42 @@ void HashAggregateOperator::mergeSpillFilesVar() {
     spillFiles_.clear();
 }
 
+namespace {
+inline uint64_t splitmix64Agg(uint64_t x) {
+    x += 0x9E3779B97F4A7C15ULL;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+    return x ^ (x >> 31);
+}
+} // namespace
+
+void HashAggregateOperator::i64Grow() {
+    const size_t newCap = i64BucketSlot_.size() * 2;
+    i64BucketKeys_.assign(newCap, 0);
+    i64BucketSlot_.assign(newCap, -1);
+    i64Mask_ = newCap - 1;
+    for (size_t s = 0; s < i64Keys_.size(); ++s) {
+        size_t b = splitmix64Agg(static_cast<uint64_t>(i64Keys_[s])) & i64Mask_;
+        while (i64BucketSlot_[b] >= 0) b = (b + 1) & i64Mask_;
+        i64BucketKeys_[b] = i64Keys_[s];
+        i64BucketSlot_[b] = static_cast<int32_t>(s);
+    }
+}
+
+int32_t HashAggregateOperator::i64FindOrInsert(int64_t key) {
+    if ((i64Keys_.size() + 1) * 10 >= i64BucketSlot_.size() * 7) i64Grow();
+    size_t b = splitmix64Agg(static_cast<uint64_t>(key)) & i64Mask_;
+    while (i64BucketSlot_[b] >= 0) {
+        if (i64BucketKeys_[b] == key) return i64BucketSlot_[b];
+        b = (b + 1) & i64Mask_;
+    }
+    const auto slot = static_cast<int32_t>(i64Keys_.size());
+    i64Keys_.push_back(key);
+    i64BucketKeys_[b] = key;
+    i64BucketSlot_[b] = slot;
+    return slot;
+}
+
 void HashAggregateOperator::build() {
     InitCtx ctx{&aggs_, &aggOffsets_};
     g_initCtx = &ctx;
@@ -274,6 +319,7 @@ void HashAggregateOperator::build() {
     std::vector<uint8_t>  keyBufFixed(path_ == Path::Fixed ? codec_->keyBytes() : 0);
     std::vector<uint8_t>  keyBufVar;
     std::vector<uint8_t*> groupSlots;
+    std::vector<uint8_t*> slotScratch;
 
     while (auto in = child_->getNext()) {
         const PositionList& pos = in->positions();
@@ -350,6 +396,36 @@ void HashAggregateOperator::build() {
                         static_cast<size_t>(rowCodes[k]) * stateBytes_);
                 }
             }
+        } else if (path_ == Path::Int64FastPath) {
+            const ColumnVector&    keyCol   = keyEvals[0];
+            const ValidityBitmask& keyValid = keyCol.validity();
+            const int64_t*         keys     = keyCol.typed<int64_t>();
+
+            // Same two-pass shape as StringFastPath: (1) key -> slot for
+            // every row (the bucket table may rehash; slots never move),
+            // (2) one stable resize of the state slab, (3) materialize
+            // per-row slot pointers.
+            rowSlots_.resize(pos.size());
+            for (size_t k = 0; k < pos.size(); ++k) {
+                const auto i = static_cast<size_t>(pos.at(k));
+                rowSlots_[k] = keyValid.isValid(i) ? i64FindOrInsert(keys[i]) : -1;
+            }
+            if (!i64Keys_.empty()) {
+                fastPathStateForCode(static_cast<int32_t>(i64Keys_.size()) - 1);
+            }
+            for (size_t k = 0; k < pos.size(); ++k) {
+                if (rowSlots_[k] < 0) {
+                    if (!nullGroupInit_) {
+                        initSlab(nullGroupState_.data());
+                        nullGroupInit_ = true;
+                    }
+                    groupSlots.push_back(nullGroupState_.data());
+                } else {
+                    groupSlots.push_back(
+                        codeStates_.data() +
+                        static_cast<size_t>(rowSlots_[k]) * stateBytes_);
+                }
+            }
         } else {
             // Existing fixed / var paths via KeyCodec + Bytes/VarBytesHashTable.
             for (size_t k = 0; k < pos.size(); ++k) {
@@ -365,16 +441,17 @@ void HashAggregateOperator::build() {
             }
         }
 
+        slotScratch.resize(groupSlots.size());
         for (size_t a = 0; a < aggs_.size(); ++a) {
             const auto& agg = aggs_[a];
             std::optional<ColumnVector> inputCol;
             if (const Expression* e = agg->inputExpr()) inputCol = e->eval(*in, mm_);
 
-            std::vector<uint8_t*> slots;
-            slots.reserve(groupSlots.size());
-            for (auto* s : groupSlots) slots.push_back(s + aggOffsets_[a]);
-
-            agg->update(slots.data(),
+            const size_t off = aggOffsets_[a];
+            for (size_t i = 0; i < groupSlots.size(); ++i) {
+                slotScratch[i] = groupSlots[i] + off;
+            }
+            agg->update(slotScratch.data(),
                         inputCol.has_value() ? &*inputCol : nullptr,
                         pos);
         }
@@ -384,6 +461,7 @@ void HashAggregateOperator::build() {
             size_t currentGroups = 0;
             switch (path_) {
                 case Path::StringFastPath: currentGroups = globalDictReverse_.size(); break;
+                case Path::Int64FastPath:  break;  // unreachable: path gated to no-spill
                 case Path::Fixed:          currentGroups = tableFixed_->numGroups();  break;
                 case Path::Var:            currentGroups = tableVar_->numGroups();    break;
             }
@@ -405,6 +483,7 @@ void HashAggregateOperator::build() {
 
     switch (path_) {
         case Path::StringFastPath: mergeSpillFiles();     break;
+        case Path::Int64FastPath:  break;  // never spills
         case Path::Fixed:          mergeSpillFilesFixed(); break;
         case Path::Var:            mergeSpillFilesVar();   break;
     }
@@ -532,9 +611,43 @@ ColumnBatch HashAggregateOperator::emitStringFastPath() {
     return ColumnBatch(std::move(cols), PositionList::identity(total));
 }
 
+ColumnBatch HashAggregateOperator::emitInt64FastPath() {
+    const size_t numSlots = i64Keys_.size();
+    const size_t total    = numSlots + (nullGroupInit_ ? 1 : 0);
+
+    auto keyCol = ColumnVector::make(Int64, total, mm_);
+    keyCol.validity().setAllValid();
+    std::vector<const uint8_t*> states;
+    states.reserve(total);
+
+    size_t r = 0;
+    if (nullGroupInit_) {
+        keyCol.typed<int64_t>()[r] = 0;
+        keyCol.validity().setValid(r, false);
+        states.push_back(nullGroupState_.data());
+        ++r;
+    }
+    for (size_t s = 0; s < numSlots; ++s, ++r) {
+        keyCol.typed<int64_t>()[r] = i64Keys_[s];
+        states.push_back(codeStates_.data() + s * stateBytes_);
+    }
+
+    std::vector<ColumnVector> cols;
+    cols.reserve(1 + aggs_.size());
+    cols.push_back(std::move(keyCol));
+    for (size_t a = 0; a < aggs_.size(); ++a) {
+        std::vector<const uint8_t*> slices;
+        slices.reserve(states.size());
+        for (const auto* s : states) slices.push_back(s + aggOffsets_[a]);
+        cols.push_back(aggs_[a]->finalize(slices, mm_));
+    }
+    return ColumnBatch(std::move(cols), PositionList::identity(total));
+}
+
 ColumnBatch HashAggregateOperator::emit() {
     switch (path_) {
         case Path::StringFastPath: return emitStringFastPath();
+        case Path::Int64FastPath:  return emitInt64FastPath();
         case Path::Fixed:          return emitFixed();
         case Path::Var:            return emitVar();
     }

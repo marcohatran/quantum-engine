@@ -22,6 +22,9 @@ namespace quantum {
 // distinct group. Subsequent getNext() calls return nullopt.
 //
 // Three internal paths chosen at construction:
+//   - Int64FastPath: single INT64 key without spill triggers. Open
+//     addressing straight on the key (no KeyCodec, no byte memcmp); group
+//     state lives in a slot-indexed slab the bucket rehash never moves.
 //   - StringFastPath: single STRING key. Maintains a global dictionary
 //     across batches; for dict-encoded inputs the per-row hash lookup is
 //     replaced with a batchCode -> globalCode table lookup (huge win for
@@ -52,13 +55,20 @@ public:
     const Schema&              outputSchema() const override { return outSchema_; }
 
 private:
-    enum class Path { StringFastPath, Fixed, Var };
+    enum class Path { StringFastPath, Int64FastPath, Fixed, Var };
 
     void        build();
     ColumnBatch emit();
     ColumnBatch emitFixed();
     ColumnBatch emitVar();
     ColumnBatch emitStringFastPath();
+    ColumnBatch emitInt64FastPath();
+
+    // Int64FastPath key -> slot lookup (open addressing; the bucket table
+    // rehashes but slot indices — and therefore state-slab positions —
+    // never move).
+    int32_t i64FindOrInsert(int64_t key);
+    void    i64Grow();
 
     // Returns a pointer to the per-group state slab for the global code, growing
     // the state vector as needed.
@@ -99,6 +109,14 @@ private:
     std::unique_ptr<BytesHashTable>    tableFixed_;
     // Path::Var
     std::unique_ptr<VarBytesHashTable> tableVar_;
+
+    // Path::Int64FastPath state. Slot s owns codeStates_[s * stateBytes_]
+    // (shared slab with StringFastPath; the two paths are exclusive).
+    std::vector<int64_t> i64Keys_;        // slot -> key, insertion order
+    std::vector<int64_t> i64BucketKeys_;  // open-addressing buckets
+    std::vector<int32_t> i64BucketSlot_;  // -1 = empty
+    size_t               i64Mask_ = 0;
+    std::vector<int32_t> rowSlots_;       // per-batch scratch
 
     // Path::StringFastPath state
     std::unordered_map<std::string, int32_t> globalDict_;

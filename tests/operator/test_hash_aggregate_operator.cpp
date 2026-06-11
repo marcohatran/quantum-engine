@@ -329,3 +329,82 @@ TEST(HashAggregate, ManyNewGroupsVarPathSurviveRehash) {
     op.close();
     EXPECT_EQ(groups, static_cast<size_t>(kGroups));
 }
+
+// --- Int64FastPath (P1) ---
+
+namespace {
+
+std::map<std::optional<int64_t>, std::pair<int64_t, int64_t>> runInt64Agg(
+        MemoryManager& mm, std::vector<ColumnBatch> src, size_t spillTrigger) {
+    auto scan = std::make_unique<ScanOperator>(
+        &mm, Schema({{"k", Int64}, {"v", Int64}}), std::move(src));
+    std::vector<ExpressionPtr> keys;
+    keys.push_back(std::make_unique<ColumnRef>(0));
+    std::vector<AggregateFunctionPtr> aggs;
+    aggs.push_back(std::make_unique<SumI64>(std::make_unique<ColumnRef>(1)));
+    aggs.push_back(std::make_unique<CountStar>());
+    // spillTrigger == 0 selects Int64FastPath; > 0 forces the Fixed path.
+    HashAggregateOperator op(&mm, std::move(scan), std::move(keys),
+                             std::move(aggs), {"k", "s", "c"}, spillTrigger);
+    std::map<std::optional<int64_t>, std::pair<int64_t, int64_t>> got;
+    op.open();
+    while (auto b = op.getNext()) {
+        for (size_t i = 0; i < b->numRows(); ++i) {
+            std::optional<int64_t> k;
+            if (b->column(0).validity().isValid(i)) {
+                k = b->column(0).typed<int64_t>()[i];
+            }
+            got[k] = {b->column(1).typed<int64_t>()[i],
+                      b->column(2).typed<int64_t>()[i]};
+        }
+    }
+    op.close();
+    return got;
+}
+
+ColumnBatch kvNullableBatch(MemoryManager& mm,
+                            const std::vector<int64_t>& ks,
+                            const std::vector<bool>&    kValid,
+                            const std::vector<int64_t>& vs) {
+    auto k = ColumnVector::make(Int64, ks.size(), &mm);
+    auto v = ColumnVector::make(Int64, vs.size(), &mm);
+    k.validity().setAllValid();
+    for (size_t i = 0; i < ks.size(); ++i) {
+        k.typed<int64_t>()[i] = ks[i];
+        v.typed<int64_t>()[i] = vs[i];
+        if (!kValid.empty()) k.validity().setValid(i, kValid[i]);
+    }
+    std::vector<ColumnVector> cols;
+    cols.push_back(std::move(k));
+    cols.push_back(std::move(v));
+    return ColumnBatch(std::move(cols), PositionList::identity(ks.size()));
+}
+
+} // namespace
+
+TEST(HashAggregate, Int64FastPathMatchesFixedPath) {
+    MemoryManager mm(64 * 1024 * 1024);
+    auto mkSrc = [&] {
+        std::vector<ColumnBatch> src;
+        // 5000 groups across batches — forces several i64Grow rehashes —
+        // with negative keys, dupes across batches, and null keys.
+        for (int b = 0; b < 3; ++b) {
+            std::vector<int64_t> ks, vs;
+            std::vector<bool>    valid;
+            for (int i = 0; i < 4000; ++i) {
+                const int64_t g = (b * 4000 + i) % 5000;
+                ks.push_back(g - 2500);  // negatives included
+                vs.push_back(i);
+                valid.push_back(i % 97 != 0);  // sprinkle null keys
+            }
+            src.push_back(kvNullableBatch(mm, ks, valid, vs));
+        }
+        return src;
+    };
+
+    auto fast  = runInt64Agg(mm, mkSrc(), /*spillTrigger=*/0);
+    auto fixed = runInt64Agg(mm, mkSrc(), /*spillTrigger=*/1000000);
+    EXPECT_EQ(fast.size(), fixed.size());
+    EXPECT_EQ(fast, fixed);
+    EXPECT_TRUE(fast.count(std::nullopt) == 1);  // null group present
+}
