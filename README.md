@@ -154,10 +154,10 @@ result checksums identical):
 
 | Scale | Quantum | Vanilla Spark | |
 |---|---|---|---|
-| 2M rows / 200 groups | **91 ms** | 151 ms | Quantum 1.67× faster |
-| 10M rows / 1000 groups | **324 ms** | 392 ms | Quantum 1.21× faster |
+| 2M rows / 200 groups | **65 ms** | 138 ms | Quantum 2.13× faster |
+| 10M rows / 1000 groups | **197 ms** | 390 ms | Quantum 1.98× faster |
 
-(Before the P0/P1 optimizations below: 121/146 ms at 2M, 495/432 ms at 10M —
+(Before the P0–P2 optimizations below: 121/146 ms at 2M, 495/432 ms at 10M —
 Spark led at scale.)
 
 Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
@@ -192,9 +192,12 @@ Arrow snappy decode (~171 ms) — P1 is the lever.
 After P0+P1, Quantum leads at both scales (table above) — the plan's
 250–300 ms estimate for the 10M case landed at 324 ms.
 
-**P2 — parallelism and fusion** (wins beyond parity)
-5. Row-group-parallel decode within a single file on the `TaskScheduler`
-   (the 6.3 multi-file fan-out, applied to row groups).
+**P2 — parallelism and fusion**
+5. ~~Decode-ahead prefetch~~ ✅ — `io/PrefetchReader` runs file decode on a
+   `TaskScheduler` task overlapped with filter + aggregation (bounded queue,
+   exception propagation, all file formats; `QUANTUM_PREFETCH=0` disables).
+   10M: 324 → 197 ms. Arrow's `use_threads`/`pre_buffer` measured flat here
+   and was not kept; row-group-parallel decode remains available headroom.
 6. Wire `HashAggregateNode.parallelism` from the Spark strategy
    (config-gated) so the 6.4 exchange + parallel aggregation engages on
    large inputs.
