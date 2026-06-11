@@ -124,6 +124,10 @@ const uint8_t* VarBytesHashTable::find(const uint8_t* key, size_t len) const noe
     }
 }
 
+void VarBytesHashTable::reserve(size_t additional) {
+    while (numGroups_ + additional >= growAt_) grow();
+}
+
 void VarBytesHashTable::grow() {
     const size_t oldCap = capacity_;
     Buffer oldSlots    = std::move(slots_);

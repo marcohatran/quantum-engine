@@ -28,6 +28,10 @@ public:
     QUANTUM_DISALLOW_COPY(VarBytesHashTable);
 
     uint8_t*       findOrInsert(const uint8_t* key, size_t len, InitFn init);
+
+    // Pre-grow so that up to `additional` NEW groups can be inserted
+    // without rehashing (state pointers stay valid). See BytesHashTable.
+    void reserve(size_t additional);
     const uint8_t* find(const uint8_t* key, size_t len) const noexcept;
 
     class Cursor {

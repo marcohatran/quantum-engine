@@ -279,6 +279,12 @@ void HashAggregateOperator::build() {
         const PositionList& pos = in->positions();
         if (pos.size() == 0) continue;
 
+        // groupSlots batch-collects state pointers below; a mid-batch
+        // rehash would dangle every pointer already collected. Reserve
+        // for the worst case (every active row a new group) up front.
+        if (path_ == Path::Fixed)    tableFixed_->reserve(pos.size());
+        else if (path_ == Path::Var) tableVar_->reserve(pos.size());
+
         std::vector<ColumnVector> keyEvals;
         keyEvals.reserve(groupKeys_.size());
         for (const auto& e : groupKeys_) keyEvals.push_back(e->eval(*in, mm_));

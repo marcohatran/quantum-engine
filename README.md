@@ -119,7 +119,10 @@ Builds the JVM module and runs `quantum.demo.QuantumDemo`: a Spark SQL
 aggregation (`WHERE` → `GROUP BY` → `ORDER BY`) whose physical plan root is
 the native `Quantum` node. Prints the results, the translation label, the
 native per-operator trace, and the engine's Prometheus counters. Requires
-the debug native build and a JDK 17+ (auto-detects Homebrew openjdk@21). Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
+the native build and a JDK 17+ (auto-detects Homebrew openjdk@21; prefers
+the release lib when present). `./scripts/run-perf-compare.sh [rows] [groups]`
+runs the same aggregation in a Quantum session and a vanilla Spark session
+back-to-back and reports timings + a result checksum. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
 
 ## Architecture at a Glance
 

@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "operator/AggregateFunction.hpp"
 #include "operator/HashAggregateOperator.hpp"
 #include "operator/ScanOperator.hpp"
+#include "vector/StringBuilder.hpp"
 
 using namespace quantum;
 
@@ -232,4 +234,98 @@ TEST(HashAggregate, TwoColumnGroupKey) {
     EXPECT_EQ((got[{1, 10}]), 100 + 400);
     EXPECT_EQ((got[{1, 20}]), 200);
     EXPECT_EQ((got[{2, 10}]), 300 + 500);
+}
+
+// Regression (perf-compare bug): inserting more new groups in ONE batch
+// than the hash table's grow threshold (1024 * 0.7 = 716) used to rehash
+// mid-batch and dangle every already-collected state pointer — silently
+// dropping updates. The operator now reserves for the batch up front.
+TEST(HashAggregate, ManyNewGroupsInOneBatchSurviveRehash) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    // Fixed path: single INT64 key, 2000 distinct keys × 2 rows, one batch.
+    constexpr int64_t kGroups = 2000;
+    const size_t n = static_cast<size_t>(kGroups) * 2;
+    auto k = ColumnVector::make(Int64, n, &mm);
+    auto v = ColumnVector::make(Int64, n, &mm);
+    for (size_t i = 0; i < n; ++i) {
+        k.typed<int64_t>()[i] = static_cast<int64_t>(i) % kGroups;
+        v.typed<int64_t>()[i] = 1;
+    }
+    std::vector<ColumnVector> cols;
+    cols.push_back(std::move(k));
+    cols.push_back(std::move(v));
+    std::vector<ColumnBatch> src;
+    src.emplace_back(std::move(cols), PositionList::identity(n));
+
+    auto scan = std::make_unique<ScanOperator>(
+        &mm, Schema({{"k", Int64}, {"v", Int64}}), std::move(src));
+    std::vector<ExpressionPtr> keys;
+    keys.push_back(std::make_unique<ColumnRef>(0));
+    std::vector<AggregateFunctionPtr> aggs;
+    aggs.push_back(std::make_unique<SumI64>(std::make_unique<ColumnRef>(1)));
+    aggs.push_back(std::make_unique<CountStar>());
+    HashAggregateOperator op(&mm, std::move(scan), std::move(keys),
+                             std::move(aggs), {"k", "s", "c"});
+
+    op.open();
+    size_t groups = 0;
+    int64_t totalCount = 0;
+    while (auto b = op.getNext()) {
+        for (size_t i = 0; i < b->numRows(); ++i) {
+            EXPECT_EQ(b->column(1).typed<int64_t>()[i], 2)
+                << "group " << b->column(0).typed<int64_t>()[i];
+            totalCount += b->column(2).typed<int64_t>()[i];
+            ++groups;
+        }
+    }
+    op.close();
+    EXPECT_EQ(groups, static_cast<size_t>(kGroups));
+    EXPECT_EQ(totalCount, static_cast<int64_t>(n));
+}
+
+TEST(HashAggregate, ManyNewGroupsVarPathSurviveRehash) {
+    MemoryManager mm(64 * 1024 * 1024);
+
+    // Var path: (STRING, INT64) composite key, 1500 distinct keys × 2 rows.
+    constexpr int64_t kGroups = 1500;
+    const size_t n = static_cast<size_t>(kGroups) * 2;
+    StringBuilder sb(&mm);
+    auto b2 = ColumnVector::make(Int64, n, &mm);
+    auto v  = ColumnVector::make(Int64, n, &mm);
+    for (size_t i = 0; i < n; ++i) {
+        const auto g = static_cast<int64_t>(i) % kGroups;
+        sb.append("key_" + std::to_string(g % 50));
+        b2.typed<int64_t>()[i] = g;
+        v.typed<int64_t>()[i]  = 1;
+    }
+    std::vector<ColumnVector> cols;
+    cols.push_back(sb.build());
+    cols.push_back(std::move(b2));
+    cols.push_back(std::move(v));
+    std::vector<ColumnBatch> src;
+    src.emplace_back(std::move(cols), PositionList::identity(n));
+
+    auto scan = std::make_unique<ScanOperator>(
+        &mm,
+        Schema({{"s", DataType{TypeId::STRING}}, {"b", Int64}, {"v", Int64}}),
+        std::move(src));
+    std::vector<ExpressionPtr> keys;
+    keys.push_back(std::make_unique<ColumnRef>(0));
+    keys.push_back(std::make_unique<ColumnRef>(1));
+    std::vector<AggregateFunctionPtr> aggs;
+    aggs.push_back(std::make_unique<CountStar>());
+    HashAggregateOperator op(&mm, std::move(scan), std::move(keys),
+                             std::move(aggs), {"s", "b", "c"});
+
+    op.open();
+    size_t groups = 0;
+    while (auto b = op.getNext()) {
+        for (size_t i = 0; i < b->numRows(); ++i) {
+            EXPECT_EQ(b->column(2).typed<int64_t>()[i], 2);
+            ++groups;
+        }
+    }
+    op.close();
+    EXPECT_EQ(groups, static_cast<size_t>(kGroups));
 }

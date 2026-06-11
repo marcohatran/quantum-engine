@@ -90,6 +90,10 @@ const uint8_t* BytesHashTable::find(const uint8_t* key) const noexcept {
     }
 }
 
+void BytesHashTable::reserve(size_t additional) {
+    while (numGroups_ + additional >= growAt_) grow();
+}
+
 void BytesHashTable::grow() {
     const size_t   oldCap   = capacity_;
     const uint8_t* oldKeys  = keys_.data();

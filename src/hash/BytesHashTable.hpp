@@ -32,6 +32,12 @@ public:
     uint8_t*       findOrInsert(const uint8_t* key, InitFn init);
     const uint8_t* find(const uint8_t* key) const noexcept;
 
+    // Pre-grow so that up to `additional` NEW groups can be inserted
+    // without rehashing. State pointers returned by findOrInsert are
+    // invalidated by growth — callers that batch-collect slot pointers
+    // (HashAggregate) must reserve for the batch first.
+    void reserve(size_t additional);
+
     class Cursor {
     public:
         bool                 valid() const noexcept { return idx_ < cap_; }

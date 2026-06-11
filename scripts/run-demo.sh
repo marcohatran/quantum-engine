@@ -13,7 +13,15 @@ if [[ -z "${JAVA_HOME:-}" && -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk
   export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 fi
 
-NATIVE_LIB_DIR="$PWD/../build-debug/src"
+NATIVE_LIB_DIR="${QUANTUM_NATIVE_DIR:-}"
+if [[ -z "$NATIVE_LIB_DIR" ]]; then
+  if [[ -e "$PWD/../build-release/src/libquantum_core.dylib" || -e "$PWD/../build-release/src/libquantum_core.so" ]]; then
+    NATIVE_LIB_DIR="$PWD/../build-release/src"   # prefer the optimized build
+  else
+    NATIVE_LIB_DIR="$PWD/../build-debug/src"
+  fi
+fi
+echo "native lib: $NATIVE_LIB_DIR"
 if [[ ! -e "$NATIVE_LIB_DIR/libquantum_core.dylib" && ! -e "$NATIVE_LIB_DIR/libquantum_core.so" ]]; then
   echo "native library not found in $NATIVE_LIB_DIR — build it first:" >&2
   echo "  cmake --preset=debug && cmake --build --preset=debug" >&2

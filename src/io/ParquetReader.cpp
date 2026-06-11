@@ -44,20 +44,26 @@ void copyFixedColumn(const arrow::ChunkedArray& chunkedArr,
     auto* dest = out.typed<CType>();
     out.validity().setAllValid();
 
-    // Walk through chunks, skipping rows < rowOffset, copying up to n rows.
-    size_t globalRow = 0;
-    size_t written   = 0;
+    // Skip whole chunks arithmetically — a per-row skip scan here makes
+    // nextBatch O(table) per batch, i.e. O(table^2 / batch) per file.
+    size_t chunkStart = 0;  // global row index of the current chunk's first row
+    size_t written    = 0;
     for (int c = 0; c < chunkedArr.num_chunks() && written < n; ++c) {
         const auto& arr = static_cast<const ArrowArrayT&>(*chunkedArr.chunk(c));
         const size_t chunkLen = static_cast<size_t>(arr.length());
-        for (size_t i = 0; i < chunkLen && written < n; ++i) {
-            if (globalRow >= rowOffset) {
-                dest[written] = static_cast<CType>(arr.Value(static_cast<int64_t>(i)));
-                out.validity().setValid(written, !arr.IsNull(static_cast<int64_t>(i)));
-                ++written;
-            }
-            ++globalRow;
+        if (chunkStart + chunkLen <= rowOffset) {  // entirely before the slice
+            chunkStart += chunkLen;
+            continue;
         }
+        const size_t begin = rowOffset > chunkStart ? rowOffset - chunkStart : 0;
+        const size_t take  = std::min(chunkLen - begin, n - written);
+        for (size_t i = 0; i < take; ++i) {
+            const auto j = static_cast<int64_t>(begin + i);
+            dest[written + i] = static_cast<CType>(arr.Value(j));
+            out.validity().setValid(written + i, !arr.IsNull(j));
+        }
+        written    += take;
+        chunkStart += chunkLen;
     }
 }
 
@@ -66,41 +72,40 @@ ColumnVector copyStringColumn(const arrow::ChunkedArray& chunkedArr,
                               size_t                     n,
                               MemoryManager*             mm) {
     StringBuilder sb(mm);
-    size_t globalRow = 0;
-    size_t written   = 0;
+
+    // Chunk-skipping slice copy, same shape as copyFixedColumn.
+    auto copySlice = [&](const auto& sArr, size_t begin, size_t take) {
+        for (size_t i = 0; i < take; ++i) {
+            const auto j = static_cast<int64_t>(begin + i);
+            if (sArr.IsNull(j)) sb.appendNull();
+            else {
+                const auto sv = sArr.GetView(j);
+                sb.append(std::string_view(sv.data(), sv.size()));
+            }
+        }
+    };
+
+    size_t chunkStart = 0;
+    size_t written    = 0;
     for (int c = 0; c < chunkedArr.num_chunks() && written < n; ++c) {
         const auto* arr = chunkedArr.chunk(c).get();
         const size_t chunkLen = static_cast<size_t>(arr->length());
+        if (chunkStart + chunkLen <= rowOffset) {
+            chunkStart += chunkLen;
+            continue;
+        }
+        const size_t begin = rowOffset > chunkStart ? rowOffset - chunkStart : 0;
+        const size_t take  = std::min(chunkLen - begin, n - written);
         if (arr->type_id() == arrow::Type::STRING) {
-            const auto& sArr = static_cast<const arrow::StringArray&>(*arr);
-            for (size_t i = 0; i < chunkLen && written < n; ++i) {
-                if (globalRow >= rowOffset) {
-                    if (sArr.IsNull(static_cast<int64_t>(i))) sb.appendNull();
-                    else {
-                        const auto sv = sArr.GetView(static_cast<int64_t>(i));
-                        sb.append(std::string_view(sv.data(), sv.size()));
-                    }
-                    ++written;
-                }
-                ++globalRow;
-            }
+            copySlice(static_cast<const arrow::StringArray&>(*arr), begin, take);
         } else if (arr->type_id() == arrow::Type::LARGE_STRING) {
-            const auto& sArr = static_cast<const arrow::LargeStringArray&>(*arr);
-            for (size_t i = 0; i < chunkLen && written < n; ++i) {
-                if (globalRow >= rowOffset) {
-                    if (sArr.IsNull(static_cast<int64_t>(i))) sb.appendNull();
-                    else {
-                        const auto sv = sArr.GetView(static_cast<int64_t>(i));
-                        sb.append(std::string_view(sv.data(), sv.size()));
-                    }
-                    ++written;
-                }
-                ++globalRow;
-            }
+            copySlice(static_cast<const arrow::LargeStringArray&>(*arr), begin, take);
         } else {
             raise(ErrorCode::Internal,
                   "copyStringColumn: unexpected chunk type {}", arr->type()->ToString());
         }
+        written    += take;
+        chunkStart += chunkLen;
     }
     return sb.build();
 }
