@@ -48,6 +48,7 @@ add_executable(quantum_tests
     io/test_iceberg_table_reader.cpp
     io/test_filesystem.cpp
     io/test_parquet_reader.cpp
+    io/test_prefetch_reader.cpp
     e2e/test_pipeline_smoke.cpp
 )
 

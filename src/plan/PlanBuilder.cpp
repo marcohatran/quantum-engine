@@ -21,6 +21,7 @@
 #include "io/DeltaTableReader.hpp"
 #include "io/IcebergTableReader.hpp"
 #include "io/ParquetReader.hpp"
+#include "io/PrefetchReader.hpp"
 #include "io/PartitionedFileReader.hpp"
 #include "operator/AggregateFunction.hpp"
 #include "operator/ExchangeOperator.hpp"
@@ -166,6 +167,17 @@ std::string operatorName(const Operator& op) {
 
 } // namespace
 
+// Decode-ahead for file scans (QUANTUM_PREFETCH=0 disables): the reader
+// runs on a scheduler task so decode overlaps downstream compute.
+FileFormatReaderPtr wrapPrefetch(FileFormatReaderPtr reader) {
+    static const bool enabled = [] {
+        const char* env = std::getenv("QUANTUM_PREFETCH");
+        return env == nullptr || std::string_view(env) != "0";
+    }();
+    if (!enabled) return reader;
+    return std::make_unique<PrefetchReader>(std::move(reader));
+}
+
 OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
     OperatorPtr op = buildImpl(node, catalog);
     if (metrics_ != nullptr) {
@@ -227,7 +239,7 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 if (n.paths.size() == 1) {
                     auto reader = std::make_unique<ParquetReader>(n.paths.front(), mm_);
                     auto wrapped = wrapPartitioned(std::move(reader), 0);
-                    return std::make_unique<FileScanOperator>(mm_, std::move(wrapped));
+                    return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(wrapped)));
                 }
                 // Per-file construction decodes the whole file (ParquetReader
                 // is eager), so multi-file scans fan the decode out across
@@ -240,7 +252,7 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                         readers[i] = wrapPartitioned(std::move(pr), i);
                     });
                 auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
-                return std::make_unique<FileScanOperator>(mm_, std::move(concat));
+                return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(concat)));
             }
             if (n.format == "delta") {
                 if (n.paths.size() != 1) {
@@ -249,7 +261,7 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                           "(got {})", n.paths.size());
                 }
                 auto reader = std::make_unique<DeltaTableReader>(n.paths.front(), mm_);
-                return std::make_unique<FileScanOperator>(mm_, std::move(reader));
+                return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(reader)));
             }
             if (n.format == "iceberg") {
                 if (n.paths.size() != 1) {
@@ -258,7 +270,7 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                           "(got {})", n.paths.size());
                 }
                 auto reader = std::make_unique<IcebergTableReader>(n.paths.front(), mm_);
-                return std::make_unique<FileScanOperator>(mm_, std::move(reader));
+                return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(reader)));
             }
             raise(ErrorCode::NotImplemented,
                   "PlanBuilder: unknown FileScanNode format '{}'", n.format);

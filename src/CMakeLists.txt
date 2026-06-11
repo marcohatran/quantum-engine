@@ -70,6 +70,7 @@ add_library(quantum_core SHARED
     io/IcebergTableReader.cpp
     io/FileSystem.cpp
     io/ParquetReader.cpp
+    io/PrefetchReader.cpp
     io/PartitionedFileReader.cpp
     plan/Plan.cpp
     plan/OperatorRegistry.cpp
