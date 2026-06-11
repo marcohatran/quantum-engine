@@ -65,7 +65,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Native operators added in Phase 5.* `FileScanOperator`, `ConcatFileReader`, `PartitionedFileReader` (constant column broadcast), `LimitOperator` (PositionList truncation), `SortOperator` (materialize + permutation sort over any of INT32/INT64/FLOAT64/BOOL/STRING; with a row-count or memory-fraction trigger it switches to an external merge sort — sorted runs spill to disk as `[keys][row]` SpillFile records, then k-way merge by head keys streams 4096-row batches), `UnionAllOperator` (N-ary; drains one child at a time, output schema = first child's). Aggregate functions added: `SumF64`, `MinF64`, `MaxF64`, `AvgF64`, `CountColumn`, `CountDistinctI64`, plus Double/String COUNT(DISTINCT) variants. New expression machinery: `UnaryExpr` (Not, IsNull), `kernels::LogicalKernels` (Kleene And/Or), comparison kernels gained `Gte/Lte`. Plan IR added `BinaryOp::And/Or/Lte/Gte`, `UnaryOp::Not/IsNull`, `AggregateKind::Count/CountDistinct`.
 
-*Caveats & known follow-ups.* `LogicalQueryStage` peeling (for shuffle-bearing AQE plans), Iceberg, NVMe disk cache, Arrow IPC cross-JVM transport, and an exchange operator for intra-operator parallelism remain on the roadmap.
+*Caveats & deferred to Phase 6.* Three items left Phase 5 deliberately: the **exchange operator** (intra-operator parallelism) needs the Phase 6 task scheduler — the Phase 1 architecture leans on Spark for task-level parallelism, and single-partition `QuantumExec` output is what makes native ORDER BY/LIMIT semantics hold; **`LogicalQueryStage` peeling** (shuffle-bearing AQE plans) is blocked on exchange, since a materialized shuffle stage has no native-readable source; and **AVX2 kernel measurement** requires x86 hardware (the kernels exist behind `QUANTUM_HAS_AVX2` but the dev box is arm64).
 
 *Benchmark headline.* `bench_file_scan_hash_aggregate.cpp` measures the headline path — 1M rows × (k:int64, v:int64) written as Parquet, scanned through `FileScanNode`, aggregated by `k`. On an Apple M-class laptop: ~3.3 M items/sec across plan-construct + Arrow Parquet decode + native HashAgg. Cardinality has small effect (16 vs 65536: 3.45 → 3.25 M/s), confirming the IR / operator / hash-table overhead is negligible relative to Parquet decoding.
 
@@ -146,7 +146,7 @@ Key invariants the codebase enforces:
 | **5** | Native LIMIT / ORDER BY routing end-to-end — strategy matches through `ReturnAnswer`, beating Spark's `SpecialLimits` (`CollectLimitExec` / `TakeOrderedAndProjectExec` / `SortExec`) | done |
 | **5** | ORDER BY non-selected aggregates — `Limit(Project(_, Sort(…)))` roots claimed; hidden ordering column computed/sorted natively, projected via `physicalIndex` remap | done |
 | **5** | Plain query roots — `SELECT … WHERE … ORDER BY … LIMIT` without GROUP BY (incl. joins, projection/rename) claimed at the `ReturnAnswer` root | done |
-| 5 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans | planned |
+| 6 | `LogicalQueryStage` peeling for shuffle-bearing AQE plans (blocked on the exchange operator — shuffle stages have no native-readable source) | planned |
 | **5** | Iceberg v1 table reader — metadata JSON / manifest-list / manifest Avro replay, deleted entries skipped, `FileScanNode format="iceberg"` | done |
 | **5** | Delta — checkpoint `.parquet` log support (`_last_checkpoint`, single- + multi-part; only post-checkpoint JSON commits replayed) | done |
 | **5** | Delta — column mapping (physical-name remap from `metaData.schemaString`) + add-column schema evolution (null-fill) | done |
@@ -154,8 +154,8 @@ Key invariants the codebase enforces:
 | **5** | Sort spill — external merge sort in `SortOperator` (sorted runs on disk, k-way merge, streaming output batches) | done |
 | **5** | Local-disk (NVMe) cache for object-store reads — cache-through `openReadable`, URI-hash keys, atomic install, env/API config | done |
 | **5** | Arrow IPC cross-JVM batch transport — `q_register_source_ipc` / `q_result_next_ipc`, QuantumExec marshals whole batches in one JNA crossing per direction | done |
-| 5 | Exchange operator, intra-operator parallelism (needs task scheduler) | planned |
-| 5 | AVX2 kernels measured on x86 hardware (no-op on arm64 dev box) | planned |
+| 6 | Exchange operator, intra-operator parallelism (needs the Phase 6 task scheduler) | planned |
+| 6 | AVX2 kernels measured on x86 hardware (hardware-dependent; arm64 dev box) | planned |
 | **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
 | 6 | Observability — Prometheus metrics, query trace, Substrait plugin API | planned |
 
