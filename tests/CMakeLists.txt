@@ -38,6 +38,7 @@ add_executable(quantum_tests
     plan/test_file_scan_plan.cpp
     plan/test_operator_registry.cpp
     plan/test_plan_builder.cpp
+    plan/test_substrait_decoder.cpp
     plan/test_plan_proto.cpp
     bridge/test_quantum_c.cpp
     bridge/test_quantum_arrow.cpp
@@ -58,7 +59,7 @@ target_link_libraries(quantum_tests
         avro-cpp::avrocpp
 )
 
-target_include_directories(quantum_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(quantum_tests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR}/src/substrait_gen)
 
 quantum_set_warnings(quantum_tests)
 quantum_apply_sanitizers(quantum_tests)

@@ -20,6 +20,7 @@
 #include "plan/Plan.hpp"
 #include "plan/PlanBuilder.hpp"
 #include "plan/PlanProto.hpp"
+#include "plan/SubstraitDecoder.hpp"
 #include "vector/ColumnBatch.hpp"
 #include "vector/ColumnVector.hpp"
 #include "vector/StringBuilder.hpp"
@@ -208,6 +209,27 @@ extern "C" QResult* q_execute(QEngine*       engine,
             raise(ErrorCode::InvalidArgument, "q_execute: null input");
         }
         auto node = planFromProtoBytes(std::string_view(
+            reinterpret_cast<const char*>(plan_bytes), plan_len));
+        auto metrics = std::make_unique<QueryMetrics>();
+        PlanBuilder pb(engine->mm.get(), metrics.get());
+        auto op = pb.build(node, engine->catalog);
+        op->open();
+        auto* out = new QResult();
+        out->op      = std::move(op);
+        out->mm      = engine->mm.get();
+        out->metrics = std::move(metrics);
+        return out;
+    }, nullptr);
+}
+
+extern "C" QResult* q_execute_substrait(QEngine*       engine,
+                                        const uint8_t* plan_bytes,
+                                        size_t         plan_len) {
+    return guarded([&]() -> QResult* {
+        if (!engine || (!plan_bytes && plan_len > 0)) {
+            raise(ErrorCode::InvalidArgument, "q_execute_substrait: null input");
+        }
+        auto node = planFromSubstraitBytes(std::string_view(
             reinterpret_cast<const char*>(plan_bytes), plan_len));
         auto metrics = std::make_unique<QueryMetrics>();
         PlanBuilder pb(engine->mm.get(), metrics.get());

@@ -107,6 +107,13 @@ QResult* q_execute(QEngine*       engine,
                    const uint8_t* plan_bytes,
                    size_t         plan_len);
 
+// Execute a serialized `substrait.Plan` (the cross-engine IR). NamedTable
+// reads resolve against the registered sources by dotted name. Returns
+// NULL on error; q_last_error() describes the failure.
+QResult* q_execute_substrait(QEngine*       engine,
+                             const uint8_t* plan_bytes,
+                             size_t         plan_len);
+
 void q_destroy_result(QResult* result);
 
 // Advance to the next output batch. Returns NULL at end-of-stream. The

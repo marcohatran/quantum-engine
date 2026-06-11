@@ -71,6 +71,8 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 **Phase 6 — In progress**
 
+*Substrait decoder (6.5).* `plan/SubstraitDecoder` turns a serialized `substrait.Plan` (protos vendored at `third_party/substrait`, v0.42.1) into the engine's IR, so external producers — Ibis, Isthmus/Calcite, DuckDB — can target the engine directly via the new `q_execute_substrait` C ABI entry point (NamedTable reads resolve against registered sources). Covered: ReadRel/FilterRel/ProjectRel (incl. `emit` remaps)/AggregateRel (sum/min/max/avg/count + COUNT(DISTINCT) via the DISTINCT invocation)/FetchRel/SortRel; field references, bool/i32/i64/fp64/string literals, comparison + Kleene logic + `is_null` + arithmetic + `like` scalar functions resolved through the plan's extension declarations. Unsupported constructs raise `NotImplemented` naming the offender.
+
 *Exchange operator + parallel aggregation (6.4).* `ExchangeOperator` — the in-process hash repartition: drains its child once and routes every row to one of N partitions by the hash of its key expressions (per-type hashing incl. nulls-to-a-fixed-seed, so null keys cluster). As a plain pull operator its output is hash-clustered (each partition contiguous); parallel consumers call `takePartitions()` instead. First consumer: `HashAggregateNode.parallelism > 1` builds a `ParallelHashAggregateOperator` — exchange by the GROUP BY keys, then one independent `HashAggregateOperator` per partition fanned across the `TaskScheduler`. Groups are disjoint across hash partitions, so per-partition results concatenate into the global answer with no merge phase. Plan IR + proto grew `ExchangeNode` and the `parallelism` field.
 
 *Task scheduler + parallel scan (6.3).* `exec/TaskScheduler` — a fixed worker pool with `submit` and an exception-propagating `parallelFor` (caller participates; first error rethrown). Sized by `QUANTUM_SCHEDULER_THREADS`, defaulting to half the hardware threads — Spark supplies task-level parallelism around the engine, so the pool deliberately undersubscribes. First consumer: multi-file Parquet scans fan per-file decode (the dominant cost on the benchmark headline path) across the pool — each file is one independent task touching only the thread-safe `MemoryManager`. This is the building block the exchange operator needs.
@@ -79,7 +81,7 @@ A Spark Catalyst plan now translates end-to-end to a native protobuf IR that run
 
 *Observability (6.1).* `PlanBuilder` wraps every operator it builds in a `MetricsOperator` decorator (operators untouched; two `steady_clock` reads per batch) recording rows / batches / open-next-close timings into a per-query `QueryMetrics`. `q_result_trace_json` returns the structured trace (operators in build order, plan root last); `q_metrics_prometheus` exposes process-wide cumulative counters in Prometheus text format (`quantum_queries_total`, `quantum_rows_emitted_total`, `quantum_spills_total` — fed by the HashAggregate and Sort spill sites — and `quantum_exec_nanos_total`). `QuantumExec` captures the trace per query (`QuantumExec.lastTraceJson`); JNA surfaces both calls.
 
-**Tests** — 240 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
+**Tests** — 244 C++ tests + 55 JVM tests (3 EngineEndToEnd + 1 Delta + 51 strategy / agg / predicate / join / source-shape).
 
 ## Build & Test
 
@@ -90,7 +92,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 
 cmake --preset=debug                 # configure (vcpkg installs deps)
 cmake --build --preset=debug         # build
-ctest --preset=debug                 # 240 tests, ~20s (Parquet + Arrow S3 startup)
+ctest --preset=debug                 # 244 tests, ~20s (Parquet + Arrow S3 startup)
 
 cmake --build --preset=release       # release build (benchmarks)
 ./build-release/benchmarks/quantum_benchmarks
@@ -171,7 +173,7 @@ Key invariants the codebase enforces:
 | **5** | Dict-merge in HashJoin `concatDense` — build-side dictionaries merged/deduped with code remap; dict layout preserved through joins | done |
 | **6** | Observability v1 — per-operator metrics (`MetricsOperator`), JSON query trace (`q_result_trace_json`), Prometheus counters (`q_metrics_prometheus`) | done |
 | **6** | Plugin API — `OperatorRegistry` + `ExtensionNode` (opaque fragment payload, Substrait by convention); plugins compose with metrics/proto/C ABI | done |
-| 6 | Substrait schema integration — decode standard Substrait rels into built-in IR | planned |
+| **6** | Substrait integration — vendored protos + `SubstraitDecoder` (Read/Filter/Project/Aggregate/Fetch/Sort) + `q_execute_substrait` | done |
 
 ## License
 

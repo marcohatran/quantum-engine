@@ -2,6 +2,30 @@
 set(QUANTUM_PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/plan/proto/quantum_plan.proto)
 protobuf_generate_cpp(QUANTUM_PROTO_SRCS QUANTUM_PROTO_HDRS ${QUANTUM_PROTO_FILES})
 
+# Vendored Substrait protos (third_party/substrait, version pinned in
+# third_party/substrait/VERSION) for the cross-engine plan decoder.
+set(SUBSTRAIT_PROTO_DIR ${CMAKE_SOURCE_DIR}/third_party/substrait/proto)
+set(SUBSTRAIT_GEN_DIR   ${CMAKE_CURRENT_BINARY_DIR}/substrait_gen)
+file(MAKE_DIRECTORY ${SUBSTRAIT_GEN_DIR})
+set(SUBSTRAIT_PROTOS
+    ${SUBSTRAIT_PROTO_DIR}/substrait/plan.proto
+    ${SUBSTRAIT_PROTO_DIR}/substrait/algebra.proto
+    ${SUBSTRAIT_PROTO_DIR}/substrait/type.proto
+    ${SUBSTRAIT_PROTO_DIR}/substrait/extensions/extensions.proto)
+set(SUBSTRAIT_SRCS
+    ${SUBSTRAIT_GEN_DIR}/substrait/plan.pb.cc
+    ${SUBSTRAIT_GEN_DIR}/substrait/algebra.pb.cc
+    ${SUBSTRAIT_GEN_DIR}/substrait/type.pb.cc
+    ${SUBSTRAIT_GEN_DIR}/substrait/extensions/extensions.pb.cc)
+add_custom_command(
+    OUTPUT ${SUBSTRAIT_SRCS}
+    COMMAND protobuf::protoc
+        --proto_path=${SUBSTRAIT_PROTO_DIR}
+        --cpp_out=${SUBSTRAIT_GEN_DIR}
+        ${SUBSTRAIT_PROTOS}
+    DEPENDS ${SUBSTRAIT_PROTOS}
+    COMMENT "Generating Substrait protobuf sources")
+
 add_library(quantum_core SHARED
     common/Metrics.cpp
     common/DataType.cpp
@@ -54,6 +78,8 @@ add_library(quantum_core SHARED
     bridge/quantum_c.cpp
     bridge/quantum_arrow.cpp
     bridge/quantum_ipc.cpp
+    plan/SubstraitDecoder.cpp
+    ${SUBSTRAIT_SRCS}
     ${QUANTUM_PROTO_SRCS}
 )
 
@@ -63,6 +89,7 @@ target_include_directories(quantum_core
         ${CMAKE_CURRENT_BINARY_DIR}     # for the generated *.pb.h
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${SUBSTRAIT_GEN_DIR}
 )
 
 target_link_libraries(quantum_core
