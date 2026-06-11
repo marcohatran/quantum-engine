@@ -71,3 +71,4 @@ Testing/
 # Java
 java/target/
 *.class
+.venv/

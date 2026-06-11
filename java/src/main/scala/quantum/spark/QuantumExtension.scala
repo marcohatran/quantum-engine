@@ -704,7 +704,9 @@ object QuantumStrategy {
               val joinPlan = QuantumPlan.PlanNode.newBuilder().setHashJoin(joinB).build()
 
               val combinedIdMap =
-                leftR.idMap ++ rightR.idMap.view.mapValues(_ + leftR.output.size).toMap
+                leftR.idMap ++ rightR.idMap.map { case (id, idx) =>
+                  id -> (idx + leftR.output.size)
+                }
 
               PeelResult(
                 plan        = joinPlan,

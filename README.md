@@ -122,7 +122,28 @@ native per-operator trace, and the engine's Prometheus counters. Requires
 the native build and a JDK 17+ (auto-detects Homebrew openjdk@21; prefers
 the release lib when present). `./scripts/run-perf-compare.sh [rows] [groups]`
 runs the same aggregation in a Quantum session and a vanilla Spark session
-back-to-back and reports timings + a result checksum. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
+back-to-back and reports timings + a result checksum.
+
+### PySpark
+
+The engine is JVM/native-side, so PySpark needs no bindings — the extension
+jar goes on the driver classpath and every translatable query runs natively:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install pyspark==3.5.4
+cd java && mvn package -Dmaven.test.skip=true \
+    -Dscala.binary.version=2.12 -Dscala.version=2.12.18 && \
+  cp target/quantum-engine-jvm-0.1.0.jar \
+     target/quantum-engine-jvm-0.1.0-scala2.12.jar && \
+  mvn -q dependency:copy-dependencies -DincludeScope=runtime && cd ..
+./scripts/run-pyspark-demo.sh
+```
+
+PyPI's `pyspark` ships Scala **2.12** binaries, hence the cross-built jar
+(`scala-collection-compat` keeps the sources identical). Note that
+`spark.createDataFrame(...)` plans as an RDD scan the strategy can't claim —
+go through Parquet (as the example does), which routes via the native
+`FileScanNode`. Sanitizers toggle via `-DQUANTUM_ENABLE_ASAN=ON`, `_UBSAN`, `_TSAN`.
 
 ## Architecture at a Glance
 
