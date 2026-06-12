@@ -234,8 +234,10 @@ execution with no engine changes.
 
 | Setting | Where | Effect |
 |---|---|---|
+| `spark.quantum.plain.maxBytes` | Spark conf | Source-size ceiling for claiming plain (non-aggregate) query roots; larger sources fall back to Spark's codegen (wide results favor it). Default 64 MB. Aggregates are always claimed. |
 | `spark.quantum.agg.parallelism` | Spark conf | > 1 hash-partitions GROUP BY input and aggregates partitions in parallel on the engine scheduler (merge-free). Default 0 (serial; the int64 fast path usually wins below very large group counts). |
 | `QUANTUM_SCHEDULER_THREADS` | env | Worker-pool size for intra-operator parallelism. Default: half the hardware threads (Spark supplies task-level parallelism around the engine). |
+| `QUANTUM_SPILL_FRACTION` | env | Memory-fraction spill trigger for aggregates/sorts (default `0.8` of the engine budget; `0` disables). |
 | `QUANTUM_PREFETCH` | env | `0` disables decode-ahead file prefetch (on by default). |
 | `QUANTUM_DISK_CACHE_DIR` | env (or `io::setDiskCacheDir`) | Local cache directory for object-store reads (`s3://`, `gs://`, `abfs://`): objects download once, immutable thereafter. Empty/unset disables. |
 
@@ -303,12 +305,17 @@ native-resident data keep the JVM heap small and roughly halve GC activity,
 and the engine's buffer recycling (R1 below) bounds native arena growth by
 the working set instead of the query length.
 
-**Known trade-off:** wide-output queries (plain `SELECT` returning millions
-of rows) favor vanilla Spark (~4× at 3.6M output rows) — Quantum's driver-side
-collect pays per-row IPC→Java→`UnsafeRow` conversion that Spark's codegen
-avoids. The engine's sweet spot is reductive queries (filters + aggregates).
-The structural fix is columnar handoff (`QuantumExec` returning Arrow-backed
-`ColumnarBatch`es via Spark's columnar execution) — future work.
+**Known trade-off (managed):** wide-output queries (plain `SELECT` returning
+millions of rows) favor vanilla Spark — per-row native→JVM conversion that
+Spark's codegen avoids. Three mitigations are in place: (1) zero-copy IPC
+result serialization — the engine's column layout is bit-identical to Arrow's
+(LSB validity bitmaps, int32 string offsets), so result buffers wrap instead
+of rebuilding row by row (wide select 5.4 → 4.0 s); (2) a **cost gate** —
+plain (non-aggregate) roots over sources larger than
+`spark.quantum.plain.maxBytes` (default 64 MB) automatically fall back to
+Spark, while reductive aggregates are always claimed; (3) the structural fix,
+columnar handoff via Spark's columnar execution, remains future work and
+would let the gate default rise.
 
 **Resource optimizations:** R1 ✅ — `MemoryManager` size-bucketed free list
 in front of the bump arena (`Buffer` destruction recycles; exact-size

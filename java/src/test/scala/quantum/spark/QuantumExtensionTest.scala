@@ -1643,4 +1643,47 @@ class QuantumExtensionTest {
     }
   }
 
+  /**
+   * Trade-off gate: plain (non-aggregate) roots over sources larger than
+   * spark.quantum.plain.maxBytes fall back to Spark — wide results pay
+   * per-row native->JVM conversion Spark's codegen avoids. Aggregates are
+   * reductive and stay claimed regardless of source size.
+   */
+  @Test
+  def plainRootCostGateFallsBackOnWideSources(): Unit = {
+    val s = spark
+    import s.implicits._
+    val dir = java.nio.file.Files.createTempDirectory("quantum_gate_").toFile
+    val path = new java.io.File(dir, "t.parquet").getAbsolutePath
+    (0 until 10000).map(i => (i.toLong % 7, i.toLong)).toDF("k", "v")
+      .coalesce(1).write.mode("overwrite").parquet(path)
+    spark.read.parquet(path).createOrReplaceTempView("kv_gate")
+
+    spark.conf.set("spark.quantum.plain.maxBytes", "1")  // everything is "wide"
+    try {
+      QuantumStrategy.reset()
+      val plainRows = spark.sql("SELECT k, v FROM kv_gate WHERE v < 5").collect()
+      assertEquals(5, plainRows.length)
+      assertTrue(QuantumStrategy.translations.forall(!_.startsWith("Plain(")),
+        "plain root should fall back over the gate; translations = " +
+          QuantumStrategy.translations)
+      assertTrue(QuantumStrategy.lastTranslation.exists(_.contains("plain.maxBytes")),
+        "reject reason should name the gate; got " + QuantumStrategy.lastTranslation)
+
+      // Aggregates ignore the gate.
+      QuantumStrategy.reset()
+      val aggRows = spark.sql(
+        "SELECT k, SUM(v) AS s FROM kv_gate GROUP BY k").collect()
+      assertEquals(7, aggRows.length)
+      assertTrue(QuantumStrategy.translations.exists(_.startsWith("HashAggregate(")),
+        "aggregate should still claim; translations = " + QuantumStrategy.translations)
+    } finally {
+      spark.conf.set("spark.quantum.plain.maxBytes", (64L * 1024 * 1024).toString)
+      def rmRf(f: java.io.File): Unit = {
+        if (f.isDirectory) f.listFiles().foreach(rmRf); f.delete()
+      }
+      rmRf(dir)
+    }
+  }
+
 }

@@ -41,6 +41,18 @@ class QuantumStrategy(session: org.apache.spark.sql.SparkSession = null)
     else session.conf.get("spark.quantum.agg.parallelism", "0").toInt
   }
 
+  /** spark.quantum.plain.maxBytes: plain (non-aggregate) query roots are
+   *  claimed only when the source's estimated size is at or below this —
+   *  wide results pay per-row native->JVM conversion that Spark's codegen
+   *  avoids, so large pass-through SELECTs run faster on vanilla Spark.
+   *  Aggregates (reductive: small results) are always claimed. Default
+   *  64 MB; raise it once columnar result handoff lands. */
+  private def plainMaxBytes: Long = {
+    if (session == null) 64L * 1024 * 1024
+    else session.conf.get("spark.quantum.plain.maxBytes",
+                          (64L * 1024 * 1024).toString).toLong
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     QuantumStrategy.lastSeen.set(plan)
     QuantumStrategy.seenClasses.add(plan.getClass.getSimpleName)
@@ -91,11 +103,20 @@ class QuantumStrategy(session: org.apache.spark.sql.SparkSession = null)
         // Plain (non-aggregate) query root: SELECT … WHERE … ORDER BY …
         // LIMIT without GROUP BY. Gated to the ReturnAnswer root so we
         // claim whole end-user queries, not arbitrary subtrees of plans
-        // Spark is in the middle of planning.
-        QuantumStrategy.tryTranslate(
-            None, other, postLimit.output, None, limit, sortOrder, projectList)
-          .map(quantumExec => Seq(quantumExec))
-          .getOrElse(Nil)
+        // Spark is in the middle of planning — and cost-gated: wide
+        // results favor Spark's codegen (see plainMaxBytes).
+        if (other.stats.sizeInBytes > plainMaxBytes) {
+          QuantumStrategy.lastTranslated.set(
+            s"reject: plain root over ${other.stats.sizeInBytes} bytes " +
+            s"(> spark.quantum.plain.maxBytes=$plainMaxBytes); wide results " +
+            "favor Spark's codegen")
+          Nil
+        } else {
+          QuantumStrategy.tryTranslate(
+              None, other, postLimit.output, None, limit, sortOrder, projectList)
+            .map(quantumExec => Seq(quantumExec))
+            .getOrElse(Nil)
+        }
       case _ => Nil
     }
   }

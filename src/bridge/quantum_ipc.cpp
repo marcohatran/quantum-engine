@@ -54,6 +54,16 @@ std::shared_ptr<arrow::RecordBatch> toArrow(const ColumnBatch& batch) {
     fields.reserve(nCols);
     arrays.reserve(nCols);
 
+    // The engine's column layout IS Arrow's: LSB-first 1=valid validity
+    // bitmaps, contiguous fixed-width values, int32 offsets + bytes for
+    // strings. Wrap the buffers (non-owning — the IPC writer copies them
+    // into the output stream while `batch` is alive) instead of rebuilding
+    // arrays row by row.
+    auto wrap = [](const void* data, size_t size) {
+        return std::make_shared<arrow::Buffer>(
+            static_cast<const uint8_t*>(data), static_cast<int64_t>(size));
+    };
+
     auto finishOrThrow = [](arrow::ArrayBuilder& b) {
         std::shared_ptr<arrow::Array> a;
         auto st = b.Finish(&a);
@@ -65,50 +75,54 @@ std::shared_ptr<arrow::RecordBatch> toArrow(const ColumnBatch& batch) {
     };
 
     for (size_t c = 0; c < nCols; ++c) {
-        const auto& col  = batch.column(c);
-        const auto  name = fmt::format("c{}", c);
+        const auto& col      = batch.column(c);
+        const auto  name     = fmt::format("c{}", c);
+        const auto  validity = wrap(col.validity().data(),
+                                    col.validity().sizeBytes());
         switch (col.type().id) {
             case TypeId::INT64: {
-                arrow::Int64Builder b;
-                for (size_t r = 0; r < nRows; ++r) {
-                    if (col.validity().isValid(r)) (void)b.Append(col.typed<int64_t>()[r]);
-                    else                           (void)b.AppendNull();
-                }
+                auto data = arrow::ArrayData::Make(
+                    arrow::int64(), static_cast<int64_t>(nRows),
+                    {validity, wrap(col.values().data(), nRows * sizeof(int64_t))},
+                    arrow::kUnknownNullCount);
                 fields.push_back(arrow::field(name, arrow::int64()));
-                arrays.push_back(finishOrThrow(b));
+                arrays.push_back(arrow::MakeArray(data));
                 break;
             }
             case TypeId::INT32: {
-                arrow::Int32Builder b;
-                for (size_t r = 0; r < nRows; ++r) {
-                    if (col.validity().isValid(r)) (void)b.Append(col.typed<int32_t>()[r]);
-                    else                           (void)b.AppendNull();
-                }
+                auto data = arrow::ArrayData::Make(
+                    arrow::int32(), static_cast<int64_t>(nRows),
+                    {validity, wrap(col.values().data(), nRows * sizeof(int32_t))},
+                    arrow::kUnknownNullCount);
                 fields.push_back(arrow::field(name, arrow::int32()));
-                arrays.push_back(finishOrThrow(b));
+                arrays.push_back(arrow::MakeArray(data));
                 break;
             }
             case TypeId::FLOAT64: {
-                arrow::DoubleBuilder b;
-                for (size_t r = 0; r < nRows; ++r) {
-                    if (col.validity().isValid(r)) (void)b.Append(col.typed<double>()[r]);
-                    else                           (void)b.AppendNull();
-                }
+                auto data = arrow::ArrayData::Make(
+                    arrow::float64(), static_cast<int64_t>(nRows),
+                    {validity, wrap(col.values().data(), nRows * sizeof(double))},
+                    arrow::kUnknownNullCount);
                 fields.push_back(arrow::field(name, arrow::float64()));
-                arrays.push_back(finishOrThrow(b));
-                break;
-            }
-            case TypeId::BOOL: {
-                arrow::BooleanBuilder b;
-                for (size_t r = 0; r < nRows; ++r) {
-                    if (col.validity().isValid(r)) (void)b.Append(col.typed<uint8_t>()[r] != 0);
-                    else                           (void)b.AppendNull();
-                }
-                fields.push_back(arrow::field(name, arrow::boolean()));
-                arrays.push_back(finishOrThrow(b));
+                arrays.push_back(arrow::MakeArray(data));
                 break;
             }
             case TypeId::STRING: {
+                if (!col.isDictEncoded()) {
+                    const auto* off = col.offsets().as<int32_t>();
+                    auto data = arrow::ArrayData::Make(
+                        arrow::utf8(), static_cast<int64_t>(nRows),
+                        {validity,
+                         wrap(off, (nRows + 1) * sizeof(int32_t)),
+                         wrap(col.values().data(),
+                              static_cast<size_t>(off[nRows]))},
+                        arrow::kUnknownNullCount);
+                    fields.push_back(arrow::field(name, arrow::utf8()));
+                    arrays.push_back(arrow::MakeArray(data));
+                    break;
+                }
+                // Dict-encoded: decode through the builder (rare at the
+                // result boundary; dict export is a follow-up).
                 arrow::StringBuilder b;
                 for (size_t r = 0; r < nRows; ++r) {
                     if (col.validity().isValid(r)) {
@@ -119,6 +133,18 @@ std::shared_ptr<arrow::RecordBatch> toArrow(const ColumnBatch& batch) {
                     }
                 }
                 fields.push_back(arrow::field(name, arrow::utf8()));
+                arrays.push_back(finishOrThrow(b));
+                break;
+            }
+            case TypeId::BOOL: {
+                // Engine bools are 1 byte/row; Arrow's are bit-packed —
+                // builder path.
+                arrow::BooleanBuilder b;
+                for (size_t r = 0; r < nRows; ++r) {
+                    if (col.validity().isValid(r)) (void)b.Append(col.typed<uint8_t>()[r] != 0);
+                    else                           (void)b.AppendNull();
+                }
+                fields.push_back(arrow::field(name, arrow::boolean()));
                 arrays.push_back(finishOrThrow(b));
                 break;
             }
