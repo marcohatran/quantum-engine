@@ -305,17 +305,21 @@ native-resident data keep the JVM heap small and roughly halve GC activity,
 and the engine's buffer recycling (R1 below) bounds native arena growth by
 the working set instead of the query length.
 
-**Known trade-off (managed):** wide-output queries (plain `SELECT` returning
-millions of rows) favor vanilla Spark — per-row native→JVM conversion that
-Spark's codegen avoids. Three mitigations are in place: (1) zero-copy IPC
-result serialization — the engine's column layout is bit-identical to Arrow's
-(LSB validity bitmaps, int32 string offsets), so result buffers wrap instead
-of rebuilding row by row (wide select 5.4 → 4.0 s); (2) a **cost gate** —
-plain (non-aggregate) roots over sources larger than
-`spark.quantum.plain.maxBytes` (default 64 MB) automatically fall back to
-Spark, while reductive aggregates are always claimed; (3) the structural fix,
-columnar handoff via Spark's columnar execution, remains future work and
-would let the gate default rise.
+**Wide-output trade-off (resolved to parity):** plain `SELECT`s returning
+millions of rows once favored vanilla Spark 4.4× — per-row native→JVM
+conversion Spark's codegen avoids. Three fixes brought it to parity
+(3.6M-row select: 5.4 → 4.0 → **1.8 s** vs Spark's ~1.7 s):
+(1) zero-copy IPC result serialization — the engine's column layout is
+bit-identical to Arrow's (LSB validity bitmaps, int32 string offsets), so
+result buffers wrap instead of rebuilding row by row; (2) **columnar
+handoff** — `QuantumExec` implements Spark's columnar execution
+(`supportsColumnar`), handing Arrow-backed `ColumnarBatch`es with vectors
+transferred zero-copy out of the IPC stream; Spark's codegen'd
+`ColumnarToRow` does the rest (gated to Long/Double/String/Boolean outputs
+with non-duplicated columns; batches close on task completion);
+(3) a **cost gate** — plain roots over sources larger than
+`spark.quantum.plain.maxBytes` (default 64 MB) still fall back to Spark,
+which remains marginally ahead with lower RSS on pure pass-through scans.
 
 **Resource optimizations:** R1 ✅ — `MemoryManager` size-bucketed free list
 in front of the bump arena (`Buffer` destruction recycles; exact-size

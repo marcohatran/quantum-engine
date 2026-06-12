@@ -34,6 +34,9 @@ object QuantumResourceProbe {
       .config("spark.sql.shuffle.partitions", "1")
       .config("spark.sql.optimizer.excludedRules",
               "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation")
+      // Measure the engine on wide results too (the production default
+      // gates these to Spark; see spark.quantum.plain.maxBytes).
+      .config("spark.quantum.plain.maxBytes", Long.MaxValue.toString)
     val spark =
       (if (mode == "quantum") builder.withExtensions(new QuantumExtension())
        else builder).getOrCreate()

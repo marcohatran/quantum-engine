@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.{BigIntVector, Float8Vector, VarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BigIntVector, FieldVector, Float8Vector, VarCharVector, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.apache.arrow.vector.types.FloatingPointPrecision
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema => ArrowSchema}
@@ -15,8 +15,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector => SparkColumnVector}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import quantum.QuantumEngine
 
@@ -67,6 +68,71 @@ case class QuantumExec(
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "nativeTimeMs"  -> SQLMetrics.createTimingMetric(sparkContext, "native execution time"))
+
+  // Columnar handoff: hand Spark Arrow-backed ColumnarBatches (vectors
+  // transferred out of the IPC reader — zero per-row conversion; Spark's
+  // codegen'd ColumnarToRow consumes them). Gated to plans whose output
+  // types map 1:1 onto the engine's result vectors: IntegerType outputs
+  // arrive as INT64 vectors and would need narrowing, and a duplicated
+  // physicalIndex would transfer the same vector twice — both keep the
+  // row path.
+  override def supportsColumnar: Boolean =
+    output.forall(a => a.dataType match {
+      case LongType | DoubleType | StringType | BooleanType => true
+      case _                                                => false
+    }) && physicalIndex.distinct.length == physicalIndex.length
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val t0      = System.nanoTime()
+    val buffers = runNativeIpc()  // raw IPC streams — serializable
+    metrics("nativeTimeMs") += (System.nanoTime() - t0) / 1000000L
+    val numRows = metrics("numOutputRows")
+    val physIdx = physicalIndex
+    val nOut    = output.size
+    // Batches materialize INSIDE the task (ColumnarBatch isn't
+    // serializable) and close at task completion — ColumnarToRow doesn't
+    // close what it consumes.
+    sparkContext.parallelize(buffers, 1).mapPartitions { it =>
+      val tc = org.apache.spark.TaskContext.get()
+      it.flatMap { bytes =>
+        val batches = QuantumExec.parseIpcToColumnar(bytes, physIdx, nOut)
+        batches.foreach { b =>
+          numRows += b.numRows()
+          if (tc != null) {
+            tc.addTaskCompletionListener[Unit] { _ =>
+              try b.close() catch { case _: Throwable => () }
+            }
+          }
+        }
+        batches
+      }
+    }
+  }
+
+  /** Run the plan and return each result batch's raw Arrow IPC stream. */
+  private def runNativeIpc(): Seq[Array[Byte]] = {
+    val eng       = QuantumExec.borrowEngine()
+    val allocator = QuantumExec.sharedAllocator
+    try {
+      sources.foreach { case (sourceId, cols) =>
+        QuantumEngine.registerSourceIpc(eng, sourceId, ipcBytesFor(cols(), allocator))
+      }
+      val result = QuantumEngine.execute(eng, planBytes)
+      try {
+        val out = scala.collection.mutable.ArrayBuffer.empty[Array[Byte]]
+        var bytes: Array[Byte] = null
+        while ({ bytes = QuantumEngine.resultNextIpc(result); bytes != null }) {
+          out += bytes
+        }
+        QuantumExec.lastTraceJson.set(QuantumEngine.resultTraceJson(result))
+        out.toSeq
+      } finally {
+        QuantumEngine.destroyResult(result)
+      }
+    } finally {
+      QuantumExec.returnEngine(eng)
+    }
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     val t0   = System.nanoTime()
@@ -252,4 +318,31 @@ object QuantumExec {
   /** One Arrow allocator for the JVM (thread-safe); netty arenas recycle
    *  across queries instead of re-growing. Never closed. */
   private[spark] lazy val sharedAllocator = new RootAllocator()
+
+  /** Parse one IPC stream into ColumnarBatches: vectors transferred out of
+   *  the reader's root (zero-copy buffer move), reordered via physIdx,
+   *  wrapped as Spark ArrowColumnVectors. Static so RDD closures don't
+   *  capture the plan node. */
+  private[spark] def parseIpcToColumnar(
+      bytes: Array[Byte], physIdx: Array[Int], nOut: Int): Seq[ColumnarBatch] = {
+    val reader = new ArrowStreamReader(new ByteArrayInputStream(bytes), sharedAllocator)
+    try {
+      val out  = scala.collection.mutable.ArrayBuffer.empty[ColumnarBatch]
+      val root = reader.getVectorSchemaRoot
+      while (reader.loadNextBatch()) {
+        val cols = new Array[SparkColumnVector](nOut)
+        var ci = 0
+        while (ci < nOut) {
+          val tp = root.getVector(physIdx(ci)).getTransferPair(sharedAllocator)
+          tp.transfer()
+          cols(ci) = new ArrowColumnVector(tp.getTo.asInstanceOf[FieldVector])
+          ci += 1
+        }
+        out += new ColumnarBatch(cols, root.getRowCount)
+      }
+      out.toSeq
+    } finally {
+      reader.close()
+    }
+  }
 }
