@@ -20,6 +20,7 @@
 #include "io/ConcatFileReader.hpp"
 #include "io/DeltaTableReader.hpp"
 #include "io/IcebergTableReader.hpp"
+#include "io/ParallelFileReader.hpp"
 #include "io/ParquetReader.hpp"
 #include "io/PrefetchReader.hpp"
 #include "io/PartitionedFileReader.hpp"
@@ -184,13 +185,34 @@ double defaultSpillFraction() {
 
 // Decode-ahead for file scans (QUANTUM_PREFETCH=0 disables): the reader
 // runs on a scheduler task so decode overlaps downstream compute.
-FileFormatReaderPtr wrapPrefetch(FileFormatReaderPtr reader) {
+bool prefetchEnabled() {
     static const bool enabled = [] {
         const char* env = std::getenv("QUANTUM_PREFETCH");
         return env == nullptr || std::string_view(env) != "0";
     }();
-    if (!enabled) return reader;
+    return enabled;
+}
+
+FileFormatReaderPtr wrapPrefetch(FileFormatReaderPtr reader) {
+    if (!prefetchEnabled()) return reader;
     return std::make_unique<PrefetchReader>(std::move(reader));
+}
+
+// How many files of a multi-file scan decode concurrently (the
+// ParallelFileReader producer count). QUANTUM_SCAN_PARALLELISM overrides;
+// defaults to the scheduler width. 1 when prefetch is disabled — that
+// flag means "no background decode tasks", so multi-file scans fall back
+// to the ordered serial ConcatFileReader.
+size_t scanParallelism() {
+    if (!prefetchEnabled()) return 1;
+    static const size_t v = [] {
+        if (const char* env = std::getenv("QUANTUM_SCAN_PARALLELISM")) {
+            const long n = std::strtol(env, nullptr, 10);
+            if (n > 0) return static_cast<size_t>(n);
+        }
+        return TaskScheduler::global().threads();
+    }();
+    return v;
 }
 
 OperatorPtr PlanBuilder::build(const PlanNode& node, SourceCatalog& catalog) {
@@ -256,16 +278,24 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                     auto wrapped = wrapPartitioned(std::move(reader), 0);
                     return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(wrapped)));
                 }
-                // Per-file construction decodes the whole file (ParquetReader
-                // is eager), so multi-file scans fan the decode out across
-                // the scheduler — each file is one independent task touching
-                // only the thread-safe MemoryManager.
+                // Multi-file: construction only reads footers (parallelFor
+                // hides the per-file metadata I/O); decode happens when
+                // batches are pulled. ParallelFileReader fans that decode
+                // out across scanParallelism() producer tasks — batch order
+                // across files is nondeterministic, which SQL permits
+                // without ORDER BY. QUANTUM_PREFETCH=0 (or parallelism 1)
+                // keeps the ordered serial path.
                 std::vector<FileFormatReaderPtr> readers(n.paths.size());
                 TaskScheduler::global().parallelFor(
                     n.paths.size(), [&](size_t i) {
                         auto pr = std::make_unique<ParquetReader>(n.paths[i], mm_);
                         readers[i] = wrapPartitioned(std::move(pr), i);
                     });
+                if (const size_t par = scanParallelism(); par > 1) {
+                    return std::make_unique<FileScanOperator>(
+                        mm_, std::make_unique<ParallelFileReader>(
+                                 std::move(readers), par));
+                }
                 auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
                 return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(concat)));
             }

@@ -69,6 +69,7 @@ add_library(quantum_core SHARED
     io/DeltaTableReader.cpp
     io/IcebergTableReader.cpp
     io/FileSystem.cpp
+    io/ParallelFileReader.cpp
     io/ParquetReader.cpp
     io/PrefetchReader.cpp
     io/PartitionedFileReader.cpp
