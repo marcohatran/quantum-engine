@@ -294,8 +294,20 @@ object QuantumExec {
   /** Most recent native query trace (JSON), for tests and diagnostics. */
   val lastTraceJson = new java.util.concurrent.atomic.AtomicReference[String]()
 
-  /** Engine memory budget per pooled instance. */
-  private val EngineBudgetBytes = 64L * 1024 * 1024
+  /** Engine memory budget per pooled instance
+   *  (`spark.quantum.budget.bytes`). A cap, not a reservation: the arena
+   *  grows on demand and returns to the OS on pool return, so idle
+   *  engines hold ~nothing. Aggregates spill to disk at
+   *  QUANTUM_SPILL_FRACTION (0.8) of this; the old 64 MB default made
+   *  high-cardinality results (millions of groups) OOM at the result
+   *  marshalling step. */
+  private lazy val EngineBudgetBytes: Long = {
+    val fromConf =
+      try Option(org.apache.spark.SparkEnv.get)
+        .map(_.conf.getLong("spark.quantum.budget.bytes", 0L)).filter(_ > 0L)
+      catch { case _: Throwable => None }
+    fromConf.getOrElse(512L * 1024 * 1024)
+  }
 
   // Engines are pooled rather than shared: the source catalog isn't
   // thread-safe, so each in-flight query borrows its own engine and the

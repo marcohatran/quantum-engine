@@ -99,3 +99,24 @@ TEST(MemoryManager, BudgetAccountingUnchangedByRecycling) {
     Buffer c = mm.allocate(4096);  // recycled block re-counts
     EXPECT_EQ(mm.used(), 8192u);
 }
+
+TEST(MemoryManager, TrimReleasesArenaWhenIdle) {
+    MemoryManager mm(16 << 20);
+    {
+        auto a = mm.allocate(1 << 20);
+        auto b = mm.allocate(2 << 20);
+        EXPECT_FALSE(mm.trim());  // live buffers — must refuse
+        EXPECT_GT(mm.arenaReservedBytes(), 0u);
+    }
+    // Buffers destroyed: bytes sit in the free lists, arena still mapped.
+    EXPECT_EQ(mm.used(), 0u);
+    EXPECT_GT(mm.arenaReservedBytes(), 0u);
+
+    EXPECT_TRUE(mm.trim());
+    EXPECT_EQ(mm.arenaReservedBytes(), 0u);
+
+    // Engine remains usable after a trim, and recycling still works.
+    auto c = mm.allocate(1 << 20);
+    EXPECT_GT(mm.arenaReservedBytes(), 0u);
+    EXPECT_EQ(mm.used(), 1u << 20);
+}

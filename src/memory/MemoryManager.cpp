@@ -57,6 +57,17 @@ void MemoryManager::release(size_t bytes) noexcept {
     used_.fetch_sub(bytes, std::memory_order_acq_rel);
 }
 
+bool MemoryManager::trim() noexcept {
+    std::lock_guard<std::mutex> lock(arenaMu_);
+    // A racing allocate() reserves budget before taking arenaMu_, so a
+    // non-zero used() here covers both live Buffers and allocations in
+    // flight; they never see freed chunks.
+    if (used_.load(std::memory_order_acquire) != 0) return false;
+    freeLists_.clear();
+    arena_.reset();
+    return true;
+}
+
 void MemoryManager::deallocate(uint8_t* data, size_t bytes) noexcept {
     if (bytes == 0 || data == nullptr) return;
     try {

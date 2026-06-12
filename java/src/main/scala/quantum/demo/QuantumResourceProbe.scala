@@ -84,8 +84,20 @@ object QuantumResourceProbe {
     val gcCount  = gc.map(_.getCollectionCount).sum
     val gcTimeMs = gc.map(_.getCollectionTime).sum
 
+    // Post-run floor: RSS after a GC, with all sessions' queries done —
+    // shows what the pooled engine + allocators retain between queries.
+    System.gc(); Thread.sleep(200)
+    val finalRssMb = {
+      val pid = ProcessHandle.current().pid()
+      val p   = new ProcessBuilder("ps", "-o", "rss=", "-p", pid.toString).start()
+      val out = new String(p.getInputStream.readAllBytes()).trim
+      p.waitFor()
+      if (out.nonEmpty) out.toLong / 1024 else -1L
+    }
+
     println(f"RESULT mode=$mode wall_ms=${times.sorted.apply(times.size / 2)}%.1f " +
-            f"heap_used_mb=$heapUsedMb%.0f gc_count=$gcCount gc_time_ms=$gcTimeMs")
+            f"heap_used_mb=$heapUsedMb%.0f gc_count=$gcCount gc_time_ms=$gcTimeMs " +
+            f"final_rss_mb=$finalRssMb")
     spark.stop()
   }
 }

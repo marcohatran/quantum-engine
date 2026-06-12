@@ -235,6 +235,7 @@ execution with no engine changes.
 | Setting | Where | Effect |
 |---|---|---|
 | `spark.quantum.plain.maxBytes` | Spark conf | Source-size ceiling for claiming plain (non-aggregate) query roots; larger sources fall back to Spark's codegen (wide results favor it). Default 64 MB. Aggregates are always claimed. |
+| `spark.quantum.budget.bytes` | Spark conf | Native memory budget per pooled engine (default 512 MB). A cap, not a reservation — arenas grow on demand and trim on pool return; aggregates/sorts spill at `QUANTUM_SPILL_FRACTION` of it. |
 | `spark.quantum.agg.parallelism` | Spark conf | > 1 hash-partitions GROUP BY input and aggregates partitions in parallel on the engine scheduler (merge-free). Default 0 (serial; the int64 fast path usually wins below very large group counts). |
 | `QUANTUM_SCHEDULER_THREADS` | env | Worker-pool size for intra-operator parallelism. Default: half the hardware threads (Spark supplies task-level parallelism around the engine). |
 | `QUANTUM_SPILL_FRACTION` | env | Memory-fraction spill trigger for aggregates/sorts (default `0.8` of the engine budget; `0` disables). |
@@ -414,6 +415,15 @@ After P0+P1, Quantum leads at both scales (table above) — the plan's
    (plain malloc/free per buffer, honoring an explicit user setting).
    Wide select peak RSS 2576 → **1935 MB** (vanilla: 1784) with wall
    1122 → 956 ms; aggregates unaffected.
+13. ~~Engine trim on pool return + configurable budget~~ ✅ —
+   `MemoryManager::trim()` returns the arena + free lists to the OS when
+   nothing is live; `q_clear_sources` (the pool-return hook) calls it,
+   so idle pooled engines hold ~nothing instead of their largest query's
+   working set. The probe verifying this exposed a real bug: the
+   hardcoded 64 MB engine budget made high-cardinality results OOM at
+   result marshalling — now `spark.quantum.budget.bytes` (default
+   512 MB; a cap, not a reservation). 10M rows → 5M groups: previously
+   failed, now **2.6 s vs vanilla 7.4 s (2.9×)**.
 6. ~~`spark.quantum.agg.parallelism`~~ ✅ — config-gated wiring from the
    Spark strategy into `HashAggregateNode.parallelism` (exchange +
    merge-free parallel aggregation). Off by default; targets large group

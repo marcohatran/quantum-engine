@@ -54,6 +54,20 @@ public:
     // Phase 1 stub: no spillable operators registered yet.
     bool spill() noexcept { return false; }
 
+    // Returns every retained byte to the OS — free lists point into arena
+    // chunks, so reclamation is all-or-nothing and only legal when no
+    // Buffer is live. Hosts that pool engines call this between queries
+    // (q_clear_sources); otherwise the recycled working set of the
+    // largest query so far is held for the engine's lifetime. Returns
+    // false (and does nothing) while allocations are outstanding.
+    bool trim() noexcept;
+
+    // Total bytes the arena currently holds from the OS (telemetry/tests).
+    size_t arenaReservedBytes() noexcept {
+        std::lock_guard<std::mutex> lock(arenaMu_);
+        return arena_.bytesReserved();
+    }
+
 private:
     Arena               arena_;
     std::mutex          arenaMu_;

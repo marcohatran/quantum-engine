@@ -12,6 +12,8 @@
 #include <string_view>
 #include <vector>
 
+#include <arrow/memory_pool.h>
+
 #include "bridge/BridgeError.hpp"
 #include "bridge/Handles.hpp"
 #include "common/Status.hpp"
@@ -200,7 +202,14 @@ extern "C" void q_register_source(QEngine*    engine,
 }
 
 extern "C" void q_clear_sources(QEngine* engine) {
-    if (engine != nullptr) engine->catalog.clear();
+    if (engine == nullptr) return;
+    engine->catalog.clear();
+    // Pool-return hygiene: with the catalog dropped nothing is live, so
+    // the engine returns its recycled working set (arena + free lists)
+    // to the OS instead of holding the largest query's footprint for the
+    // pool's lifetime. Arrow's decode pool gets the same chance.
+    engine->mm->trim();
+    arrow::default_memory_pool()->ReleaseUnused();
 }
 
 // ---------------------------------------------------------------------------
