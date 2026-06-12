@@ -197,6 +197,10 @@ extern "C" void q_register_source(QEngine*    engine,
     }, 0);
 }
 
+extern "C" void q_clear_sources(QEngine* engine) {
+    if (engine != nullptr) engine->catalog.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Plan execution
 // ---------------------------------------------------------------------------

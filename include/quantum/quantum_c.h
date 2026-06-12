@@ -97,6 +97,11 @@ void q_register_source(QEngine*    engine,
                        QBatch**    batches,
                        size_t      num_batches);
 
+// Drop every registered source (consumed or not). Hosts that pool engines
+// across queries call this when returning an engine, so per-query source
+// ids don't accumulate in the catalog.
+void q_clear_sources(QEngine* engine);
+
 // ---------------------------------------------------------------------------
 // Plan execution
 // ---------------------------------------------------------------------------

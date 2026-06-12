@@ -205,3 +205,40 @@ TEST(QuantumC, TraceJsonAndPrometheusCounters) {
 
     q_destroy_engine(eng);
 }
+
+TEST(QuantumC, ClearSourcesDropsCatalog) {
+    QEngine* eng = q_create_engine(1 << 20);
+    const std::vector<int64_t> ks = {1, 2};
+    QColumn* col = q_column_int64(eng, ks.data(), nullptr, ks.size());
+    QColumn* cols[1] = {col};
+    QBatch* batch = q_batch_new(eng, cols, 1);
+    QBatch* batches[1] = {batch};
+    q_register_source(eng, "src", batches, 1);
+
+    q_clear_sources(eng);
+
+    // The source is gone: executing a scan against it must fail cleanly.
+    PlanNode root{ScanNode{"src", Schema({{"k", Int64}})}};
+    auto bytes = planToProtoBytes(root);
+    QResult* res = q_execute(eng,
+                             reinterpret_cast<const uint8_t*>(bytes.data()),
+                             bytes.size());
+    EXPECT_EQ(res, nullptr);
+    EXPECT_NE(std::string(q_last_error()).find("no source"), std::string::npos);
+
+    // Engine remains usable: re-register and run.
+    QColumn* col2 = q_column_int64(eng, ks.data(), nullptr, ks.size());
+    QColumn* cols2[1] = {col2};
+    QBatch* b2 = q_batch_new(eng, cols2, 1);
+    QBatch* bs2[1] = {b2};
+    q_register_source(eng, "src", bs2, 1);
+    QResult* res2 = q_execute(eng,
+                              reinterpret_cast<const uint8_t*>(bytes.data()),
+                              bytes.size());
+    ASSERT_NE(res2, nullptr) << q_last_error();
+    const QBatch* out = q_result_next(res2);
+    ASSERT_NE(out, nullptr);
+    EXPECT_EQ(q_batch_num_rows(out), 2u);
+    q_destroy_result(res2);
+    q_destroy_engine(eng);
+}

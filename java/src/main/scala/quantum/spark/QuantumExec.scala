@@ -79,8 +79,8 @@ case class QuantumExec(
   }
 
   private def runNative(): Seq[InternalRow] = {
-    val eng       = QuantumEngine.createEngine(64L * 1024 * 1024)
-    val allocator = new RootAllocator()
+    val eng       = QuantumExec.borrowEngine()
+    val allocator = QuantumExec.sharedAllocator
     try {
       // Each registered source (one per LocalRelation in the plan) is
       // serialized as one Arrow IPC stream — a single JNA crossing per
@@ -104,8 +104,10 @@ case class QuantumExec(
         QuantumEngine.destroyResult(result)
       }
     } finally {
-      allocator.close()
-      QuantumEngine.destroyEngine(eng)
+      // Pooled: the engine (its arena + recycled buffers) and the Arrow
+      // allocator (its netty arenas) are reused by the next query instead
+      // of being torn down and re-grown.
+      QuantumExec.returnEngine(eng)
     }
   }
 
@@ -222,4 +224,29 @@ case class QuantumExec(
 object QuantumExec {
   /** Most recent native query trace (JSON), for tests and diagnostics. */
   val lastTraceJson = new java.util.concurrent.atomic.AtomicReference[String]()
+
+  /** Engine memory budget per pooled instance. */
+  private val EngineBudgetBytes = 64L * 1024 * 1024
+
+  // Engines are pooled rather than shared: the source catalog isn't
+  // thread-safe, so each in-flight query borrows its own engine and the
+  // pool grows to the observed concurrency. Engines live for the JVM —
+  // their arenas and free lists become a stable working set instead of
+  // being re-grown per query.
+  private val enginePool =
+    new java.util.concurrent.ConcurrentLinkedQueue[QuantumEngine.Engine]()
+
+  private[spark] def borrowEngine(): QuantumEngine.Engine = {
+    val pooled = enginePool.poll()
+    if (pooled != null) pooled else QuantumEngine.createEngine(EngineBudgetBytes)
+  }
+
+  private[spark] def returnEngine(e: QuantumEngine.Engine): Unit = {
+    QuantumEngine.clearSources(e)  // drop per-query source ids
+    enginePool.offer(e)
+  }
+
+  /** One Arrow allocator for the JVM (thread-safe); netty arenas recycle
+   *  across queries instead of re-growing. Never closed. */
+  private[spark] lazy val sharedAllocator = new RootAllocator()
 }

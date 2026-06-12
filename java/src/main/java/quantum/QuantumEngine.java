@@ -64,6 +64,7 @@ public final class QuantumEngine {
         void       q_register_source(Engine engine, String source_id,
                                      Pointer batches, long num_batches);
 
+        void       q_clear_sources(Engine engine);
         Result     q_execute(Engine engine, Pointer plan_bytes, long plan_len);
         void       q_destroy_result(Result result);
         Batch      q_result_next(Result result);
@@ -103,6 +104,9 @@ public final class QuantumEngine {
     }
 
     public static void destroyEngine(Engine e) { NATIVE.q_destroy_engine(e); }
+
+    /** Drop all registered sources (for hosts that pool engines). */
+    public static void clearSources(Engine e) { NATIVE.q_clear_sources(e); }
 
     /** Build a float64 column from a Java double[] (validity = null for all-valid). */
     public static Column columnFloat64(Engine e, double[] values, byte[] validity) {
