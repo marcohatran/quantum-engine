@@ -98,6 +98,11 @@ struct FileScanNode {
     std::optional<Schema>                   schema;
     Schema                                  partition_columns;
     std::vector<std::vector<LiteralExpr>>   partition_values;  // [path_idx][col_idx]
+    // File-schema column indices to decode (ascending; empty = all).
+    // Engine-internal: filled by plan::pruneScanColumns, not by hosts —
+    // every ColumnRef above the scan must already be remapped to the
+    // pruned positions. Parquet only.
+    std::vector<int32_t>                    projected_columns;
 };
 
 struct FilterNode;

@@ -43,7 +43,12 @@ object QuantumResourceProbe {
     spark.sparkContext.setLogLevel("ERROR")
 
     if (mode == "prep") {
-      spark.range(rows).selectExpr(s"id % $groups AS k", "id AS v")
+      // Optional 5th arg: extra double columns, for wide-table scans where
+      // the queries below still touch only k and v (column pruning).
+      val extraCols = if (args.length > 4) args(4).toInt else 0
+      val extras = (0 until extraCols).map(i => s"CAST(id * 1.0 + $i AS DOUBLE) AS e$i")
+      spark.range(rows)
+        .selectExpr(Seq(s"id % $groups AS k", "id AS v") ++ extras: _*)
         .coalesce(1).write.mode("overwrite").parquet(dataDir)
       spark.stop()
       return

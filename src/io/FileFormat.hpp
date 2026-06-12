@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "common/DataType.hpp"
 #include "vector/ColumnBatch.hpp"
@@ -31,6 +32,9 @@ public:
 // the bare minimum; backends will grow their own option structs as they land.
 struct FileFormatOptions {
     size_t batchSize = 4096;
+    // File-schema column indices to read, ascending (empty = all).
+    // Honored by ParquetReader; other formats decode everything.
+    std::vector<int32_t> columns;
 };
 
 using FileFormatReaderPtr = std::unique_ptr<FileFormatReader>;

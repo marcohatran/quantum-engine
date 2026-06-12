@@ -14,6 +14,7 @@
 #include "expression/BinaryExpr.hpp"
 #include "expression/ColumnRef.hpp"
 #include "expression/Literal.hpp"
+#include "common/Status.hpp"
 #include "io/ParquetReader.hpp"
 #include "memory/MemoryManager.hpp"
 #include "operator/FileScanOperator.hpp"
@@ -190,4 +191,41 @@ TEST(FileScan, ParquetThroughFilterAndProject) {
 
     EXPECT_EQ(got, (std::vector<std::pair<int64_t,int64_t>>{
         {2, 200}, {3, 300}, {4, 400}}));
+}
+
+TEST(ParquetReader, ProjectedColumnsDecodeSubset) {
+    auto path = writeSampleParquet({1, 2, 3}, {10, 20, 30},
+                                   {"a", "b", "c"}, "projected");
+    MemoryManager mm(1 << 20);
+    FileFormatOptions options;
+    options.columns = {0, 2};  // k and name; v is never decoded
+
+    ParquetReader reader(path, &mm, options);
+    ASSERT_EQ(reader.schema().numFields(), 2u);
+    EXPECT_EQ(reader.schema().fields()[0].name, "k");
+    EXPECT_EQ(reader.schema().fields()[1].name, "name");
+
+    reader.open();
+    std::vector<std::pair<int64_t, std::string>> got;
+    while (auto batch = reader.nextBatch()) {
+        ASSERT_EQ(batch->numColumns(), 2u);
+        for (size_t i = 0; i < batch->numRows(); ++i) {
+            got.emplace_back(batch->column(0).typed<int64_t>()[i],
+                             std::string(batch->column(1).stringAt(i)));
+        }
+    }
+    reader.close();
+    cleanup(path);
+
+    EXPECT_EQ(got, (std::vector<std::pair<int64_t, std::string>>{
+        {1, "a"}, {2, "b"}, {3, "c"}}));
+}
+
+TEST(ParquetReader, ProjectedColumnOutOfRangeRejects) {
+    auto path = writeSampleParquet({1}, {10}, {"a"}, "projected_oob");
+    MemoryManager mm(1 << 20);
+    FileFormatOptions options;
+    options.columns = {0, 7};
+    EXPECT_THROW(ParquetReader(path, &mm, options), QuantumError);
+    cleanup(path);
 }

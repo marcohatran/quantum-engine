@@ -239,6 +239,7 @@ execution with no engine changes.
 | `QUANTUM_SCHEDULER_THREADS` | env | Worker-pool size for intra-operator parallelism. Default: half the hardware threads (Spark supplies task-level parallelism around the engine). |
 | `QUANTUM_SPILL_FRACTION` | env | Memory-fraction spill trigger for aggregates/sorts (default `0.8` of the engine budget; `0` disables). |
 | `QUANTUM_PREFETCH` | env | `0` disables decode-ahead file prefetch (on by default) and multi-file parallel decode. |
+| `QUANTUM_PRUNE_COLUMNS` | env | `0` disables scan column pruning (on by default: aggregate queries decode only referenced Parquet columns). |
 | `QUANTUM_BATCH_ROWS` | env | Rows per scan batch for plan-built file scans. Default 16384. |
 | `QUANTUM_SCAN_PARALLELISM` | env | How many files of a multi-file scan decode concurrently (`io/ParallelFileReader` producer tasks; batch order across files is nondeterministic, as SQL permits). Default: the scheduler width; `1` keeps the ordered serial scan. |
 | `QUANTUM_DISK_CACHE_DIR` | env (or `io::setDiskCacheDir`) | Local cache directory for object-store reads (`s3://`, `gs://`, `abfs://`): objects download once, immutable thereafter. Empty/unset disables. |
@@ -389,6 +390,14 @@ After P0+P1, Quantum leads at both scales (table above) — the plan's
    queue hops. 10M agg 233 → 183 ms, wide select −27%; 64K measured no
    better for aggregates while multiplying the parallel-scan queue
    working-set on wide tables.
+10. ~~Scan column pruning~~ ✅ — `plan/pruneScanColumns` (engine-side IR
+   pass, run by `q_execute`): for `HashAggregate → Filter* → FileScan`
+   chains it records the columns actually referenced in
+   `FileScanNode::projected_columns`, remaps every `ColumnRef`, and the
+   Parquet reader decodes only those columns. 20-column 10M-row table,
+   2-column aggregate: 2628 → **194 ms** (13.6×; equal to the 2-column
+   table) vs vanilla 865 ms — the engine now wins 4.5× on wide tables
+   where it previously lost 3×. `QUANTUM_PRUNE_COLUMNS=0` disables.
 6. ~~`spark.quantum.agg.parallelism`~~ ✅ — config-gated wiring from the
    Spark strategy into `HashAggregateNode.parallelism` (exchange +
    merge-free parallel aggregation). Off by default; targets large group

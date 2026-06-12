@@ -73,9 +73,24 @@ ParquetReader::ParquetReader(std::string       path,
               "ParquetReader: schema read failed: {}", schema_st.ToString());
     }
     std::vector<Field> fields;
-    fields.reserve(static_cast<size_t>(arrowSchema->num_fields()));
-    for (const auto& f : arrowSchema->fields()) {
-        fields.push_back(Field{f->name(), arrowTypeToDataType(*f->type())});
+    if (options_.columns.empty()) {
+        fields.reserve(static_cast<size_t>(arrowSchema->num_fields()));
+        for (const auto& f : arrowSchema->fields()) {
+            fields.push_back(Field{f->name(), arrowTypeToDataType(*f->type())});
+        }
+    } else {
+        // Projected read: schema (and every decoded batch) carries only the
+        // selected columns, in the given ascending order.
+        fields.reserve(options_.columns.size());
+        for (const int32_t idx : options_.columns) {
+            if (idx < 0 || idx >= arrowSchema->num_fields()) {
+                raise(ErrorCode::InvalidArgument,
+                      "ParquetReader: projected column {} out of range "
+                      "(file has {} columns)", idx, arrowSchema->num_fields());
+            }
+            const auto& f = arrowSchema->field(idx);
+            fields.push_back(Field{f->name(), arrowTypeToDataType(*f->type())});
+        }
     }
     schema_ = Schema(std::move(fields));
 }
@@ -83,7 +98,17 @@ ParquetReader::ParquetReader(std::string       path,
 ParquetReader::~ParquetReader() = default;
 
 void ParquetReader::open() {
-    auto rb_result = reader_->GetRecordBatchReader();
+    auto rb_result = [&] {
+        if (options_.columns.empty()) return reader_->GetRecordBatchReader();
+        // Projected read: decode only the selected columns. Row groups are
+        // all of them; flat schemas make field index == leaf column index.
+        const int nRowGroups = reader_->parquet_reader()->metadata()->num_row_groups();
+        std::vector<int> rowGroups(static_cast<size_t>(nRowGroups));
+        for (int i = 0; i < nRowGroups; ++i) rowGroups[static_cast<size_t>(i)] = i;
+        return reader_->GetRecordBatchReader(
+            rowGroups, std::vector<int>(options_.columns.begin(),
+                                        options_.columns.end()));
+    }();
     if (!rb_result.ok()) {
         raise(ErrorCode::InvalidArgument,
               "ParquetReader: record batch reader failed: {}",

@@ -18,6 +18,7 @@
 #include "memory/MemoryManager.hpp"
 #include "operator/Operator.hpp"
 #include "plan/Plan.hpp"
+#include "plan/ColumnPruning.hpp"
 #include "plan/PlanBuilder.hpp"
 #include "plan/PlanProto.hpp"
 #include "plan/SubstraitDecoder.hpp"
@@ -214,6 +215,7 @@ extern "C" QResult* q_execute(QEngine*       engine,
         }
         auto node = planFromProtoBytes(std::string_view(
             reinterpret_cast<const char*>(plan_bytes), plan_len));
+        pruneScanColumns(node);
         auto metrics = std::make_unique<QueryMetrics>();
         PlanBuilder pb(engine->mm.get(), metrics.get());
         auto op = pb.build(node, engine->catalog);
@@ -235,6 +237,7 @@ extern "C" QResult* q_execute_substrait(QEngine*       engine,
         }
         auto node = planFromSubstraitBytes(std::string_view(
             reinterpret_cast<const char*>(plan_bytes), plan_len));
+        pruneScanColumns(node);
         auto metrics = std::make_unique<QueryMetrics>();
         PlanBuilder pb(engine->mm.get(), metrics.get());
         auto op = pb.build(node, engine->catalog);

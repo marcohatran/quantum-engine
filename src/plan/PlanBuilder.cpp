@@ -259,6 +259,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                       "PlanBuilder: FileScanNode has no paths");
             }
             if (n.format == "parquet") {
+                FileFormatOptions scanOptions = defaultFileFormatOptions();
+                scanOptions.columns = n.projected_columns;
                 const bool partitioned = n.partition_columns.numFields() > 0;
                 if (partitioned && n.partition_values.size() != n.paths.size()) {
                     raise(ErrorCode::InvalidArgument,
@@ -293,7 +295,7 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
 
                 if (n.paths.size() == 1) {
                     auto reader = std::make_unique<ParquetReader>(
-                        n.paths.front(), mm_, defaultFileFormatOptions());
+                        n.paths.front(), mm_, scanOptions);
                     auto wrapped = wrapPartitioned(std::move(reader), 0);
                     return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(wrapped)));
                 }
@@ -308,7 +310,7 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 TaskScheduler::global().parallelFor(
                     n.paths.size(), [&](size_t i) {
                         auto pr = std::make_unique<ParquetReader>(
-                            n.paths[i], mm_, defaultFileFormatOptions());
+                            n.paths[i], mm_, scanOptions);
                         readers[i] = wrapPartitioned(std::move(pr), i);
                     });
                 if (const size_t par = scanParallelism(); par > 1) {
@@ -318,6 +320,11 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 }
                 auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
                 return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(concat)));
+            }
+            if (!n.projected_columns.empty()) {
+                raise(ErrorCode::NotImplemented,
+                      "PlanBuilder: projected_columns only supported for parquet "
+                      "(got format '{}')", n.format);
             }
             if (n.format == "delta") {
                 if (n.paths.size() != 1) {

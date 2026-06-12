@@ -75,6 +75,7 @@ add_library(quantum_core SHARED
     io/PartitionedFileReader.cpp
     plan/Plan.cpp
     plan/OperatorRegistry.cpp
+    plan/ColumnPruning.cpp
     plan/PlanBuilder.cpp
     plan/PlanJson.cpp
     plan/PlanProto.cpp
