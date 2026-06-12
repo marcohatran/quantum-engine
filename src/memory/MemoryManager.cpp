@@ -22,7 +22,13 @@ Buffer MemoryManager::allocate(size_t bytes) {
     uint8_t* p = nullptr;
     {
         std::lock_guard<std::mutex> lock(arenaMu_);
-        p = arena_.allocate(bytes);
+        auto it = freeLists_.find(bytes);
+        if (it != freeLists_.end() && !it->second.empty()) {
+            p = it->second.back();
+            it->second.pop_back();
+        } else {
+            p = arena_.allocate(bytes);
+        }
     }
 
     if (p == nullptr) {
@@ -49,6 +55,18 @@ bool MemoryManager::reserve(size_t bytes) noexcept {
 void MemoryManager::release(size_t bytes) noexcept {
     if (bytes == 0) return;
     used_.fetch_sub(bytes, std::memory_order_acq_rel);
+}
+
+void MemoryManager::deallocate(uint8_t* data, size_t bytes) noexcept {
+    if (bytes == 0 || data == nullptr) return;
+    try {
+        std::lock_guard<std::mutex> lock(arenaMu_);
+        freeLists_[bytes].push_back(data);
+    } catch (...) {
+        // Free-list bookkeeping failed (allocation) — drop the block; the
+        // arena reclaims it at engine teardown, exactly as before recycling.
+    }
+    release(bytes);
 }
 
 } // namespace quantum

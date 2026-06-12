@@ -10,7 +10,7 @@ Buffer::~Buffer() {
 
 void Buffer::release() noexcept {
     if (owner_ != nullptr && size_ > 0) {
-        owner_->release(size_);
+        owner_->deallocate(data_, size_);
     }
     data_  = nullptr;
     size_  = 0;

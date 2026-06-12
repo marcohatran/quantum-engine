@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <unordered_map>
+#include <vector>
 
 #include "common/Macros.hpp"
 #include "memory/Arena.hpp"
@@ -31,6 +33,14 @@ public:
     // Releases `bytes` back to the budget. Called from Buffer's destructor.
     void release(size_t bytes) noexcept;
 
+    // Releases the budget AND returns the block to a size-bucketed free
+    // list for reuse. The Arena underneath is a bump allocator that can't
+    // free individual blocks, so without recycling a query's transient
+    // per-batch buffers accumulate for its whole lifetime; with it, arena
+    // growth is bounded by the working set. Allocation sizes are 64-byte
+    // quantized, so exact-size buckets hit ~always on the steady state.
+    void deallocate(uint8_t* data, size_t bytes) noexcept;
+
     size_t used()   const noexcept { return used_.load(std::memory_order_relaxed); }
     size_t budget() const noexcept { return budget_; }
 
@@ -49,6 +59,9 @@ private:
     std::mutex          arenaMu_;
     std::atomic<size_t> used_{0};
     size_t              budget_;
+    // Exact-size free lists, guarded by arenaMu_. Pointers reference arena
+    // memory; the map only stores recycling metadata.
+    std::unordered_map<size_t, std::vector<uint8_t*>> freeLists_;
 };
 
 } // namespace quantum

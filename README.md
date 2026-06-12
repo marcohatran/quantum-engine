@@ -291,15 +291,24 @@ mode measured by `/usr/bin/time -l`, 10M rows / 1000 groups, 3 iterations):
 
 | Metric | Quantum | Vanilla Spark |
 |---|---|---|
-| Query wall (median) | **197 ms** | 422 ms |
-| Whole-process CPU (user+sys) | **9.8 s** | 12.8 s |
-| Peak RSS | **606 MB** | 644 MB |
-| JVM heap in use after runs | **107 MB** | 268 MB |
-| GC collections / time | **20 / 60 ms** | 37 / 92 ms |
+| Query wall (median) | **~200 ms** | ~420 ms |
+| Whole-process CPU (user+sys) | **~10 s** | ~13–15 s |
+| Peak RSS | **468 MB** | ~610–640 MB |
+| JVM heap in use after runs | **~107 MB** | ~130–270 MB |
+| GC collections / time | **20 / 60 ms** | 36 / ~100 ms |
 
-Quantum's RSS includes the native side (engine buffers, Arrow pools), yet
-still lands below vanilla: the streaming O(batch) reader and native-resident
-data keep the JVM heap ~60% smaller and roughly halve GC activity.
+Quantum's RSS includes the native side (engine buffers, Arrow pools) and
+still lands ~140 MB below vanilla: the streaming O(batch) reader and
+native-resident data keep the JVM heap small and roughly halve GC activity,
+and the engine's buffer recycling (R1 below) bounds native arena growth by
+the working set instead of the query length.
+
+**Resource optimizations:** R1 ✅ — `MemoryManager` size-bucketed free list
+in front of the bump arena (`Buffer` destruction recycles; exact-size
+buckets hit ~always since allocations are 64-byte quantized). Peak RSS
+606 → 468 MB at 10M with wall time unchanged. Remaining ideas: engine +
+`RootAllocator` reuse across queries, streamed result conversion in
+`QuantumExec`, budget-wired spill defaults, dict-preserving string reads.
 
 Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
 ~125 ms Parquet decode at plan-build + JNA/Spark overhead, ~61 ms scan batch
