@@ -25,6 +25,7 @@ object QuantumResourceProbe {
     val rows    = if (args.length > 2) args(2).toLong else 10000000L
     val groups  = if (args.length > 3) args(3).toLong else 1000L
     val iters   = if (args.length > 4) args(4).toInt else 3
+    val query   = if (args.length > 5) args(5) else "agg"
 
     val builder = SparkSession.builder()
       .appName(s"quantum-resource-$mode")
@@ -46,13 +47,19 @@ object QuantumResourceProbe {
     }
 
     spark.read.parquet(dataDir).createOrReplaceTempView("t")
-    val sql = s"SELECT k, SUM(v) AS s, COUNT(*) AS c FROM t " +
-              s"WHERE v > ${rows / 10} GROUP BY k"
+    // "agg": small result (one row per group). "select": wide result --
+    // ~90% of input rows return to the driver, stressing result conversion.
+    val (sql, expectRows) =
+      if (query == "select")
+        (s"SELECT k, v FROM t WHERE v > ${rows / 10}", rows - rows / 10 - 1)
+      else
+        (s"SELECT k, SUM(v) AS s, COUNT(*) AS c FROM t " +
+         s"WHERE v > ${rows / 10} GROUP BY k", groups)
 
     def runOnce(): Double = {
       val t0 = System.nanoTime()
       val n  = spark.sql(sql).collect().length
-      require(n == groups, s"expected $groups rows, got $n")
+      require(n == expectRows, s"expected $expectRows rows, got $n")
       (System.nanoTime() - t0) / 1e6
     }
 

@@ -10,6 +10,7 @@ cd "$(dirname "$0")/../java"
 ROWS="${1:-10000000}"
 NGROUPS="${2:-1000}"
 ITERS="${3:-3}"
+QUERY="${4:-agg}"
 
 if [[ -z "${JAVA_HOME:-}" && -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]]; then
   export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
@@ -49,7 +50,7 @@ JVM_FLAGS=(
 )
 
 DATA_DIR="$(mktemp -d)/t.parquet"
-echo "rows=$ROWS groups=$NGROUPS iterations=$ITERS"
+echo "rows=$ROWS groups=$NGROUPS iterations=$ITERS query=$QUERY"
 "$JAVA_HOME/bin/java" "${JVM_FLAGS[@]}" -cp "$CP" \
   quantum.demo.QuantumResourceProbe prep "$DATA_DIR" "$ROWS" "$NGROUPS" > /dev/null 2>&1
 
@@ -57,7 +58,7 @@ run_mode() {
   local mode="$1"
   local tmpout; tmpout=$(mktemp)
   /usr/bin/time -l "$JAVA_HOME/bin/java" "${JVM_FLAGS[@]}" -cp "$CP" \
-      quantum.demo.QuantumResourceProbe "$mode" "$DATA_DIR" "$ROWS" "$NGROUPS" "$ITERS" \
+      quantum.demo.QuantumResourceProbe "$mode" "$DATA_DIR" "$ROWS" "$NGROUPS" "$ITERS" "$QUERY" \
       > "$tmpout" 2>&1 || true
   local result rss rss_mb cputimes
   result=$(grep "^RESULT" "$tmpout" || echo "RESULT mode=$mode FAILED")

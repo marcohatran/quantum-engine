@@ -70,12 +70,10 @@ case class QuantumExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val t0   = System.nanoTime()
-    val rows = runNative()
+    val rows = runNative()  // already UnsafeRow copies — single materialization
     metrics("nativeTimeMs") += (System.nanoTime() - t0) / 1000000L
     metrics("numOutputRows") += rows.size
-    val proj = UnsafeProjection.create(output, output)
-    val unsafe = rows.map(r => proj(r).copy())
-    sparkContext.parallelize(unsafe, 1)
+    sparkContext.parallelize(rows, 1)
   }
 
   private def runNative(): Seq[InternalRow] = {
@@ -94,9 +92,10 @@ case class QuantumExec(
       val result = QuantumEngine.execute(eng, planBytes)
       try {
         val collected = scala.collection.mutable.ArrayBuffer.empty[InternalRow]
+        val proj      = UnsafeProjection.create(output, output)
         var bytes: Array[Byte] = null
         while ({ bytes = QuantumEngine.resultNextIpc(result); bytes != null }) {
-          readIpcBatch(bytes, allocator, collected)
+          readIpcBatch(bytes, allocator, proj, collected)
         }
         QuantumExec.lastTraceJson.set(QuantumEngine.resultTraceJson(result))
         collected.toSeq
@@ -175,19 +174,23 @@ case class QuantumExec(
   }
 
   /** Parse one IPC result batch and append its rows (reordered through
-   *  physicalIndex) to `out`. Engine columns come back named c0..cN. */
+   *  physicalIndex, projected straight to compact UnsafeRow copies via a
+   *  reused scratch row — one materialization, no per-row object trees) to
+   *  `out`. Engine columns come back named c0..cN. */
   private def readIpcBatch(bytes: Array[Byte],
                            allocator: RootAllocator,
+                           proj: UnsafeProjection,
                            out: scala.collection.mutable.ArrayBuffer[InternalRow]): Unit = {
     val reader = new ArrowStreamReader(new ByteArrayInputStream(bytes), allocator)
     try {
-      val root = reader.getVectorSchemaRoot
-      val nOut = output.size
+      val root    = reader.getVectorSchemaRoot
+      val nOut    = output.size
+      val values  = new Array[Any](nOut)
+      val scratch = new GenericInternalRow(values)
       while (reader.loadNextBatch()) {
         val nRows = root.getRowCount
         var r = 0
         while (r < nRows) {
-          val values = new Array[Any](nOut)
           var ci = 0
           while (ci < nOut) {
             val vec = root.getVector(physicalIndex(ci))
@@ -211,7 +214,7 @@ case class QuantumExec(
             }
             ci += 1
           }
-          out += new GenericInternalRow(values)
+          out += proj(scratch).copy()  // projection reuses its buffer; copy
           r += 1
         }
       }

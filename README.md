@@ -303,12 +303,23 @@ native-resident data keep the JVM heap small and roughly halve GC activity,
 and the engine's buffer recycling (R1 below) bounds native arena growth by
 the working set instead of the query length.
 
+**Known trade-off:** wide-output queries (plain `SELECT` returning millions
+of rows) favor vanilla Spark (~4× at 3.6M output rows) — Quantum's driver-side
+collect pays per-row IPC→Java→`UnsafeRow` conversion that Spark's codegen
+avoids. The engine's sweet spot is reductive queries (filters + aggregates).
+The structural fix is columnar handoff (`QuantumExec` returning Arrow-backed
+`ColumnarBatch`es via Spark's columnar execution) — future work.
+
 **Resource optimizations:** R1 ✅ — `MemoryManager` size-bucketed free list
 in front of the bump arena (`Buffer` destruction recycles; exact-size
 buckets hit ~always since allocations are 64-byte quantized). Peak RSS
-606 → 468 MB at 10M with wall time unchanged. Remaining ideas: engine +
-`RootAllocator` reuse across queries, streamed result conversion in
-`QuantumExec`, budget-wired spill defaults, dict-preserving string reads.
+606 → 468 MB at 10M with wall time unchanged. R2 ✅ — engines pooled
+(borrow/return + `q_clear_sources`) and one JVM-wide `RootAllocator`;
+per-query churn eliminated for long sessions. R3 ✅ — single-pass result
+conversion straight to compact `UnsafeRow`s (reused scratch row): on a
+3.6M-row wide result, JVM heap 2.4 → 1.2 GB, GC time −32%, RSS −300 MB.
+Remaining ideas: budget-wired spill defaults, dict-preserving string reads,
+columnar result handoff.
 
 Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
 ~125 ms Parquet decode at plan-build + JNA/Spark overhead, ~61 ms scan batch
