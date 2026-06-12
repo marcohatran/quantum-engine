@@ -203,6 +203,24 @@ FileFormatReaderPtr wrapPrefetch(FileFormatReaderPtr reader) {
 // defaults to the scheduler width. 1 when prefetch is disabled — that
 // flag means "no background decode tasks", so multi-file scans fall back
 // to the ordered serial ConcatFileReader.
+// Rows per scan batch (QUANTUM_BATCH_ROWS overrides). Plan-built scans
+// default to 16K rather than FileFormatOptions' 4K: larger batches
+// amortize per-batch operator dispatch and queue hops (10M-row agg
+// 233 -> 183 ms, wide select -27%), while 64K measured no better for
+// aggregates and multiplies queue working-set on wide tables.
+FileFormatOptions defaultFileFormatOptions() {
+    static const FileFormatOptions opts = [] {
+        FileFormatOptions o;
+        o.batchSize = 16384;
+        if (const char* env = std::getenv("QUANTUM_BATCH_ROWS")) {
+            const long n = std::strtol(env, nullptr, 10);
+            if (n > 0) o.batchSize = static_cast<size_t>(n);
+        }
+        return o;
+    }();
+    return opts;
+}
+
 size_t scanParallelism() {
     if (!prefetchEnabled()) return 1;
     static const size_t v = [] {
@@ -274,7 +292,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 };
 
                 if (n.paths.size() == 1) {
-                    auto reader = std::make_unique<ParquetReader>(n.paths.front(), mm_);
+                    auto reader = std::make_unique<ParquetReader>(
+                        n.paths.front(), mm_, defaultFileFormatOptions());
                     auto wrapped = wrapPartitioned(std::move(reader), 0);
                     return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(wrapped)));
                 }
@@ -288,7 +307,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 std::vector<FileFormatReaderPtr> readers(n.paths.size());
                 TaskScheduler::global().parallelFor(
                     n.paths.size(), [&](size_t i) {
-                        auto pr = std::make_unique<ParquetReader>(n.paths[i], mm_);
+                        auto pr = std::make_unique<ParquetReader>(
+                            n.paths[i], mm_, defaultFileFormatOptions());
                         readers[i] = wrapPartitioned(std::move(pr), i);
                     });
                 if (const size_t par = scanParallelism(); par > 1) {
@@ -305,7 +325,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                           "PlanBuilder: delta FileScanNode expects 1 table-root path "
                           "(got {})", n.paths.size());
                 }
-                auto reader = std::make_unique<DeltaTableReader>(n.paths.front(), mm_);
+                auto reader = std::make_unique<DeltaTableReader>(
+                    n.paths.front(), mm_, defaultFileFormatOptions());
                 return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(reader)));
             }
             if (n.format == "iceberg") {
@@ -314,7 +335,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                           "PlanBuilder: iceberg FileScanNode expects 1 table-root path "
                           "(got {})", n.paths.size());
                 }
-                auto reader = std::make_unique<IcebergTableReader>(n.paths.front(), mm_);
+                auto reader = std::make_unique<IcebergTableReader>(
+                    n.paths.front(), mm_, defaultFileFormatOptions());
                 return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(reader)));
             }
             raise(ErrorCode::NotImplemented,

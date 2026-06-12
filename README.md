@@ -239,6 +239,7 @@ execution with no engine changes.
 | `QUANTUM_SCHEDULER_THREADS` | env | Worker-pool size for intra-operator parallelism. Default: half the hardware threads (Spark supplies task-level parallelism around the engine). |
 | `QUANTUM_SPILL_FRACTION` | env | Memory-fraction spill trigger for aggregates/sorts (default `0.8` of the engine budget; `0` disables). |
 | `QUANTUM_PREFETCH` | env | `0` disables decode-ahead file prefetch (on by default) and multi-file parallel decode. |
+| `QUANTUM_BATCH_ROWS` | env | Rows per scan batch for plan-built file scans. Default 16384. |
 | `QUANTUM_SCAN_PARALLELISM` | env | How many files of a multi-file scan decode concurrently (`io/ParallelFileReader` producer tasks; batch order across files is nondeterministic, as SQL permits). Default: the scheduler width; `1` keeps the ordered serial scan. |
 | `QUANTUM_DISK_CACHE_DIR` | env (or `io::setDiskCacheDir`) | Local cache directory for object-store reads (`s3://`, `gs://`, `abfs://`): objects download once, immutable thereafter. Empty/unset disables. |
 
@@ -283,8 +284,8 @@ result checksums identical):
 
 | Scale | Quantum | Vanilla Spark | |
 |---|---|---|---|
-| 2M rows / 200 groups | **65 ms** | 138 ms | Quantum 2.13× faster |
-| 10M rows / 1000 groups | **197 ms** | 390 ms | Quantum 1.98× faster |
+| 2M rows / 200 groups | **64 ms** | 142 ms | Quantum 2.21× faster |
+| 10M rows / 1000 groups | **180 ms** | 377 ms | Quantum 2.10× faster |
 
 (Before the P0–P2 optimizations below: 121/146 ms at 2M, 495/432 ms at 10M —
 Spark led at scale.)
@@ -383,6 +384,11 @@ After P0+P1, Quantum leads at both scales (table above) — the plan's
    deadlock). The streaming-reader rewrite in P0 had quietly serialized
    this path. 8×10M-row files: 1.32 → 1.14 s — at the single-threaded
    compute floor, with decode fully hidden.
+9. ~~16K scan batches~~ ✅ — plan-built scans batch 16 384 rows instead of
+   4 096 (`QUANTUM_BATCH_ROWS` overrides): fewer per-batch dispatch and
+   queue hops. 10M agg 233 → 183 ms, wide select −27%; 64K measured no
+   better for aggregates while multiplying the parallel-scan queue
+   working-set on wide tables.
 6. ~~`spark.quantum.agg.parallelism`~~ ✅ — config-gated wiring from the
    Spark strategy into `HashAggregateNode.parallelism` (exchange +
    merge-free parallel aggregation). Off by default; targets large group
