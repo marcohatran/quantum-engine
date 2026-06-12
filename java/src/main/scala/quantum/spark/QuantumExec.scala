@@ -317,7 +317,16 @@ object QuantumExec {
 
   /** One Arrow allocator for the JVM (thread-safe); netty arenas recycle
    *  across queries instead of re-growing. Never closed. */
-  private[spark] lazy val sharedAllocator = new RootAllocator()
+  private[spark] lazy val sharedAllocator = {
+    // Default to the Unsafe allocation manager (malloc/free per buffer):
+    // netty's pooled arenas never return freed direct memory to the OS,
+    // which costs hundreds of MB of peak RSS on wide results. Honor an
+    // explicit user choice. Must be set before the first allocator exists.
+    if (System.getProperty("arrow.allocation.manager.type") == null) {
+      System.setProperty("arrow.allocation.manager.type", "Unsafe")
+    }
+    new RootAllocator()
+  }
 
   /** Parse one IPC stream into ColumnarBatches: vectors transferred out of
    *  the reader's root (zero-copy buffer move), reordered via physIdx,

@@ -406,6 +406,14 @@ After P0+P1, Quantum leads at both scales (table above) — the plan's
    conservative). Selective query (`v > 9M` over 10M ascending rows,
    4 MB row groups): 188 → **110 ms**; vanilla's own skipping: 130 ms.
    `QUANTUM_STATS_SKIP=0` disables.
+
+**R5 — allocator hygiene**
+12. ~~Arrow Unsafe allocation manager~~ ✅ — arrow-java's default netty
+   pooled arenas never return freed direct memory to the OS;
+   `QuantumExec` now defaults `arrow.allocation.manager.type=Unsafe`
+   (plain malloc/free per buffer, honoring an explicit user setting).
+   Wide select peak RSS 2576 → **1935 MB** (vanilla: 1784) with wall
+   1122 → 956 ms; aggregates unaffected.
 6. ~~`spark.quantum.agg.parallelism`~~ ✅ — config-gated wiring from the
    Spark strategy into `HashAggregateNode.parallelism` (exchange +
    merge-free parallel aggregation). Off by default; targets large group
