@@ -261,6 +261,29 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
             if (n.format == "parquet") {
                 FileFormatOptions scanOptions = defaultFileFormatOptions();
                 scanOptions.columns = n.projected_columns;
+                for (const auto& p : n.stat_predicates) {
+                    StatsPredicate sp;
+                    sp.column = p.column;
+                    switch (p.op) {
+                        case BinaryOpType::Eq:  sp.op = StatsPredicate::Op::Eq;  break;
+                        case BinaryOpType::Lt:  sp.op = StatsPredicate::Op::Lt;  break;
+                        case BinaryOpType::Gt:  sp.op = StatsPredicate::Op::Gt;  break;
+                        case BinaryOpType::Lte: sp.op = StatsPredicate::Op::Lte; break;
+                        case BinaryOpType::Gte: sp.op = StatsPredicate::Op::Gte; break;
+                        default:
+                            raise(ErrorCode::InvalidArgument,
+                                  "PlanBuilder: non-comparison stat predicate");
+                    }
+                    if (const auto* i = std::get_if<int64_t>(&p.literal.value)) {
+                        sp.literal = *i;
+                    } else if (const auto* d = std::get_if<double>(&p.literal.value)) {
+                        sp.literal = *d;
+                    } else {
+                        raise(ErrorCode::InvalidArgument,
+                              "PlanBuilder: non-numeric stat predicate literal");
+                    }
+                    scanOptions.statsPredicates.push_back(sp);
+                }
                 const bool partitioned = n.partition_columns.numFields() > 0;
                 if (partitioned && n.partition_values.size() != n.paths.size()) {
                     raise(ErrorCode::InvalidArgument,
@@ -321,10 +344,10 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
                 auto concat = std::make_unique<ConcatFileReader>(std::move(readers));
                 return std::make_unique<FileScanOperator>(mm_, wrapPrefetch(std::move(concat)));
             }
-            if (!n.projected_columns.empty()) {
+            if (!n.projected_columns.empty() || !n.stat_predicates.empty()) {
                 raise(ErrorCode::NotImplemented,
-                      "PlanBuilder: projected_columns only supported for parquet "
-                      "(got format '{}')", n.format);
+                      "PlanBuilder: projected_columns / stat_predicates only "
+                      "supported for parquet (got format '{}')", n.format);
             }
             if (n.format == "delta") {
                 if (n.paths.size() != 1) {

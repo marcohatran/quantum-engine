@@ -92,6 +92,16 @@ struct ScanNode {
 // LiteralExpr per partition column). When non-empty, each ParquetReader is
 // wrapped in a PartitionedFileReader that synthesizes the partition columns
 // as constants appended to every batch. Empty => no partition columns.
+// One `column <op> literal` comparison a scan may use to skip whole row
+// groups via column-chunk min/max statistics. Conservative: a row group
+// that passes may still contain non-matching rows, so the FilterNode that
+// supplied the predicate always stays in the plan.
+struct ScanPredicate {
+    int32_t      column = 0;  // index into the scan's (projected) output
+    BinaryOpType op;          // Eq / Lt / Gt / Lte / Gte
+    LiteralExpr  literal;
+};
+
 struct FileScanNode {
     std::vector<std::string>                paths;
     std::string                             format;
@@ -103,6 +113,10 @@ struct FileScanNode {
     // every ColumnRef above the scan must already be remapped to the
     // pruned positions. Parquet only.
     std::vector<int32_t>                    projected_columns;
+    // Conjunctive row-group skipping predicates. Engine-internal: filled
+    // by plan::pushScanPredicates after pruning, so `column` indices are
+    // in the same (projected) space as ColumnRefs above the scan.
+    std::vector<ScanPredicate>              stat_predicates;
 };
 
 struct FilterNode;

@@ -38,6 +38,7 @@ add_executable(quantum_tests
     plan/test_file_scan_plan.cpp
     plan/test_operator_registry.cpp
     plan/test_column_pruning.cpp
+    plan/test_predicate_pushdown.cpp
     plan/test_plan_builder.cpp
     plan/test_substrait_decoder.cpp
     plan/test_plan_proto.cpp

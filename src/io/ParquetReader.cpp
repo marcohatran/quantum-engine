@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <arrow/api.h>
@@ -9,7 +10,9 @@
 #include <arrow/result.h>
 #include <arrow/status.h>
 #include <parquet/arrow/reader.h>
+#include <parquet/metadata.h>
 #include <parquet/properties.h>
+#include <parquet/statistics.h>
 
 #include <fmt/format.h>
 
@@ -97,14 +100,75 @@ ParquetReader::ParquetReader(std::string       path,
 
 ParquetReader::~ParquetReader() = default;
 
+namespace {
+
+// Could a row group whose column-chunk min/max is [min, max] contain a
+// row satisfying `value <op> lit`? Missing/odd stats answer true.
+template <typename T>
+bool rangeMayMatch(StatsPredicate::Op op, T min, T max, T lit) {
+    switch (op) {
+        case StatsPredicate::Op::Eq:  return min <= lit && lit <= max;
+        case StatsPredicate::Op::Lt:  return min < lit;
+        case StatsPredicate::Op::Lte: return min <= lit;
+        case StatsPredicate::Op::Gt:  return max > lit;
+        case StatsPredicate::Op::Gte: return max >= lit;
+    }
+    return true;
+}
+
+bool rowGroupMayMatch(const parquet::RowGroupMetaData&  rg,
+                      const std::vector<StatsPredicate>& preds,
+                      const std::vector<int32_t>&        projection) {
+    for (const auto& pred : preds) {
+        const int fileIdx = projection.empty()
+            ? pred.column
+            : projection[static_cast<size_t>(pred.column)];
+        if (fileIdx < 0 || fileIdx >= rg.num_columns()) continue;
+        auto chunk = rg.ColumnChunk(fileIdx);
+        auto stats = chunk->statistics();
+        if (!stats || !stats->HasMinMax()) continue;
+        bool may = true;
+        if (stats->physical_type() == parquet::Type::INT64 &&
+            std::holds_alternative<int64_t>(pred.literal)) {
+            const auto& s =
+                static_cast<const parquet::Int64Statistics&>(*stats);
+            may = rangeMayMatch(pred.op, s.min(), s.max(),
+                                std::get<int64_t>(pred.literal));
+        } else if (stats->physical_type() == parquet::Type::DOUBLE &&
+                   std::holds_alternative<double>(pred.literal)) {
+            const auto& s =
+                static_cast<const parquet::DoubleStatistics&>(*stats);
+            may = rangeMayMatch(pred.op, s.min(), s.max(),
+                                std::get<double>(pred.literal));
+        }
+        if (!may) return false;
+    }
+    return true;
+}
+
+} // namespace
+
 void ParquetReader::open() {
     auto rb_result = [&] {
-        if (options_.columns.empty()) return reader_->GetRecordBatchReader();
-        // Projected read: decode only the selected columns. Row groups are
-        // all of them; flat schemas make field index == leaf column index.
-        const int nRowGroups = reader_->parquet_reader()->metadata()->num_row_groups();
-        std::vector<int> rowGroups(static_cast<size_t>(nRowGroups));
-        for (int i = 0; i < nRowGroups; ++i) rowGroups[static_cast<size_t>(i)] = i;
+        if (options_.columns.empty() && options_.statsPredicates.empty()) {
+            return reader_->GetRecordBatchReader();
+        }
+        // Projected / stats-skipping read. Flat schemas make field index ==
+        // leaf column index.
+        const auto* meta = reader_->parquet_reader()->metadata().get();
+        std::vector<int> rowGroups;
+        rowGroups.reserve(static_cast<size_t>(meta->num_row_groups()));
+        for (int i = 0; i < meta->num_row_groups(); ++i) {
+            if (options_.statsPredicates.empty() ||
+                rowGroupMayMatch(*meta->RowGroup(i),
+                                 options_.statsPredicates,
+                                 options_.columns)) {
+                rowGroups.push_back(i);
+            }
+        }
+        if (options_.columns.empty()) {
+            return reader_->GetRecordBatchReader(rowGroups);
+        }
         return reader_->GetRecordBatchReader(
             rowGroups, std::vector<int>(options_.columns.begin(),
                                         options_.columns.end()));

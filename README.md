@@ -239,6 +239,7 @@ execution with no engine changes.
 | `QUANTUM_SCHEDULER_THREADS` | env | Worker-pool size for intra-operator parallelism. Default: half the hardware threads (Spark supplies task-level parallelism around the engine). |
 | `QUANTUM_SPILL_FRACTION` | env | Memory-fraction spill trigger for aggregates/sorts (default `0.8` of the engine budget; `0` disables). |
 | `QUANTUM_PREFETCH` | env | `0` disables decode-ahead file prefetch (on by default) and multi-file parallel decode. |
+| `QUANTUM_STATS_SKIP` | env | `0` disables row-group statistics skipping (on by default: comparison filters skip Parquet row groups via min/max stats). |
 | `QUANTUM_PRUNE_COLUMNS` | env | `0` disables scan column pruning (on by default: aggregate queries decode only referenced Parquet columns). |
 | `QUANTUM_BATCH_ROWS` | env | Rows per scan batch for plan-built file scans. Default 16384. |
 | `QUANTUM_SCAN_PARALLELISM` | env | How many files of a multi-file scan decode concurrently (`io/ParallelFileReader` producer tasks; batch order across files is nondeterministic, as SQL permits). Default: the scheduler width; `1` keeps the ordered serial scan. |
@@ -398,6 +399,13 @@ After P0+P1, Quantum leads at both scales (table above) — the plan's
    2-column aggregate: 2628 → **194 ms** (13.6×; equal to the 2-column
    table) vs vanilla 865 ms — the engine now wins 4.5× on wide tables
    where it previously lost 3×. `QUANTUM_PRUNE_COLUMNS=0` disables.
+11. ~~Row-group statistics skipping~~ ✅ — `plan/pushScanPredicates`
+   copies `col <cmp> literal` AND-conjuncts from filters above parquet
+   scans into the scan node; the reader drops row groups whose
+   column-chunk min/max can't match (the filter stays — skipping is
+   conservative). Selective query (`v > 9M` over 10M ascending rows,
+   4 MB row groups): 188 → **110 ms**; vanilla's own skipping: 130 ms.
+   `QUANTUM_STATS_SKIP=0` disables.
 6. ~~`spark.quantum.agg.parallelism`~~ ✅ — config-gated wiring from the
    Spark strategy into `HashAggregateNode.parallelism` (exchange +
    merge-free parallel aggregation). Off by default; targets large group

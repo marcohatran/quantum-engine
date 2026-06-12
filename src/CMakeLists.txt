@@ -77,6 +77,7 @@ add_library(quantum_core SHARED
     plan/OperatorRegistry.cpp
     plan/ColumnPruning.cpp
     plan/PlanBuilder.cpp
+    plan/PredicatePushdown.cpp
     plan/PlanJson.cpp
     plan/PlanProto.cpp
     bridge/quantum_c.cpp
