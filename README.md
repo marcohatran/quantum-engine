@@ -286,6 +286,21 @@ result checksums identical):
 (Before the P0–P2 optimizations below: 121/146 ms at 2M, 495/432 ms at 10M —
 Spark led at scale.)
 
+Process-level resource usage (`scripts/run-resource-compare.sh`, one JVM per
+mode measured by `/usr/bin/time -l`, 10M rows / 1000 groups, 3 iterations):
+
+| Metric | Quantum | Vanilla Spark |
+|---|---|---|
+| Query wall (median) | **197 ms** | 422 ms |
+| Whole-process CPU (user+sys) | **9.8 s** | 12.8 s |
+| Peak RSS | **606 MB** | 644 MB |
+| JVM heap in use after runs | **107 MB** | 268 MB |
+| GC collections / time | **20 / 60 ms** | 37 / 92 ms |
+
+Quantum's RSS includes the native side (engine buffers, Arrow pools), yet
+still lands below vanilla: the streaming O(batch) reader and native-resident
+data keep the JVM heap ~60% smaller and roughly halve GC activity.
+
 Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
 ~125 ms Parquet decode at plan-build + JNA/Spark overhead, ~61 ms scan batch
 slicing (a second copy of all data), ~42 ms filter, **~268 ms hash aggregation**.
