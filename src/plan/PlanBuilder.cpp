@@ -167,6 +167,21 @@ std::string operatorName(const Operator& op) {
 
 } // namespace
 
+// Default memory-fraction spill trigger for aggregates and sorts
+// (QUANTUM_SPILL_FRACTION overrides; "0" disables). Bounds worst-case
+// memory: when MemoryManager usage crosses the fraction, partial state
+// flushes to disk and merges back before emit.
+double defaultSpillFraction() {
+    static const double v = [] {
+        if (const char* env = std::getenv("QUANTUM_SPILL_FRACTION")) {
+            const double f = std::strtod(env, nullptr);
+            return (f >= 0.0 && f < 1.0) ? f : 0.0;
+        }
+        return 0.8;
+    }();
+    return v;
+}
+
 // Decode-ahead for file scans (QUANTUM_PREFETCH=0 disables): the reader
 // runs on a scheduler task so decode overlaps downstream compute.
 FileFormatReaderPtr wrapPrefetch(FileFormatReaderPtr reader) {
@@ -317,7 +332,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
             return std::make_unique<HashAggregateOperator>(
                 mm_, build(n->child, catalog),
                 std::move(keys), std::move(aggs),
-                n->output_names);
+                n->output_names,
+                /*spillTriggerGroups=*/0, defaultSpillFraction());
         } else if constexpr (std::is_same_v<T, std::unique_ptr<ExchangeNode>>) {
             std::vector<ExpressionPtr> keys;
             keys.reserve(n->keys.size());
@@ -345,7 +361,8 @@ OperatorPtr PlanBuilder::buildImpl(const PlanNode& node, SourceCatalog& catalog)
             for (const auto& k : n->keys) keys.push_back(buildExpr(k));
             return std::make_unique<SortOperator>(
                 mm_, build(n->child, catalog),
-                std::move(keys), n->ascending, n->nulls_first);
+                std::move(keys), n->ascending, n->nulls_first,
+                /*spillTriggerRows=*/0, defaultSpillFraction());
         } else if constexpr (std::is_same_v<T, std::unique_ptr<ExtensionNode>>) {
             ExtensionContext ctx;
             ctx.mm      = mm_;

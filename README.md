@@ -318,8 +318,13 @@ buckets hit ~always since allocations are 64-byte quantized). Peak RSS
 per-query churn eliminated for long sessions. R3 ✅ — single-pass result
 conversion straight to compact `UnsafeRow`s (reused scratch row): on a
 3.6M-row wide result, JVM heap 2.4 → 1.2 GB, GC time −32%, RSS −300 MB.
-Remaining ideas: budget-wired spill defaults, dict-preserving string reads,
-columnar result handoff.
+R4 ✅ — spill wired to the
+memory budget by default: `PlanBuilder` sets `spillFraction = 0.8`
+(`QUANTUM_SPILL_FRACTION` overrides, `0` disables) on aggregates and sorts,
+and `Int64FastPath` gained full spill support (8-byte-key records, in-place
+bucket reset, merge via the same fast path) so the default doesn't cost the
+P1 win — worst-case memory is now bounded, not just typically small.
+Remaining ideas: dict-preserving string reads, columnar result handoff.
 
 Where Quantum's 495 ms goes at 10M (from the native per-operator trace):
 ~125 ms Parquet decode at plan-build + JNA/Spark overhead, ~61 ms scan batch

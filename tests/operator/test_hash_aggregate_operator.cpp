@@ -402,9 +402,12 @@ TEST(HashAggregate, Int64FastPathMatchesFixedPath) {
         return src;
     };
 
-    auto fast  = runInt64Agg(mm, mkSrc(), /*spillTrigger=*/0);
-    auto fixed = runInt64Agg(mm, mkSrc(), /*spillTrigger=*/1000000);
-    EXPECT_EQ(fast.size(), fixed.size());
-    EXPECT_EQ(fast, fixed);
+    auto fast    = runInt64Agg(mm, mkSrc(), /*spillTrigger=*/0);
+    // A low group trigger forces several spill+merge round-trips through
+    // the SAME fast path (the path no longer falls back when spill is
+    // configured).
+    auto spilled = runInt64Agg(mm, mkSrc(), /*spillTrigger=*/700);
+    EXPECT_EQ(fast.size(), spilled.size());
+    EXPECT_EQ(fast, spilled);
     EXPECT_TRUE(fast.count(std::nullopt) == 1);  // null group present
 }

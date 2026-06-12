@@ -70,10 +70,7 @@ HashAggregateOperator::HashAggregateOperator(
     if (groupKeys_.size() == 1 && keyTypes_[0].id == TypeId::STRING) {
         path_ = Path::StringFastPath;
         nullGroupState_.resize(stateBytes_);
-    } else if (groupKeys_.size() == 1 && keyTypes_[0].id == TypeId::INT64 &&
-               spillTriggerGroups == 0 && spillFraction == 0.0) {
-        // Spill for this path is a follow-up; spill-configured aggregates
-        // take the Fixed path below.
+    } else if (groupKeys_.size() == 1 && keyTypes_[0].id == TypeId::INT64) {
         path_ = Path::Int64FastPath;
         nullGroupState_.resize(stateBytes_);
         i64BucketKeys_.assign(2048, 0);
@@ -237,6 +234,59 @@ void HashAggregateOperator::spillVar() {
     metrics::recordSpill();
     tableVar_ = std::make_unique<VarBytesHashTable>(stateBytes_, mm_);
     for (auto& a : aggs_) a->clearOutOfLineState();
+}
+
+void HashAggregateOperator::spillInt64FastPath() {
+    if (i64Keys_.empty() && !nullGroupInit_) return;
+
+    SpillFile file(stateBytes_);
+    std::vector<uint8_t> rec;
+    for (size_t s = 0; s < i64Keys_.size(); ++s) {
+        serializeSlab(codeStates_.data() + s * stateBytes_, rec);
+        file.write(reinterpret_cast<const uint8_t*>(&i64Keys_[s]),
+                   static_cast<int32_t>(sizeof(int64_t)),
+                   rec.data(), rec.size());
+    }
+    if (nullGroupInit_) {
+        serializeSlab(nullGroupState_.data(), rec);
+        file.writeNullGroup(rec.data(), rec.size());
+    }
+    file.finishWriting();
+    spillFiles_.push_back(std::move(file));
+    metrics::recordSpill();
+
+    // Reset in-memory state; every group was spilled.
+    i64Keys_.clear();
+    std::fill(i64BucketSlot_.begin(), i64BucketSlot_.end(), -1);
+    codeStates_.clear();
+    nullGroupInit_ = false;
+    for (auto& a : aggs_) a->clearOutOfLineState();
+}
+
+void HashAggregateOperator::mergeSpillFilesInt64() {
+    if (spillFiles_.empty()) return;
+    InitCtx ctx{&aggs_, &aggOffsets_};
+    g_initCtx = &ctx;
+    for (auto& file : spillFiles_) {
+        auto reader = file.reader();
+        while (reader.next()) {
+            if (reader.isNullGroup()) {
+                if (!nullGroupInit_) {
+                    initSlab(nullGroupState_.data());
+                    nullGroupInit_ = true;
+                }
+                mergeSerializedInto(nullGroupState_.data(), reader.state());
+            } else {
+                int64_t key = 0;
+                std::memcpy(&key, reader.key(), sizeof(key));
+                const int32_t slot = i64FindOrInsert(key);
+                uint8_t* dst = fastPathStateForCode(slot);
+                mergeSerializedInto(dst, reader.state());
+            }
+        }
+    }
+    g_initCtx = nullptr;
+    spillFiles_.clear();
 }
 
 void HashAggregateOperator::mergeSpillFilesFixed() {
@@ -461,7 +511,7 @@ void HashAggregateOperator::build() {
             size_t currentGroups = 0;
             switch (path_) {
                 case Path::StringFastPath: currentGroups = globalDictReverse_.size(); break;
-                case Path::Int64FastPath:  break;  // unreachable: path gated to no-spill
+                case Path::Int64FastPath:  currentGroups = i64Keys_.size(); break;
                 case Path::Fixed:          currentGroups = tableFixed_->numGroups();  break;
                 case Path::Var:            currentGroups = tableVar_->numGroups();    break;
             }
@@ -472,6 +522,7 @@ void HashAggregateOperator::build() {
             if (overGroups || overMemory) {
                 switch (path_) {
                     case Path::StringFastPath: spillStringFastPath(); break;
+                    case Path::Int64FastPath:  spillInt64FastPath();  break;
                     case Path::Fixed:          spillFixed();          break;
                     case Path::Var:            spillVar();            break;
                 }
@@ -483,7 +534,7 @@ void HashAggregateOperator::build() {
 
     switch (path_) {
         case Path::StringFastPath: mergeSpillFiles();     break;
-        case Path::Int64FastPath:  break;  // never spills
+        case Path::Int64FastPath:  mergeSpillFilesInt64(); break;
         case Path::Fixed:          mergeSpillFilesFixed(); break;
         case Path::Var:            mergeSpillFilesVar();   break;
     }

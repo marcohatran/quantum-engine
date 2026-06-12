@@ -22,7 +22,7 @@ namespace quantum {
 // distinct group. Subsequent getNext() calls return nullopt.
 //
 // Three internal paths chosen at construction:
-//   - Int64FastPath: single INT64 key without spill triggers. Open
+//   - Int64FastPath: single INT64 key. Open
 //     addressing straight on the key (no KeyCodec, no byte memcmp); group
 //     state lives in a slot-indexed slab the bucket rehash never moves.
 //   - StringFastPath: single STRING key. Maintains a global dictionary
@@ -82,6 +82,9 @@ private:
     // record, then replace the table with a fresh one.
     void     spillFixed();
     void     spillVar();
+    // Int64FastPath: 8-byte key records; bucket table reset in place.
+    void     spillInt64FastPath();
+    void     mergeSpillFilesInt64();
     // After all input has been consumed, drain every spill file back into the
     // current in-memory state via the appropriate find-or-insert + agg->merge.
     void     mergeSpillFiles();
